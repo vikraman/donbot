@@ -16,7 +16,7 @@ export default async (robot) => {
       'But I only just met her!'
     ]
     const joke = jokes[Math.floor(Math.random() * jokes.length)]
-    if (Math.random() < 0.003183) {
+    if (Math.random() < 0.314) {
       await res.send(`${word}? ${joke}`)
     }
   })
