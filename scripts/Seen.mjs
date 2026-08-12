@@ -9,6 +9,7 @@
 //
 
 const seenKey = userId => `seen:${userId}`
+const LAST_MESSAGE_KEY = 'seen:last'
 
 export default async (robot) => {
   robot.hear(/.*/, async res => {
@@ -16,7 +17,9 @@ export default async (robot) => {
     if (user && user.id != null) {
       const known = robot.brain.userForId(user.id, { name: user.name })
       known.name = user.name
-      robot.brain.set(seenKey(user.id), { name: user.name, time: Date.now() })
+      const now = Date.now()
+      robot.brain.set(seenKey(user.id), { name: user.name, time: now })
+      robot.brain.set(LAST_MESSAGE_KEY, now)
     }
   })
 
