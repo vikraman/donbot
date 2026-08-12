@@ -43,7 +43,7 @@ describe('Ask testing Hubot scripts', () => {
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant ask capital of france', 'test-room')
-    assert.strictEqual(sent[0], 'Paris is the capital of France.')
+    assert.strictEqual(sent[0], 'Paris is the capital of France. [Gemini]')
   })
 
   it('should fall back to duckduckgo when gemini has no key', async () => {
@@ -55,7 +55,7 @@ describe('Ask testing Hubot scripts', () => {
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant ask what is 6 times 7', 'test-room')
-    assert.strictEqual(sent[0], '42')
+    assert.strictEqual(sent[0], '42 [DuckDuckGo]')
   })
 
   it('should fall back to wikipedia when gemini and duckduckgo have no answer', async () => {
@@ -73,7 +73,7 @@ describe('Ask testing Hubot scripts', () => {
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant ask who is ada lovelace', 'test-room')
-    assert.strictEqual(sent[0], 'Ada Lovelace was an English mathematician.')
+    assert.strictEqual(sent[0], 'Ada Lovelace was an English mathematician. [Wikipedia]')
   })
 
   it('should resolve a natural-language question with trailing punctuation', async () => {
@@ -94,7 +94,7 @@ describe('Ask testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant ask what is the capital of France?', 'test-room')
     assert.match(decodeURIComponent(wikiSearchUrl), /srsearch=capital of France(?!\?)/)
-    assert.strictEqual(sent[0], 'Paris has been the capital of France since its liberation in 1944.')
+    assert.strictEqual(sent[0], 'Paris has been the capital of France since its liberation in 1944. [Wikipedia]')
   })
 
   it('should resolve a contracted question like "what\'s" without garbling the search', async () => {
@@ -115,7 +115,7 @@ describe('Ask testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, "@Dumbotheelephant ask what's the capital of France?", 'test-room')
     assert.match(decodeURIComponent(wikiSearchUrl), /srsearch=capital of France(?!\?)/)
-    assert.strictEqual(sent[0], 'Paris has been the capital of France since its liberation in 1944.')
+    assert.strictEqual(sent[0], 'Paris has been the capital of France since its liberation in 1944. [Wikipedia]')
   })
 
   it('should not swallow "does" when stripping "how does"', async () => {
@@ -189,7 +189,7 @@ describe('Ask testing Hubot scripts', () => {
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant please ask what is rust', 'test-room')
-    assert.strictEqual(sent[0], 'Polite answer.')
+    assert.strictEqual(sent[0], 'Polite answer. [Gemini]')
   })
 
   it('should support "tell me about" as an alternate phrasing', async () => {
@@ -199,7 +199,7 @@ describe('Ask testing Hubot scripts', () => {
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant tell me about rust', 'test-room')
-    assert.strictEqual(sent[0], 'Rust is a systems programming language.')
+    assert.strictEqual(sent[0], 'Rust is a systems programming language. [Gemini]')
   })
 
   it('should query gemini directly with "ask gg"', async () => {
@@ -214,7 +214,8 @@ describe('Ask testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant ask gg what is rust', 'test-room')
     assert.match(requestedUrl, /generativelanguage\.googleapis\.com/)
-    assert.strictEqual(sent[0], 'Direct gemini answer.')
+    assert.strictEqual(sent[0], 'Direct gemini answer. [Gemini]')
+    assert.strictEqual(sent.length, 1)
   })
 
   it('should query duckduckgo directly with "ask ddg"', async () => {
@@ -228,7 +229,24 @@ describe('Ask testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant ask ddg rust programming language', 'test-room')
     assert.match(requestedUrl, /duckduckgo\.com/)
-    assert.strictEqual(sent[0], 'Direct ddg answer.')
+    assert.strictEqual(sent[0], 'Direct ddg answer. [DuckDuckGo]')
+    assert.strictEqual(sent.length, 1)
+  })
+
+  it('should not also fire the fallback-chain listener when using "ask ddg" and ddg has no answer', async () => {
+    delete process.env.GEMINI_API_KEY
+    mock.method(global, 'fetch', async (url) => {
+      if (url.includes('duckduckgo')) {
+        return { json: async () => ({ AbstractText: '', Answer: '', Definition: '' }) }
+      }
+      return { json: async () => ({ query: { search: [] } }) }
+    })
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant ask ddg rust programming language', 'test-room')
+    assert.strictEqual(sent.length, 1)
+    assert.strictEqual(sent[0], "I don't have an answer for that.")
   })
 
   it('should query wikipedia directly with "ask wiki"', async () => {
@@ -242,6 +260,7 @@ describe('Ask testing Hubot scripts', () => {
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant ask wiki rust programming language', 'test-room')
-    assert.strictEqual(sent[0], 'Direct wiki answer.')
+    assert.strictEqual(sent[0], 'Direct wiki answer. [Wikipedia]')
+    assert.strictEqual(sent.length, 1)
   })
 })

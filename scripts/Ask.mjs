@@ -1,7 +1,8 @@
 // Description:
 //   Looks up a short answer to a question. By default tries Gemini, then
 //   DuckDuckGo, then Wikipedia, using whichever answers first. Individual
-//   sources can be queried directly.
+//   sources can be queried directly. Every answer is tagged with the
+//   source that produced it, e.g. "Paris. [Gemini]".
 //
 // Commands:
 //   hubot ask <question> - Answers <question>, trying Gemini, DuckDuckGo, then Wikipedia in turn.
@@ -22,6 +23,14 @@ const QUESTION_PREFIX = /^(who|what|where|when|why|how)(?:['’](?:s|re)|\s+(?:i
 const cleanForSearch = question =>
   question.replace(TRAILING_PUNCTUATION, '').replace(QUESTION_PREFIX, '').trim()
 
+const SOURCE_LABELS = {
+  gg: 'Gemini',
+  ddg: 'DuckDuckGo',
+  wiki: 'Wikipedia'
+}
+
+const withSource = (source, text) => text ? { source, text } : null
+
 const askGemini = async (question) => {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return null
@@ -41,14 +50,14 @@ const askGemini = async (question) => {
   const text = data.candidates && data.candidates[0] && data.candidates[0].content &&
     data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
     data.candidates[0].content.parts[0].text
-  return text ? text.trim() : null
+  return withSource('gg', text ? text.trim() : null)
 }
 
 const askDuckDuckGo = async (question) => {
   const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(cleanForSearch(question))}&format=json&no_html=1&skip_disambig=1`
   const response = await fetch(url)
   const data = await response.json()
-  return data.AbstractText || data.Answer || data.Definition || null
+  return withSource('ddg', data.AbstractText || data.Answer || data.Definition || null)
 }
 
 const askWikipedia = async (question) => {
@@ -62,7 +71,7 @@ const askWikipedia = async (question) => {
   const summaryResponse = await fetch(summaryUrl)
   if (!summaryResponse.ok) return null
   const data = await summaryResponse.json()
-  return data.extract || null
+  return withSource('wiki', data.extract || null)
 }
 
 const SOURCES = {
@@ -73,23 +82,25 @@ const SOURCES = {
 
 const NO_ANSWER = "I don't have an answer for that."
 
+const formatAnswer = result => result ? `${result.text} [${SOURCE_LABELS[result.source]}]` : NO_ANSWER
+
 export default async (robot) => {
   robot.respond(/ask (gg|ddg|wiki) (.+)$/i, async res => {
     const source = res.match[1].toLowerCase()
     const question = res.match[2].trim()
-    const answer = await SOURCES[source](question)
-    await res.send(answer || NO_ANSWER)
+    const result = await SOURCES[source](question)
+    await res.send(formatAnswer(result))
   })
 
-  robot.respond(/(?:please\s+)?ask (.+)$/i, async res => {
+  robot.respond(/(?:please\s+)?ask (?!gg\s|ddg\s|wiki\s)(.+)$/i, async res => {
     const question = res.match[1].trim()
-    const answer = await askGemini(question) || await askDuckDuckGo(question) || await askWikipedia(question)
-    await res.send(answer || NO_ANSWER)
+    const result = await askGemini(question) || await askDuckDuckGo(question) || await askWikipedia(question)
+    await res.send(formatAnswer(result))
   })
 
   robot.respond(/tell me about (.+)$/i, async res => {
     const question = res.match[1].trim()
-    const answer = await askGemini(question) || await askDuckDuckGo(question) || await askWikipedia(question)
-    await res.send(answer || NO_ANSWER)
+    const result = await askGemini(question) || await askDuckDuckGo(question) || await askWikipedia(question)
+    await res.send(formatAnswer(result))
   })
 }
