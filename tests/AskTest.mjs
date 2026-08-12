@@ -10,6 +10,10 @@ const geminiResponse = text => ({
   json: async () => ({ candidates: [{ content: { parts: [{ text }] } }] })
 })
 
+const wikiSearchResult = title => ({
+  json: async () => ({ query: { search: [{ title }] } })
+})
+
 describe('Ask testing Hubot scripts', () => {
   let robot = null
   let originalGeminiKey
@@ -60,8 +64,8 @@ describe('Ask testing Hubot scripts', () => {
       if (url.includes('duckduckgo')) {
         return { json: async () => ({ AbstractText: '', Answer: '', Definition: '' }) }
       }
-      if (url.includes('opensearch')) {
-        return { json: async () => (['ada lovelace', ['Ada Lovelace'], [''], ['https://en.wikipedia.org/wiki/Ada_Lovelace']]) }
+      if (url.includes('list=search')) {
+        return wikiSearchResult('Ada Lovelace')
       }
       return { ok: true, json: async () => ({ extract: 'Ada Lovelace was an English mathematician.' }) }
     })
@@ -72,19 +76,60 @@ describe('Ask testing Hubot scripts', () => {
     assert.strictEqual(sent[0], 'Ada Lovelace was an English mathematician.')
   })
 
+  it('should resolve a natural-language question with trailing punctuation', async () => {
+    delete process.env.GEMINI_API_KEY
+    let wikiSearchUrl = ''
+    mock.method(global, 'fetch', async (url) => {
+      if (url.includes('duckduckgo')) {
+        return { json: async () => ({ AbstractText: '', Answer: '', Definition: '' }) }
+      }
+      if (url.includes('list=search')) {
+        wikiSearchUrl = url
+        return wikiSearchResult('List of capitals of France')
+      }
+      return { ok: true, json: async () => ({ extract: 'Paris has been the capital of France since its liberation in 1944.' }) }
+    })
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant ask what is the capital of France?', 'test-room')
+    assert.match(decodeURIComponent(wikiSearchUrl), /srsearch=capital of France(?!\?)/)
+    assert.strictEqual(sent[0], 'Paris has been the capital of France since its liberation in 1944.')
+  })
+
   it('should say it has no answer when every source comes up empty', async () => {
     delete process.env.GEMINI_API_KEY
     mock.method(global, 'fetch', async (url) => {
       if (url.includes('duckduckgo')) {
         return { json: async () => ({ AbstractText: '', Answer: '', Definition: '' }) }
       }
-      return { json: async () => (['nothing', [], [], []]) }
+      return { json: async () => ({ query: { search: [] } }) }
     })
     const user = robot.brain.userForId('test-user', { name: 'test user' })
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant ask asdkjaslkdj', 'test-room')
     assert.strictEqual(sent[0], "I don't have an answer for that.")
+  })
+
+  it('should support "please ask" as an alternate phrasing', async () => {
+    process.env.GEMINI_API_KEY = 'test-key'
+    mock.method(global, 'fetch', async () => geminiResponse('Polite answer.'))
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant please ask what is rust', 'test-room')
+    assert.strictEqual(sent[0], 'Polite answer.')
+  })
+
+  it('should support "tell me about" as an alternate phrasing', async () => {
+    process.env.GEMINI_API_KEY = 'test-key'
+    mock.method(global, 'fetch', async () => geminiResponse('Rust is a systems programming language.'))
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant tell me about rust', 'test-room')
+    assert.strictEqual(sent[0], 'Rust is a systems programming language.')
   })
 
   it('should query gemini directly with "ask gg"', async () => {
@@ -118,8 +163,8 @@ describe('Ask testing Hubot scripts', () => {
 
   it('should query wikipedia directly with "ask wiki"', async () => {
     mock.method(global, 'fetch', async (url) => {
-      if (url.includes('opensearch')) {
-        return { json: async () => (['rust', ['Rust (programming language)'], [''], ['x']]) }
+      if (url.includes('list=search')) {
+        return wikiSearchResult('Rust (programming language)')
       }
       return { ok: true, json: async () => ({ extract: 'Direct wiki answer.' }) }
     })
