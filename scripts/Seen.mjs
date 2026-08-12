@@ -1,8 +1,11 @@
 // Description:
-//   Tracks when each user was last seen.
+//   Tracks when each user was last seen, and keeps the brain's known-user
+//   list up to date so other commands (reminders, roles, "who do you
+//   know") can find people by name.
 //
 // Commands:
 //   hubot seen <user> - Shows when <user> was last seen.
+//   hubot who do you know - Lists everyone the bot has seen talk.
 //
 
 const seenKey = userId => `seen:${userId}`
@@ -11,8 +14,21 @@ export default async (robot) => {
   robot.hear(/.*/, async res => {
     const user = res.message.user
     if (user && user.id != null) {
+      const known = robot.brain.userForId(user.id, { name: user.name })
+      known.name = user.name
       robot.brain.set(seenKey(user.id), { name: user.name, time: Date.now() })
     }
+  })
+
+  robot.respond(/who do you know\??$/i, async res => {
+    const users = Object.values(robot.brain.data.users || {})
+    const names = [...new Set(users.map(u => u.name).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+
+    if (names.length === 0) {
+      await res.send("I don't know anyone yet.")
+      return
+    }
+    await res.send(`I know ${names.length} ${names.length === 1 ? 'person' : 'people'}: ${names.join(', ')}`)
   })
 
   robot.respond(/(?:seen|have you seen|when (?:was|did you see)) ([\w .-]+?)\??\s*$/i, async res => {

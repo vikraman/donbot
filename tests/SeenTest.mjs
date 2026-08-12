@@ -43,4 +43,34 @@ describe('Seen testing Hubot scripts', () => {
     await robot.adapter.say(author, '@Dumbotheelephant have you seen holman', 'test-room')
     assert.match(sent[0], /^holman was last seen /)
   })
+  it('should register a speaker in the brain just from them talking, with no prior registration', async () => {
+    const stranger = { id: 'stranger-id', name: 'stranger' }
+    await robot.adapter.say(stranger, 'hello there', 'test-room')
+    assert.strictEqual(robot.brain.data.users['stranger-id'].name, 'stranger')
+  })
+  it('should update a known user\'s name in the brain when it changes', async () => {
+    const user = { id: 'renamed-id', name: 'oldname' }
+    await robot.adapter.say(user, 'hello there', 'test-room')
+    user.name = 'newname'
+    await robot.adapter.say(user, 'hello again', 'test-room')
+    assert.strictEqual(robot.brain.data.users['renamed-id'].name, 'newname')
+  })
+  it('should say it knows no one yet when asked "who do you know" with no history', async () => {
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    const author = robot.brain.userForId('author-id', { name: 'author' })
+    await robot.adapter.say(author, '@Dumbotheelephant who do you know', 'test-room')
+    assert.strictEqual(sent[0], `I know 1 person: author`)
+  })
+  it('should list everyone the bot has seen talk with "who do you know"', async () => {
+    const author = robot.brain.userForId('author-id', { name: 'author' })
+    const holman = { id: 'holman-id', name: 'holman' }
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(holman, 'hello there', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant who do you know', 'test-room')
+    assert.match(sent[0], /^I know 2 people: /)
+    assert.match(sent[0], /\bauthor\b/)
+    assert.match(sent[0], /\bholman\b/)
+  })
 })
