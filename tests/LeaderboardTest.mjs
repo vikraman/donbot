@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test'
+import { describe, it, beforeEach, afterEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { Robot } from 'hubot'
@@ -17,6 +17,7 @@ describe('Leaderboard testing Hubot scripts', () => {
   afterEach(() => {
     delete process.env.EXPRESS_PORT
     robot.shutdown()
+    mock.reset()
   })
   it('should say there are no scores yet', async () => {
     const user = robot.brain.userForId('test-user', { name: 'test user' })
@@ -25,7 +26,8 @@ describe('Leaderboard testing Hubot scripts', () => {
     await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
     assert.strictEqual(sent[0], 'No scores yet.')
   })
-  it('should list scores in descending order', async () => {
+  it('should list scores in descending order without commentary', async () => {
+    mock.method(Math, 'random', () => 0.9)
     robot.brain.set('plusplus:tacos', 5)
     robot.brain.set('plusplus:pizza', 10)
     const user = robot.brain.userForId('test-user', { name: 'test user' })
@@ -35,11 +37,22 @@ describe('Leaderboard testing Hubot scripts', () => {
     assert.strictEqual(sent[0], '1. pizza: 10\n2. tacos: 5')
   })
   it('should support "top scores" as an alternate phrasing', async () => {
+    mock.method(Math, 'random', () => 0.9)
     robot.brain.set('plusplus:tacos', 5)
     const user = robot.brain.userForId('test-user', { name: 'test user' })
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(user, '@Dumbotheelephant top scores', 'test-room')
     assert.strictEqual(sent[0], '1. tacos: 5')
+  })
+  it('should include commentary about the top scorer when the roll succeeds', async () => {
+    mock.method(Math, 'random', () => 0)
+    robot.brain.set('plusplus:tacos', 5)
+    robot.brain.set('plusplus:pizza', 10)
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
+    assert.match(sent[0], /pizza is untouchable right now\./)
   })
 })

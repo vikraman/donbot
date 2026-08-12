@@ -15,6 +15,31 @@ const getAmbiguousUserText = users =>
 
 const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
 
+const pick = options => options[Math.floor(Math.random() * options.length)]
+
+const NOTHING_TO_ME = [
+  '{name} is nothing to me.',
+  "I've got nothing on {name}.",
+  "{name}? Blank slate.",
+  "No roles for {name} yet."
+]
+
+const NEVER_HEARD = [
+  "{name}? Never heard of 'em",
+  "{name} who?",
+  "Doesn't ring a bell: {name}",
+  "I don't know any {name}."
+]
+
+const UNKNOWN_USER = [
+  "I don't know anything about {name}.",
+  "Never met {name}.",
+  "{name} is a mystery to me.",
+  "No idea who {name} is."
+]
+
+const fillTemplate = (template, name) => template.replace('{name}', name)
+
 export default async (robot) => {
   robot.respond(/who is @?([\w .-]+)\?*$/i, async res => {
     const joiner = ', '
@@ -33,12 +58,12 @@ export default async (robot) => {
           const j = user.roles.join('').includes(',') ? '; ' : joiner
           await res.send(`${name} is ${user.roles.join(j)}.`)
         } else {
-          await res.send(`${name} is nothing to me.`)
+          await res.send(fillTemplate(pick(NOTHING_TO_ME), name))
         }
       } else if (users.length > 1) {
         await res.send(getAmbiguousUserText(users))
       } else {
-        await res.send(`${name}? Never heard of 'em`)
+        await res.send(fillTemplate(pick(NEVER_HEARD), name))
       }
     }
   })
@@ -69,7 +94,7 @@ export default async (robot) => {
     } else if (users.length > 1) {
       await res.send(getAmbiguousUserText(users))
     } else {
-      await res.send(`I don't know anything about ${name}.`)
+      await res.send(fillTemplate(pick(UNKNOWN_USER), name))
     }
   })
 
@@ -95,7 +120,7 @@ export default async (robot) => {
     } else if (users.length > 1) {
       await res.send(getAmbiguousUserText(users))
     } else {
-      await res.send(`I don't know anything about ${name}.`)
+      await res.send(fillTemplate(pick(UNKNOWN_USER), name))
     }
   })
 }

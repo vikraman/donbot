@@ -52,4 +52,21 @@ describe('Xkcd testing Hubot scripts', () => {
     await robot.adapter.say(user, '@Dumbotheelephant xkcd comic', 'test-room')
     assert.strictEqual(sent[0], 'Test: https://imgs.xkcd.com/comics/test.png')
   })
+  it('should fetch a random comic number within the latest range', async () => {
+    mock.method(Math, 'random', () => 0.5)
+    let requestedUrls = []
+    mock.method(global, 'fetch', async (url) => {
+      requestedUrls.push(url)
+      if (url === 'https://xkcd.com/info.0.json') {
+        return { ok: true, json: async () => ({ num: 100, title: 'Latest', img: 'https://imgs.xkcd.com/comics/latest.png' }) }
+      }
+      return { ok: true, json: async () => ({ title: 'Random Comic', img: 'https://imgs.xkcd.com/comics/random.png' }) }
+    })
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant xkcd random', 'test-room')
+    assert.strictEqual(requestedUrls[1], 'https://xkcd.com/51/info.0.json')
+    assert.strictEqual(sent[0], 'Random Comic: https://imgs.xkcd.com/comics/random.png')
+  })
 })
