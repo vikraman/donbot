@@ -18,7 +18,7 @@ services:
     command: redis-server --save 60 1 --appendonly yes
 
   watchtower:
-    image: containrrr/watchtower
+    image: nickfedor/watchtower:latest
     container_name: watchtower
     restart: unless-stopped
     volumes:
