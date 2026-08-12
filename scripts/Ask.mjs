@@ -15,16 +15,18 @@
 //
 
 const TRAILING_PUNCTUATION = /[?!.]+$/
-const QUESTION_PREFIX = /^(who|what|where|when|why|how)\s+(is|are|was|were|do|does|did|can|could)\s+(the\s+)?/i
+// Matches "what is"/"what's"/"what're", "who is"/"who's", "how does", etc.
+// The verb alternation uses \b so "do" doesn't swallow the "do" in "does".
+const QUESTION_PREFIX = /^(who|what|where|when|why|how)(?:['’](?:s|re)|\s+(?:is|are|was|were|do|does|did|can|could)\b)\s*(the\s+)?/i
 
 const cleanForSearch = question =>
-  question.replace(QUESTION_PREFIX, '').replace(TRAILING_PUNCTUATION, '').trim()
+  question.replace(TRAILING_PUNCTUATION, '').replace(QUESTION_PREFIX, '').trim()
 
 const askGemini = async (question) => {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return null
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

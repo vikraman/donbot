@@ -97,6 +97,61 @@ describe('Ask testing Hubot scripts', () => {
     assert.strictEqual(sent[0], 'Paris has been the capital of France since its liberation in 1944.')
   })
 
+  it('should resolve a contracted question like "what\'s" without garbling the search', async () => {
+    delete process.env.GEMINI_API_KEY
+    let wikiSearchUrl = ''
+    mock.method(global, 'fetch', async (url) => {
+      if (url.includes('duckduckgo')) {
+        return { json: async () => ({ AbstractText: '', Answer: '', Definition: '' }) }
+      }
+      if (url.includes('list=search')) {
+        wikiSearchUrl = url
+        return wikiSearchResult('List of capitals of France')
+      }
+      return { ok: true, json: async () => ({ extract: 'Paris has been the capital of France since its liberation in 1944.' }) }
+    })
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, "@Dumbotheelephant ask what's the capital of France?", 'test-room')
+    assert.match(decodeURIComponent(wikiSearchUrl), /srsearch=capital of France(?!\?)/)
+    assert.strictEqual(sent[0], 'Paris has been the capital of France since its liberation in 1944.')
+  })
+
+  it('should not swallow "does" when stripping "how does"', async () => {
+    delete process.env.GEMINI_API_KEY
+    let wikiSearchUrl = ''
+    mock.method(global, 'fetch', async (url) => {
+      if (url.includes('duckduckgo')) {
+        return { json: async () => ({ AbstractText: '', Answer: '', Definition: '' }) }
+      }
+      if (url.includes('list=search')) {
+        wikiSearchUrl = url
+        return wikiSearchResult('Photosynthesis')
+      }
+      return { ok: true, json: async () => ({ extract: 'Photosynthesis is a system of biological processes.' }) }
+    })
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant ask how does photosynthesis work', 'test-room')
+    assert.match(decodeURIComponent(wikiSearchUrl), /srsearch=photosynthesis work&/)
+  })
+
+  it('should send gemini the raw, unstripped question', async () => {
+    process.env.GEMINI_API_KEY = 'test-key'
+    let requestBody = null
+    mock.method(global, 'fetch', async (url, options) => {
+      requestBody = JSON.parse(options.body)
+      return geminiResponse('Paris.')
+    })
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, "@Dumbotheelephant ask what's the capital of France?", 'test-room')
+    assert.strictEqual(requestBody.contents[0].parts[0].text, "what's the capital of France?")
+  })
+
   it('should say it has no answer when every source comes up empty', async () => {
     delete process.env.GEMINI_API_KEY
     mock.method(global, 'fetch', async (url) => {
