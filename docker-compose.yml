@@ -4,8 +4,18 @@ services:
     container_name: donbot
     restart: unless-stopped
     env_file: .env
+    depends_on:
+      - redis
     labels:
       - com.centurylinklabs.watchtower.enable=true
+
+  redis:
+    image: redis:7-alpine
+    container_name: donbot-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: redis-server --save 60 1 --appendonly yes
 
   watchtower:
     image: containrrr/watchtower
@@ -14,3 +24,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     command: --interval 60 --cleanup --label-enable
+
+volumes:
+  redis-data:

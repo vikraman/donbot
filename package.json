@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "source .env && hubot --name donbot --adapter @hubot-friends/hubot-discord",
-    "test": "node --test"
+    "test": "node --test tests/*.mjs"
   },
   "keywords": [],
   "author": "",

@@ -1,5 +1,6 @@
 [
   "hubot-help",
   "hubot-rules",
-  "hubot-diagnostics"
+  "hubot-diagnostics",
+  "hubot-redis-brain"
 ]
