@@ -6,6 +6,7 @@
 // Commands:
 //   hubot seen <user> - Shows when <user> was last seen.
 //   hubot who do you know - Lists everyone the bot has seen talk.
+//   hubot who is your owner - Shows who owns/runs the bot.
 //
 
 const seenKey = userId => `seen:${userId}`
@@ -32,6 +33,17 @@ export default async (robot) => {
       return
     }
     await res.send(`I know ${names.length} ${names.length === 1 ? 'person' : 'people'}: ${names.join(', ')}`)
+  })
+
+  robot.respond(/who(?:'s| is) your owner\??$|who (?:made|owns|runs) you\??$/i, async res => {
+    const ownerId = process.env.OWNER_USER_ID
+    if (!ownerId) {
+      await res.send("I don't have an owner configured.")
+      return
+    }
+
+    const owner = robot.brain.data.users && robot.brain.data.users[ownerId]
+    await res.send(owner ? `${owner.name} owns me.` : "My owner hasn't said anything yet, so I don't know their name.")
   })
 
   robot.respond(/(?:seen|have you seen|when (?:was|did you see)) ([\w .-]+?)\??\s*$/i, async res => {

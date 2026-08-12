@@ -16,6 +16,7 @@ describe('Seen testing Hubot scripts', () => {
   })
   afterEach(() => {
     delete process.env.EXPRESS_PORT
+    delete process.env.OWNER_USER_ID
     robot.shutdown()
   })
   it('should say it has not seen an unknown user', async () => {
@@ -72,5 +73,40 @@ describe('Seen testing Hubot scripts', () => {
     assert.match(sent[0], /^I know 2 people: /)
     assert.match(sent[0], /\bauthor\b/)
     assert.match(sent[0], /\bholman\b/)
+  })
+  it('should say it has no owner configured when OWNER_USER_ID is unset', async () => {
+    const author = robot.brain.userForId('author-id', { name: 'author' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(author, '@Dumbotheelephant who is your owner', 'test-room')
+    assert.strictEqual(sent[0], "I don't have an owner configured.")
+  })
+  it('should say the owner is unknown when configured but never seen talk', async () => {
+    process.env.OWNER_USER_ID = 'owner-id'
+    const author = robot.brain.userForId('author-id', { name: 'author' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(author, '@Dumbotheelephant who is your owner', 'test-room')
+    assert.strictEqual(sent[0], "My owner hasn't said anything yet, so I don't know their name.")
+  })
+  it('should report the owner\'s name once known', async () => {
+    process.env.OWNER_USER_ID = 'owner-id'
+    const owner = { id: 'owner-id', name: 'vikraman' }
+    const author = robot.brain.userForId('author-id', { name: 'author' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(owner, 'hello', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant who is your owner', 'test-room')
+    assert.strictEqual(sent[0], 'vikraman owns me.')
+  })
+  it('should support "who made you" as an alternate phrasing', async () => {
+    process.env.OWNER_USER_ID = 'owner-id'
+    const owner = { id: 'owner-id', name: 'vikraman' }
+    const author = robot.brain.userForId('author-id', { name: 'author' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(owner, 'hello', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant who made you', 'test-room')
+    assert.strictEqual(sent[0], 'vikraman owns me.')
   })
 })
