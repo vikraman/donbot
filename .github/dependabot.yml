@@ -1,9 +1,14 @@
-version: 2 # Specifies the version of the Dependabot configuration file format
-
+version: 2
 updates:
-  # Configuration for dependency updates
-  - package-ecosystem: "github-actions" # Specifies the ecosystem to check for updates
-    directory: "/" # Specifies the directory to check for dependencies; "/" means the root directory
+  # Configuration for npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/" # Location of package.json
     schedule:
-      # Check for updates to GitHub Actions every week
+      interval: "weekly" # Options: daily, weekly, monthly
+
+  # Configuration for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/" # Search for workflows in the root
+    schedule:
       interval: "weekly"
+
