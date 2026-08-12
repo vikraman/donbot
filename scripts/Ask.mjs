@@ -32,7 +32,8 @@ const askGemini = async (question) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: question }] }],
-      generationConfig: { maxOutputTokens: 200 }
+      systemInstruction: { parts: [{ text: 'Answer in 1-3 short sentences. No markdown formatting, headers, or bullet points.' }] },
+      generationConfig: { maxOutputTokens: 1024 }
     })
   })
   if (!response.ok) return null

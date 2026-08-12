@@ -152,6 +152,21 @@ describe('Ask testing Hubot scripts', () => {
     assert.strictEqual(requestBody.contents[0].parts[0].text, "what's the capital of France?")
   })
 
+  it('should request a large enough token budget to survive thinking overhead', async () => {
+    process.env.GEMINI_API_KEY = 'test-key'
+    let requestBody = null
+    mock.method(global, 'fetch', async (url, options) => {
+      requestBody = JSON.parse(options.body)
+      return geminiResponse('Answer.')
+    })
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant ask years of Napoleon\'s rule?', 'test-room')
+    assert.ok(requestBody.generationConfig.maxOutputTokens >= 1000)
+    assert.match(requestBody.systemInstruction.parts[0].text, /short/i)
+  })
+
   it('should say it has no answer when every source comes up empty', async () => {
     delete process.env.GEMINI_API_KEY
     mock.method(global, 'fetch', async (url) => {
