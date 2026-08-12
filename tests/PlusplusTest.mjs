@@ -48,4 +48,12 @@ describe('Plusplus testing Hubot scripts', () => {
     await robot.adapter.say(user, '@Dumbotheelephant score for donbot', 'test-room')
     assert.strictEqual(sent[1], 'donbot: 1')
   })
+  it('should support "points for" as an alternate phrasing', async () => {
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, 'donbot++', 'test-room')
+    await robot.adapter.say(user, '@Dumbotheelephant points for donbot', 'test-room')
+    assert.strictEqual(sent[1], 'donbot: 1')
+  })
 })

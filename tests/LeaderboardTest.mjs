@@ -5,43 +5,41 @@ import { Robot } from 'hubot'
 
 import dummyRobot from './doubles/DummyAdapter.mjs'
 
-describe('Garble testing Hubot scripts', () => {
+describe('Leaderboard testing Hubot scripts', () => {
   let robot = null
   beforeEach(async () => {
     process.env.EXPRESS_PORT = 0
     robot = new Robot(dummyRobot, true, 'Dumbotheelephant')
     await robot.loadAdapter()
     await robot.run()
-    await robot.loadFile('./scripts', 'Garble.mjs')
+    await robot.loadFile('./scripts', 'Leaderboard.mjs')
   })
   afterEach(() => {
     delete process.env.EXPRESS_PORT
     robot.shutdown()
   })
-  it('should keep first and last letters of each word in place', async () => {
+  it('should say there are no scores yet', async () => {
     const user = robot.brain.userForId('test-user', { name: 'test user' })
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
-    await robot.adapter.say(user, '@Dumbotheelephant garble hello world', 'test-room')
-    const words = sent[0].split(' ')
-    assert.strictEqual(words.length, 2)
-    assert.strictEqual(words[0][0], 'h')
-    assert.strictEqual(words[0][words[0].length - 1], 'o')
-    assert.strictEqual(words[1][0], 'w')
-    assert.strictEqual(words[1][words[1].length - 1], 'd')
+    await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
+    assert.strictEqual(sent[0], 'No scores yet.')
   })
-  it('should leave short words unchanged', async () => {
+  it('should list scores in descending order', async () => {
+    robot.brain.set('plusplus:tacos', 5)
+    robot.brain.set('plusplus:pizza', 10)
     const user = robot.brain.userForId('test-user', { name: 'test user' })
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
-    await robot.adapter.say(user, '@Dumbotheelephant garble a to it', 'test-room')
-    assert.strictEqual(sent[0], 'a to it')
+    await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
+    assert.strictEqual(sent[0], '1. pizza: 10\n2. tacos: 5')
   })
-  it('should support "scramble" as an alternate trigger word', async () => {
+  it('should support "top scores" as an alternate phrasing', async () => {
+    robot.brain.set('plusplus:tacos', 5)
     const user = robot.brain.userForId('test-user', { name: 'test user' })
     const sent = []
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
-    await robot.adapter.say(user, '@Dumbotheelephant scramble hello', 'test-room')
-    assert.strictEqual(sent[0][0], 'h')
+    await robot.adapter.say(user, '@Dumbotheelephant top scores', 'test-room')
+    assert.strictEqual(sent[0], '1. tacos: 5')
   })
 })

@@ -23,7 +23,7 @@ const garbleWord = word => {
 }
 
 export default async (robot) => {
-  robot.respond(/garble (.+)$/i, async res => {
+  robot.respond(/(?:garble|scramble)\s+(.+)$/i, async res => {
     const garbled = res.match[1].split(' ').map(garbleWord).join(' ')
     await res.send(garbled)
   })

@@ -29,4 +29,11 @@ describe('Count testing Hubot scripts', () => {
     assert.strictEqual(replies[0], 'Count is now 1')
     assert.strictEqual(replies[1], 'Count is now 2')
   })
+  it('should support "counter" as an alternate trigger word', async () => {
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const replies = []
+    robot.on('reply', (envelope, ...strings) => { replies.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant counter', 'test-room')
+    assert.strictEqual(replies[0], 'Count is now 1')
+  })
 })

@@ -29,4 +29,14 @@ describe('Pugme testing Hubot scripts', () => {
     await robot.adapter.say(user, '@Dumbotheelephant pug me', 'test-room')
     assert.strictEqual(sent[0], 'https://images.dog.ceo/breeds/pug/example.jpg')
   })
+  it('should support the "show me a pug" alternate phrasing', async () => {
+    mock.method(global, 'fetch', async () => ({
+      json: async () => ({ message: 'https://images.dog.ceo/breeds/pug/example2.jpg', status: 'success' })
+    }))
+    const user = robot.brain.userForId('test-user', { name: 'test user' })
+    const sent = []
+    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    await robot.adapter.say(user, '@Dumbotheelephant show me a pug', 'test-room')
+    assert.strictEqual(sent[0], 'https://images.dog.ceo/breeds/pug/example2.jpg')
+  })
 })

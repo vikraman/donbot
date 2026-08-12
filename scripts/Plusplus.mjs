@@ -19,7 +19,7 @@ export default async (robot) => {
     await res.send(`${thing}: ${score}`)
   })
 
-  robot.respond(/score for ([\w .-]+?)\s*$/i, async res => {
+  robot.respond(/(?:score for|points for|how many points does) ([\w .-]+?) ?(?:have)?\s*$/i, async res => {
     const thing = res.match[1].trim()
     const score = robot.brain.get(scoreKey(thing)) || 0
     await res.send(`${thing}: ${score}`)

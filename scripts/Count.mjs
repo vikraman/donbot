@@ -6,7 +6,7 @@
 //
 
 export default async (robot) => {
-  robot.respond(/count$/, async res => {
+  robot.respond(/count(?: it| it up|er)?$/i, async res => {
     const count = (robot.brain.get('count') || 0) + 1
     robot.brain.set('count', count)
     await res.reply(`Count is now ${count}`)
