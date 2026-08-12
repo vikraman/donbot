@@ -212,7 +212,7 @@ describe('RateLimit testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     for (let i = 0; i < 6; i++) await robot.adapter.say(pest, '@Dumbotheelephant ping', 'test-room')
     await robot.adapter.say(owner, "@Dumbotheelephant who's rate limited", 'test-room')
-    assert.match(sent.at(-1), /^pest in test-room: .+ left \(offense #1\)$/)
+    assert.match(sent.at(-1), /^<@pest-id> in test-room: .+ left \(offense #1\)$/)
   })
 
   it('should resolve the room to a real channel name when a discord client is present', async () => {
@@ -226,7 +226,7 @@ describe('RateLimit testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     for (let i = 0; i < 6; i++) await robot.adapter.say(pest, '@Dumbotheelephant ping', 'test-room')
     await robot.adapter.say(owner, "@Dumbotheelephant who's rate limited", 'test-room')
-    assert.match(sent.at(-1), /^pest in #general: .+ left \(offense #1\)$/)
+    assert.match(sent.at(-1), /^<@pest-id> in #general: .+ left \(offense #1\)$/)
   })
 
   it('should fall back to the raw room id when there is no matching channel', async () => {
@@ -238,7 +238,7 @@ describe('RateLimit testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     for (let i = 0; i < 6; i++) await robot.adapter.say(pest, '@Dumbotheelephant ping', 'test-room')
     await robot.adapter.say(owner, "@Dumbotheelephant who's rate limited", 'test-room')
-    assert.match(sent.at(-1), /^pest in test-room: .+ left \(offense #1\)$/)
+    assert.match(sent.at(-1), /^<@pest-id> in test-room: .+ left \(offense #1\)$/)
   })
 
   it('should support "rate limits" as a shorter phrasing', async () => {

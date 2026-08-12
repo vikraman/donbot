@@ -31,12 +31,16 @@ const UNIT_MS = {
   hours: 60 * 60 * 1000
 }
 
+import { mentionFor } from './lib/mention.mjs'
+
 const REMINDERS_KEY = 'reminders'
+
+const mentionForReminder = reminder => mentionFor({ id: reminder.targetId, name: reminder.targetName })
 
 const scheduleReminder = (robot, reminder) => {
   const delay = reminder.dueAt - Date.now()
   const timer = setTimeout(async () => {
-    await robot.messageRoom(reminder.room, `@${reminder.targetName} reminder: ${reminder.message}`)
+    await robot.messageRoom(reminder.room, `${mentionForReminder(reminder)} reminder: ${reminder.message}`)
     const reminders = robot.brain.get(REMINDERS_KEY) || []
     robot.brain.set(REMINDERS_KEY, reminders.filter(r => r.id !== reminder.id))
   }, Math.max(delay, 0))
@@ -45,22 +49,22 @@ const scheduleReminder = (robot, reminder) => {
 
 // Resolves who the reminder is for. "me" is the sender; a Discord raw
 // mention (<@id>) or a plain name is looked up in the brain so we can
-// address them by their known name; falls back to the raw text if unknown.
+// address them by their known name and id; falls back to the raw text if unknown.
 const resolveTarget = (robot, res, who) => {
   const trimmed = who.trim()
   if (!trimmed || trimmed.toLowerCase() === 'me') {
-    return res.message.user.name
+    return { id: res.message.user.id, name: res.message.user.name }
   }
 
   const mentionMatch = trimmed.match(/^<@!?(\d+)>$/)
   if (mentionMatch) {
     const user = robot.brain.userForId(mentionMatch[1])
-    return (user && user.name) || trimmed
+    return { id: mentionMatch[1], name: (user && user.name) || trimmed }
   }
 
   const name = trimmed.replace(/^@/, '')
   const users = robot.brain.usersForFuzzyName(name)
-  return users.length === 1 ? users[0].name : name
+  return users.length === 1 ? { id: users[0].id, name: users[0].name } : { id: null, name }
 }
 
 const formatRemaining = ms => {
@@ -78,11 +82,11 @@ const formatRemaining = ms => {
 const handleList = async (robot, res, { mineOnly }) => {
   const reminders = robot.brain.get(REMINDERS_KEY) || []
   const room = res.message.room
-  const requester = res.message.user.name
+  const requester = res.message.user.id
 
   const pending = reminders
     .filter(r => r.room === room)
-    .filter(r => !mineOnly || r.targetName === requester)
+    .filter(r => !mineOnly || r.targetId === requester)
     .sort((a, b) => a.dueAt - b.dueAt)
 
   if (pending.length === 0) {
@@ -90,7 +94,7 @@ const handleList = async (robot, res, { mineOnly }) => {
     return
   }
 
-  const lines = pending.map(r => `in ${formatRemaining(r.dueAt - Date.now())} for @${r.targetName}: ${r.message}`)
+  const lines = pending.map(r => `in ${formatRemaining(r.dueAt - Date.now())} for ${mentionForReminder(r)}: ${r.message}`)
   await res.send(lines.join('\n'))
 }
 
@@ -102,10 +106,11 @@ const handleRemind = async (robot, res, { who, amount, unit, message }) => {
     return
   }
 
-  const targetName = resolveTarget(robot, res, who)
+  const target = resolveTarget(robot, res, who)
   const reminder = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    targetName,
+    targetId: target.id,
+    targetName: target.name,
     room: res.message.room,
     message: message.trim(),
     dueAt: Date.now() + parseInt(amount, 10) * unitMs
@@ -116,7 +121,7 @@ const handleRemind = async (robot, res, { who, amount, unit, message }) => {
   robot.brain.set(REMINDERS_KEY, reminders)
   scheduleReminder(robot, reminder)
 
-  const whom = targetName === res.message.user.name ? 'you' : targetName
+  const whom = target.id === res.message.user.id ? 'you' : mentionForReminder(reminder)
   await res.send(`Ok, I'll remind ${whom} in ${amount} ${unit}.`)
 }
 

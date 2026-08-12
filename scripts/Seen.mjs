@@ -9,6 +9,8 @@
 //   hubot who is your owner - Shows who owns/runs the bot.
 //
 
+import { mentionFor } from './lib/mention.mjs'
+
 const seenKey = userId => `seen:${userId}`
 const LAST_MESSAGE_KEY = 'seen:last'
 
@@ -64,6 +66,6 @@ export default async (robot) => {
       await res.send(`I haven't seen ${name} say anything.`)
       return
     }
-    await res.send(`${entry.name} was last seen ${new Date(entry.time).toISOString()}`)
+    await res.send(`${mentionFor({ id: users[0].id, name: entry.name })} was last seen ${new Date(entry.time).toISOString()}`)
   })
 }

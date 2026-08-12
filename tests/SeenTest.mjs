@@ -33,7 +33,7 @@ describe('Seen testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(holman, 'hello there', 'test-room')
     await robot.adapter.say(author, '@Dumbotheelephant seen holman', 'test-room')
-    assert.match(sent[0], /^holman was last seen /)
+    assert.match(sent[0], /^<@holman-id> was last seen /)
   })
   it('should support "have you seen" as an alternate phrasing', async () => {
     const author = robot.brain.userForId('author-id', { name: 'author' })
@@ -42,7 +42,7 @@ describe('Seen testing Hubot scripts', () => {
     robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
     await robot.adapter.say(holman, 'hello there', 'test-room')
     await robot.adapter.say(author, '@Dumbotheelephant have you seen holman', 'test-room')
-    assert.match(sent[0], /^holman was last seen /)
+    assert.match(sent[0], /^<@holman-id> was last seen /)
   })
   it('should register a speaker in the brain just from them talking, with no prior registration', async () => {
     const stranger = { id: 'stranger-id', name: 'stranger' }

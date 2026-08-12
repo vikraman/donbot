@@ -12,6 +12,8 @@
 //   OWNER_USER_ID - Discord user ID exempted from rate limiting. Optional.
 //
 
+import { mentionFor } from './lib/mention.mjs'
+
 const WINDOW_MS = 60 * 1000
 const MAX_COMMANDS_PER_WINDOW = 5
 const BASE_COOLDOWN_MS = 30 * 1000
@@ -127,8 +129,8 @@ export default async (robot) => {
 
     const lines = limited.map(({ userId, room, state }) => {
       const user = robot.brain.data.users && robot.brain.data.users[userId]
-      const name = (user && user.name) || userId
-      return `${name} in ${roomName(robot, room)}: ${formatDuration(state.dismissedUntil - now)} left (offense #${state.offenseCount})`
+      const mention = mentionFor({ id: userId, name: user && user.name })
+      return `${mention} in ${roomName(robot, room)}: ${formatDuration(state.dismissedUntil - now)} left (offense #${state.offenseCount})`
     })
     await res.send(lines.join('\n'))
   })
