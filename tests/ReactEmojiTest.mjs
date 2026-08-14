@@ -7,16 +7,26 @@ import { SENTIMENT_EMOJI } from '../scripts/ReactEmoji.mjs'
 describe('ReactEmoji testing Hubot scripts', () => {
   const state = setupRobot('ReactEmoji.mjs')
 
-  it('should react with a matching emoji for a single keyword', async () => {
+  it('should react when at least 2 keywords match', async () => {
     const { robot } = state
     mock.method(Math, 'random', () => 0.5)
     const reacted = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji) => { reacted.push(emoji) } }
     })
-    await robot.adapter.say(user, 'show me a pug', 'test-room')
+    await robot.adapter.say(user, 'such a cute puppy', 'test-room')
     assert.ok(reacted.length > 0)
-    assert.ok(reacted.every(e => ['🐾', '🐕'].includes(e)))
+    assert.ok(reacted.every(e => ['🥺', '🐶', '🐾', '🙇', '🐯', '🐳'].includes(e)))
+  })
+  it('should not react when only a single keyword matches', async () => {
+    const { robot } = state
+    mock.method(Math, 'random', () => 0.9)
+    const reacted = []
+    const user = brainUser(robot, 'test-user', 'test user', {
+      message: { react: async (emoji) => { reacted.push(emoji) } }
+    })
+    await robot.adapter.say(user, 'anyone want pizza later', 'test-room')
+    assert.deepStrictEqual(reacted, [])
   })
   it('should react to a different keyword category', async () => {
     const { robot } = state
@@ -25,8 +35,9 @@ describe('ReactEmoji testing Hubot scripts', () => {
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji) => { reacted.push(emoji) } }
     })
-    await robot.adapter.say(user, 'anyone want pizza later', 'test-room')
-    assert.deepStrictEqual(reacted, ['🍕'])
+    await robot.adapter.say(user, 'want some pizza and cheese', 'test-room')
+    assert.ok(reacted.length > 0)
+    assert.ok(reacted.every(e => ['🥯', '🍕', '🥪', '🫕', '🪤'].includes(e)))
   })
   it('should react with at most 5 distinct emojis', async () => {
     const { robot } = state
@@ -46,7 +57,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji) => { reacted.push(emoji) } }
     })
-    await robot.adapter.say(user, 'nothing interesting here', 'test-room')
+    await robot.adapter.say(user, 'zzz qwerty blah foobar', 'test-room')
     assert.deepStrictEqual(reacted, [])
   })
   it('should skip reacting entirely when the skip roll succeeds', async () => {
@@ -56,14 +67,14 @@ describe('ReactEmoji testing Hubot scripts', () => {
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji) => { reacted.push(emoji) } }
     })
-    await robot.adapter.say(user, 'show me a pug', 'test-room')
+    await robot.adapter.say(user, 'such a cute puppy', 'test-room')
     assert.deepStrictEqual(reacted, [])
   })
   it('should not error when the raw message has no react method', async () => {
     const { robot } = state
     mock.method(Math, 'random', () => 0.9)
     const user = brainUser(robot, 'test-user', 'test user')
-    await assert.doesNotReject(robot.adapter.say(user, 'show me a pug', 'test-room'))
+    await assert.doesNotReject(robot.adapter.say(user, 'such a cute puppy', 'test-room'))
   })
   it('should react with a sentiment emoji for strong positive tone with no keyword match', async () => {
     const { robot } = state
