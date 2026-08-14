@@ -1,6 +1,5 @@
 // Description:
-//   Lets you praise the bot for a job well done. Tracks how many times
-//   it's been praised.
+//   Praise the bot for a job well done. Tracks praise count.
 //
 // Commands:
 //   hubot cookie - Gives the bot a cookie.
@@ -10,9 +9,8 @@
 //   hubot praise count - Shows how many times the bot has been praised.
 //   hubot who praised you - Lists who has praised the bot and how often.
 //
-// Also reacts to positive-affirmation reactions added to one of the bot's
-// own messages, treating them the same as a praise command. Discord only.
-// (⭐ is intentionally excluded — StarReact.mjs already owns that emoji.)
+// Also reacts to positive-affirmation emoji reactions on the bot's own messages. Discord only.
+// (⭐ excluded — StarReact.mjs owns it.)
 //
 
 import { mentionFor } from './lib/mention.mjs'

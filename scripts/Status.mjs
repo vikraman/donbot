@@ -1,13 +1,13 @@
 // Description:
-//   Reports bot status. The default is a quick summary; add "verbose" or
-//   "detailed" for full details (memory breakdown, brain size, Discord
-//   connection info, runtime versions).
+//   Reports bot status. Default is a quick summary; add "verbose"/"detailed" for full details.
 //
 // Commands:
 //   hubot status - Shows a quick status summary.
 //   hubot status verbose - Shows detailed bot status.
 //   hubot uptime - Shows how long the bot has been running.
 //
+
+import hubotPackage from 'hubot/package.json' with { type: 'json' }
 
 const formatUptime = seconds => {
   const d = Math.floor(seconds / 86400)
@@ -102,7 +102,7 @@ export default async (robot) => {
       `Brain: ${brain.status} (${brain.host}) — ${brain.userCount} users, ${brain.keyCount} keys, ${brain.sizeKb} KB`,
       `Listeners: ${scriptCount}`,
       `Node: ${process.version} (${process.platform}/${process.arch})`,
-      `Hubot: ${robot.version || 'unknown'}`
+      `Hubot: ${hubotPackage.version || 'unknown'}`
     ]
 
     const discord = discordInfo(robot)

@@ -1,7 +1,6 @@
 // Description:
-//   Tracks when each user was last seen, and keeps the brain's known-user
-//   list up to date so other commands (reminders, roles, "who do you
-//   know") can find people by name.
+//   Tracks when each user was last seen; keeps the brain's known-user list up to date
+//   so other commands can find people by name.
 //
 // Commands:
 //   hubot seen <user> - Shows when <user> was last seen.

@@ -1,7 +1,5 @@
 // Description:
-//   Set a reminder for later, for yourself or someone else. Reminders
-//   persist in the brain and are rescheduled on startup, so they survive
-//   restarts and redeploys.
+//   Set a reminder for yourself or someone else. Persists in the brain, survives restarts.
 //
 // Commands:
 //   hubot remind me in <N> <unit> to <message> - Reminds you in N minutes/hours to do something.
@@ -47,9 +45,7 @@ const scheduleReminder = (robot, reminder) => {
   timer.unref()
 }
 
-// Resolves who the reminder is for. "me" is the sender; a Discord raw
-// mention (<@id>) or a plain name is looked up in the brain so we can
-// address them by their known name and id; falls back to the raw text if unknown.
+// "me" is the sender; mention/name is looked up in the brain, else falls back to raw text
 const resolveTarget = (robot, res, who) => {
   const trimmed = who.trim()
   if (!trimmed || trimmed.toLowerCase() === 'me') {

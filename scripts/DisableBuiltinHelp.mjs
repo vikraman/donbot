@@ -1,10 +1,6 @@
 // Description:
-//   Unregisters hubot core's built-in "help" command so it falls through to
-//   hubot-help's classic comment-scraped help listing instead. The built-in
-//   command uses a rigid --flag argument syntax that doesn't fit this bot's
-//   natural-language scripts, and its dispatch runs in receive middleware
-//   ahead of the listener chain, so it would otherwise shadow every other
-//   help handler unconditionally.
+//   Unregisters core's "help" so hubot-help's comment-scraped listing runs instead.
+//   Core's help uses rigid --flags and shadows other help handlers via middleware.
 //
 
 export default async (robot) => {

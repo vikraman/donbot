@@ -1,7 +1,6 @@
 // Description:
-//   Rate-limits how often a user can run commands in a room. Past the
-//   limit, the bot stops responding and tells them to get back to work
-//   instead. Repeat offenders get exponentially longer cooldowns.
+//   Rate-limits commands per user/room. Past the limit, stops responding and tells them to
+//   get back to work. Repeat offenders get exponentially longer cooldowns.
 //
 // Commands:
 //   hubot who's rate limited - (Owner only) Lists users currently in a rate-limit cooldown.

@@ -1,6 +1,5 @@
 // Description:
-//   Fetches a random joke, live. Defaults to a dad joke; specific
-//   categories pull from other free joke sources.
+//   Fetches a random joke, live. Defaults to a dad joke; categories pull from other sources.
 //
 // Commands:
 //   hubot joke - Replies with a random dad joke.

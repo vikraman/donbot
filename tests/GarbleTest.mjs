@@ -1,27 +1,15 @@
-import { describe, it, beforeEach, afterEach } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { Robot } from 'hubot'
-
-import dummyRobot from './doubles/DummyAdapter.mjs'
+import { setupRobot, collect, brainUser } from './helpers/setup.mjs'
 
 describe('Garble testing Hubot scripts', () => {
-  let robot = null
-  beforeEach(async () => {
-    process.env.EXPRESS_PORT = 0
-    robot = new Robot(dummyRobot, true, 'Dumbotheelephant')
-    await robot.loadAdapter()
-    await robot.run()
-    await robot.loadFile('./scripts', 'Garble.mjs')
-  })
-  afterEach(() => {
-    delete process.env.EXPRESS_PORT
-    robot.shutdown()
-  })
+  const state = setupRobot('Garble.mjs')
+
   it('should keep first and last letters of each word in place', async () => {
-    const user = robot.brain.userForId('test-user', { name: 'test user' })
-    const sent = []
-    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    const { robot } = state
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant garble hello world', 'test-room')
     const words = sent[0].split(' ')
     assert.strictEqual(words.length, 2)
@@ -31,16 +19,16 @@ describe('Garble testing Hubot scripts', () => {
     assert.strictEqual(words[1][words[1].length - 1], 'd')
   })
   it('should leave short words unchanged', async () => {
-    const user = robot.brain.userForId('test-user', { name: 'test user' })
-    const sent = []
-    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    const { robot } = state
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant garble a to it', 'test-room')
     assert.strictEqual(sent[0], 'a to it')
   })
   it('should support "scramble" as an alternate trigger word', async () => {
-    const user = robot.brain.userForId('test-user', { name: 'test user' })
-    const sent = []
-    robot.on('send', (envelope, ...strings) => { sent.push(strings.join('')) })
+    const { robot } = state
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant scramble hello', 'test-room')
     assert.strictEqual(sent[0][0], 'h')
   })

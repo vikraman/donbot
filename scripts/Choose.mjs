@@ -1,6 +1,5 @@
 // Description:
-//   Random decisions and numbers, backed by true randomness from random.org
-//   (falls back to Math.random if random.org is unavailable).
+//   Random decisions and numbers via random.org, falls back to Math.random.
 //
 // Commands:
 //   hubot choose <a> or <b> or <c> - Picks one option at random.

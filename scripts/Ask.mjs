@@ -1,8 +1,5 @@
 // Description:
-//   Looks up a short answer to a question. By default tries Gemini, then
-//   DuckDuckGo, then Wikipedia, using whichever answers first. Individual
-//   sources can be queried directly. Every answer is tagged with the
-//   source that produced it, e.g. "Paris. [Gemini]".
+//   Answers a question via Gemini, DuckDuckGo, or Wikipedia (fallback chain or direct). Tags source.
 //
 // Commands:
 //   hubot ask <question> - Answers <question>, trying Gemini, DuckDuckGo, then Wikipedia in turn.
@@ -16,8 +13,7 @@
 //
 
 const TRAILING_PUNCTUATION = /[?!.]+$/
-// Matches "what is"/"what's"/"what're", "who is"/"who's", "how does", etc.
-// The verb alternation uses \b so "do" doesn't swallow the "do" in "does".
+// \b keeps "do" from swallowing "does"
 const QUESTION_PREFIX = /^(who|what|where|when|why|how)(?:['’](?:s|re)|\s+(?:is|are|was|were|do|does|did|can|could)\b)\s*(the\s+)?/i
 
 const cleanForSearch = question =>

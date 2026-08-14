@@ -1,6 +1,5 @@
 // Description:
-//   Fetches a Futurama quote, live, with attribution. Optionally scoped to
-//   a specific character.
+//   Fetches a Futurama quote, live, with attribution. Optionally scoped to a character.
 //
 // Commands:
 //   hubot quote - Replies with a random Futurama quote.

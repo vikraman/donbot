@@ -1,36 +1,25 @@
-import { describe, it, beforeEach, afterEach, mock } from 'node:test'
+import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { Robot } from 'hubot'
-
-import dummyRobot from './doubles/DummyAdapter.mjs'
+import { setupRobot } from './helpers/setup.mjs'
 
 describe('Presence testing Hubot scripts', () => {
-  let robot = null
-  beforeEach(async () => {
-    process.env.EXPRESS_PORT = 0
-    robot = new Robot(dummyRobot, true, 'Dumbotheelephant')
-    await robot.loadAdapter()
-    await robot.run()
-  })
-  afterEach(() => {
-    delete process.env.EXPRESS_PORT
-    robot.shutdown()
-    mock.reset()
-  })
+  const state = setupRobot('Presence.mjs', { deferLoad: true })
 
   it('should not error when there is no discord-like client', async () => {
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    const { robot } = state
+    await state.loadScript()
     robot.brain.emit('connected')
   })
 
   it('should set an activity on the discord client once connected', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = {
       isReady: () => true,
       user: { setActivity }
     }
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     robot.brain.emit('connected')
     assert.strictEqual(setActivity.mock.calls.length, 1)
     const [text, options] = setActivity.mock.calls[0].arguments
@@ -40,24 +29,26 @@ describe('Presence testing Hubot scripts', () => {
   })
 
   it('should not error when the client is present but not ready', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = {
       isReady: () => false,
       user: { setActivity }
     }
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     robot.brain.emit('connected')
     assert.strictEqual(setActivity.mock.calls.length, 0)
   })
 
   it('should report the guild count when available', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = {
       isReady: () => true,
       user: { setActivity },
       guilds: { cache: { size: 3 } }
     }
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     const statuses = []
     for (let i = 0; i < 200; i++) {
       robot.brain.emit('connected')
@@ -67,9 +58,10 @@ describe('Presence testing Hubot scripts', () => {
   })
 
   it('should report the listener count', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = { isReady: () => true, user: { setActivity } }
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     const statuses = []
     for (let i = 0; i < 200; i++) {
       robot.brain.emit('connected')
@@ -79,9 +71,10 @@ describe('Presence testing Hubot scripts', () => {
   })
 
   it('should report memory usage', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = { isReady: () => true, user: { setActivity } }
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     const statuses = []
     for (let i = 0; i < 200; i++) {
       robot.brain.emit('connected')
@@ -91,9 +84,10 @@ describe('Presence testing Hubot scripts', () => {
   })
 
   it('should report brain size', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = { isReady: () => true, user: { setActivity } }
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     const statuses = []
     for (let i = 0; i < 200; i++) {
       robot.brain.emit('connected')
@@ -103,10 +97,11 @@ describe('Presence testing Hubot scripts', () => {
   })
 
   it('should report quiet time since the last message once someone has spoken', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = { isReady: () => true, user: { setActivity } }
     robot.brain.set('seen:last', Date.now() - 5 * 60000)
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     const statuses = []
     for (let i = 0; i < 200; i++) {
       robot.brain.emit('connected')
@@ -116,9 +111,10 @@ describe('Presence testing Hubot scripts', () => {
   })
 
   it('should report today\'s date', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = { isReady: () => true, user: { setActivity } }
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     const statuses = []
     for (let i = 0; i < 200; i++) {
       robot.brain.emit('connected')
@@ -128,9 +124,10 @@ describe('Presence testing Hubot scripts', () => {
   })
 
   it('should sometimes show a random emoji mood', async () => {
+    const { robot } = state
     const setActivity = mock.fn()
     robot.adapter.client = { isReady: () => true, user: { setActivity } }
-    await robot.loadFile('./scripts', 'Presence.mjs')
+    await state.loadScript()
     const statuses = []
     for (let i = 0; i < 200; i++) {
       robot.brain.emit('connected')

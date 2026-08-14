@@ -1,6 +1,5 @@
 // Description:
-//   Rotates the bot's Discord custom status (the secondary line under its
-//   name) between live stats and flavor text every 15 minutes.
+//   Rotates the bot's Discord custom status between live stats and flavor text every 15 minutes.
 //
 
 const ROTATE_MS = 15 * 60 * 1000
