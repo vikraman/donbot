@@ -1,8 +1,15 @@
-import { describe, it } from 'node:test'
+import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.mjs'
+
+const ENTHUSIASTIC_LINES = [
+  "That's more like it. Keep it coming.",
+  "See, was that so hard? A little respect.",
+  "I'll add that to my tab. You owe me plenty more.",
+  "I do good work. Glad somebody noticed."
+]
 
 describe('Praise testing Hubot scripts', () => {
   const state = setupRobot('Praise.mjs')
@@ -151,6 +158,25 @@ describe('Praise testing Hubot scripts', () => {
     await new Promise(resolve => setImmediate(resolve))
 
     assert.strictEqual(sent.length, 0)
+  })
+
+  it('should pick from the enthusiastic pool for a strongly enthusiastic compliment', async () => {
+    const { robot } = state
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
+    for (let i = 0; i < 10; i++) {
+      await robot.adapter.say(user, '@Dumbotheelephant what a fantastic, brilliant, outstanding effort, good job!!!', 'test-room')
+    }
+    for (const line of sent) assert.ok(ENTHUSIASTIC_LINES.includes(line))
+  })
+
+  it('should still pick from the full pool for a flat "thanks"', async () => {
+    const { robot } = state
+    mock.method(Math, 'random', () => 0)
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant thanks', 'test-room')
+    assert.strictEqual(sent[0], "Heh, yeah, I know I'm good.")
   })
 
   it('should ignore non-praise emoji reactions', async () => {

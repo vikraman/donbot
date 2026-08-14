@@ -15,6 +15,7 @@
 
 import { mentionFor } from './lib/mention.mjs'
 import { pick } from './lib/random.mjs'
+import { scoreTone } from './lib/sentiment.mjs'
 
 const PRAISE_COUNT_KEY = 'praise:count'
 const PRAISE_BY_USER_PREFIX = 'praise:user:'
@@ -23,15 +24,26 @@ const PRAISE_EMOJI = [
   '👌', '💪', '🙏', '💖', '💕', '😻', '🫡', '✨', '🏆', '🎖️', '🥇', '👑', '💐', '🤩', '😎', '🤌'
 ]
 
-const REACTIONS = [
-  "Heh, yeah, I know I'm good.",
-  "That's more like it. Keep it coming.",
-  "See, was that so hard? A little respect.",
-  "I'll add that to my tab. You owe me plenty more.",
-  "Not bad yourself, for a mark.",
-  "I do good work. Glad somebody noticed.",
-  "Alright, alright, don't wear it out."
-]
+const REACTIONS = {
+  grudging: [
+    "Heh, yeah, I know I'm good.",
+    "Not bad yourself, for a mark.",
+    "Alright, alright, don't wear it out."
+  ],
+  enthusiastic: [
+    "That's more like it. Keep it coming.",
+    "See, was that so hard? A little respect.",
+    "I'll add that to my tab. You owe me plenty more.",
+    "I do good work. Glad somebody noticed."
+  ]
+}
+const ALL_REACTIONS = [...REACTIONS.grudging, ...REACTIONS.enthusiastic]
+
+// only strongly enthusiastic text narrows the pool; no text (emoji reaction) uses the full range
+const reactionsFor = text => {
+  if (text && scoreTone(text).tone === 'positive') return REACTIONS.enthusiastic
+  return ALL_REACTIONS
+}
 
 const recordPraise = (robot, userId) => {
   const count = (robot.brain.get(PRAISE_COUNT_KEY) || 0) + 1
@@ -48,7 +60,7 @@ const recordPraise = (robot, userId) => {
 export default async (robot) => {
   robot.respond(/(?:cookie|good (?:bot|job)|good boy(?: donbot)?|thanks?(?: you)?)[.!]*$/i, async res => {
     recordPraise(robot, res.message.user.id)
-    await res.send(pick(REACTIONS))
+    await res.send(pick(reactionsFor(res.message.text)))
   })
 
   robot.respond(/praise count$/i, async res => {
@@ -94,6 +106,6 @@ export default async (robot) => {
     if (message.author?.id !== client.user?.id) return
 
     recordPraise(robot, user.id)
-    await robot.messageRoom(message.channelId, pick(REACTIONS))
+    await robot.messageRoom(message.channelId, pick(ALL_REACTIONS))
   })
 }
