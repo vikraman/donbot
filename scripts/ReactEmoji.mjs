@@ -5,7 +5,7 @@
 import emojiData from 'emojilib' with { type: 'json' }
 import abstractKeywords from './lib/abstract-keywords.json' with { type: 'json' }
 
-import { shuffle, chance } from './lib/random.mjs'
+import { pick, shuffle, chance } from './lib/random.mjs'
 import { scoreTone } from './lib/sentiment.mjs'
 
 // emojilib includes common function words as keywords (e.g. "me" -> flag emoji,
@@ -85,14 +85,14 @@ export default async (robot) => {
     // a single stray keyword shouldn't react on its own; sentiment alone still can
     if (matchedKeywords.length < MIN_KEYWORD_MATCHES && !sustained) return
 
-    // one combined pool: tone sets the vibe, keywords add specific concepts
-    const pool = [
-      ...(sustained ? SENTIMENT_EMOJI[tone] : []),
-      ...(matchedKeywords.length >= MIN_KEYWORD_MATCHES ? matchedKeywords.flatMap(word => KEYWORD_EMOJI.get(word)) : [])
+    // one emoji per signal: tone contributes at most one, each keyword contributes one
+    const candidates = [
+      ...(sustained ? [pick(SENTIMENT_EMOJI[tone])] : []),
+      ...(matchedKeywords.length >= MIN_KEYWORD_MATCHES ? matchedKeywords.map(word => pick(KEYWORD_EMOJI.get(word))) : [])
     ]
-    if (pool.length === 0) return
+    if (candidates.length === 0) return
 
-    const emojis = [...new Set(shuffle(pool))].slice(0, MAX_REACTIONS_PER_MESSAGE)
+    const emojis = [...new Set(shuffle(candidates))].slice(0, MAX_REACTIONS_PER_MESSAGE)
 
     for (const emoji of emojis) {
       await message.react(emoji)
