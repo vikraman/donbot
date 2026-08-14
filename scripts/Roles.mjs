@@ -13,9 +13,9 @@
 const getAmbiguousUserText = users =>
   `Be more specific, I know ${users.length} people named like that: ${users.map(u => u.name).join(', ')}`
 
-const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
+import { pick } from './lib/random.mjs'
 
-const pick = options => options[Math.floor(Math.random() * options.length)]
+const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
 
 const NOTHING_TO_ME = [
   '{name} is nothing to me.',

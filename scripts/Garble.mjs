@@ -5,20 +5,13 @@
 //   hubot garble <text> - Garbles <text>.
 //
 
-const shuffle = letters => {
-  const arr = letters.split('')
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]]
-  }
-  return arr.join('')
-}
+import { shuffle } from './lib/random.mjs'
 
 const garbleWord = word => {
   if (word.length <= 3) return word
   const first = word[0]
   const last = word[word.length - 1]
-  const middle = shuffle(word.slice(1, -1))
+  const middle = shuffle(word.slice(1, -1).split('')).join('')
   return first + middle + last
 }
 

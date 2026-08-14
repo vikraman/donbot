@@ -7,6 +7,8 @@
 //   hubot xkcd random - Shows a random xkcd comic.
 //
 
+import { secureRandomInt } from './lib/random.mjs'
+
 export default async (robot) => {
   robot.respond(/xkcd(?: comic)?\s*(random|\d+)?$/i, async res => {
     let number = res.match[1]
@@ -18,7 +20,7 @@ export default async (robot) => {
         return
       }
       const latest = await latestResponse.json()
-      number = String(1 + Math.floor(Math.random() * latest.num))
+      number = String(secureRandomInt(1, latest.num))
     }
 
     const url = number ? `https://xkcd.com/${number}/info.0.json` : 'https://xkcd.com/info.0.json'

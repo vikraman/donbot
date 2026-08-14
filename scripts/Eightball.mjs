@@ -5,6 +5,8 @@
 //   hubot 8ball <question> - Answers a yes/no question.
 //
 
+import { pick } from './lib/random.mjs'
+
 const answers = [
   'It is certain.',
   'It is decidedly so.',
@@ -30,7 +32,6 @@ const answers = [
 
 export default async (robot) => {
   robot.respond(/(?:8ball|8-ball|magic 8 ?ball)\s+(.+)$/i, async res => {
-    const answer = answers[Math.floor(Math.random() * answers.length)]
-    await res.send(answer)
+    await res.send(pick(answers))
   })
 }

@@ -2,6 +2,8 @@
 //   Rotates the bot's Discord custom status between live stats and flavor text every 15 minutes.
 //
 
+import { pick } from './lib/random.mjs'
+
 const ROTATE_MS = 15 * 60 * 1000
 const REMINDERS_KEY = 'reminders'
 const LAST_MESSAGE_KEY = 'seen:last'
@@ -35,8 +37,6 @@ const DONBOT_QUOTES = [
   'How many times is that? Two or three?',
   'Remember, only kill the one with the beard.'
 ]
-
-const pick = options => options[Math.floor(Math.random() * options.length)]
 
 const buildStatuses = robot => [
   () => `Up ${formatUptime(process.uptime())}`,

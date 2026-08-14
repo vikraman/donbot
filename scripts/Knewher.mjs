@@ -5,6 +5,8 @@
 //   functor - hubot says 'Functor? I barely knew her!'
 //
 
+import { pick, chance } from './lib/random.mjs'
+
 export default async (robot) => {
   robot.hear(/\b((?:[A-Za-z0-9]+){4,9}(?:or|er))(?:s?)(?:[^\w\s])?\b/, async res => {
     const name = res.match[1]
@@ -15,8 +17,8 @@ export default async (robot) => {
       'I just met her!',
       'But I only just met her!'
     ]
-    const joke = jokes[Math.floor(Math.random() * jokes.length)]
-    if (Math.random() < 0.314) {
+    const joke = pick(jokes)
+    if (chance(0.314)) {
       await res.send(`${word}? ${joke}`)
     }
   })

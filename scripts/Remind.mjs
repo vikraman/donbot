@@ -30,6 +30,7 @@ const UNIT_MS = {
 }
 
 import { mentionFor } from './lib/mention.mjs'
+import { randomId } from './lib/random.mjs'
 
 const REMINDERS_KEY = 'reminders'
 
@@ -104,7 +105,7 @@ const handleRemind = async (robot, res, { who, amount, unit, message }) => {
 
   const target = resolveTarget(robot, res, who)
   const reminder = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    id: randomId(),
     targetId: target.id,
     targetName: target.name,
     room: res.message.room,

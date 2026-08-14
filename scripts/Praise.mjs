@@ -14,6 +14,7 @@
 //
 
 import { mentionFor } from './lib/mention.mjs'
+import { pick } from './lib/random.mjs'
 
 const PRAISE_COUNT_KEY = 'praise:count'
 const PRAISE_BY_USER_PREFIX = 'praise:user:'
@@ -21,8 +22,6 @@ const PRAISE_EMOJI = [
   '👍', '❤️', '🎉', '🙌', '👏', '💯', '🔥', '😍', '🥳',
   '👌', '💪', '🙏', '💖', '💕', '😻', '🫡', '✨', '🏆', '🎖️', '🥇', '👑', '💐', '🤩', '😎', '🤌'
 ]
-
-const pick = options => options[Math.floor(Math.random() * options.length)]
 
 const REACTIONS = [
   "Heh, yeah, I know I'm good.",

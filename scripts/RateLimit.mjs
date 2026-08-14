@@ -12,6 +12,7 @@
 //
 
 import { mentionFor } from './lib/mention.mjs'
+import { pick } from './lib/random.mjs'
 
 const WINDOW_MS = 60 * 1000
 const MAX_COMMANDS_PER_WINDOW = 5
@@ -49,8 +50,6 @@ const DISMISSALS = [
   "Alright, that's it. You're cut off. Go be productive somewhere I can't see you.",
   "Nobody likes a pest. Go on, get outta here."
 ]
-
-const pick = options => options[Math.floor(Math.random() * options.length)]
 
 const escapeRegExp = str => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 

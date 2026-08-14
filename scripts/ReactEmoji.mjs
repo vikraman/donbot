@@ -3,6 +3,8 @@
 //   Discord only.
 //
 
+import { pick, shuffle, chance } from './lib/random.mjs'
+
 const KEYWORD_EMOJI = {
   // animals
   pug: ['🐾', '🐕'],
@@ -163,25 +165,13 @@ const KEYWORD_EMOJI = {
 const MAX_REACTIONS_PER_MESSAGE = 5
 const SKIP_CHANCE = 0.15
 
-const shuffle = arr => {
-  const copy = [...arr]
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]]
-  }
-  return copy
-}
-
-const pickEmoji = word => {
-  const options = KEYWORD_EMOJI[word.toLowerCase()]
-  return options[Math.floor(Math.random() * options.length)]
-}
+const pickEmoji = word => pick(KEYWORD_EMOJI[word.toLowerCase()])
 
 export default async (robot) => {
   const pattern = new RegExp(`\\b(${Object.keys(KEYWORD_EMOJI).join('|')})\\b`, 'gi')
 
   robot.hear(pattern, async res => {
-    if (Math.random() < SKIP_CHANCE) return
+    if (chance(SKIP_CHANCE)) return
 
     const message = res.message.user && res.message.user.message
     if (!message || typeof message.react !== 'function') return

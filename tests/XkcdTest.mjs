@@ -41,7 +41,6 @@ describe('Xkcd testing Hubot scripts', () => {
   })
   it('should fetch a random comic number within the latest range', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.5)
     let requestedUrls = []
     mock.method(global, 'fetch', async (url) => {
       requestedUrls.push(url)
@@ -53,7 +52,9 @@ describe('Xkcd testing Hubot scripts', () => {
     const user = brainUser(robot, 'test-user', 'test user')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant xkcd random', 'test-room')
-    assert.strictEqual(requestedUrls[1], 'https://xkcd.com/51/info.0.json')
+    assert.match(requestedUrls[1], /^https:\/\/xkcd\.com\/(\d+)\/info\.0\.json$/)
+    const number = Number(requestedUrls[1].match(/\/(\d+)\/info\.0\.json$/)[1])
+    assert.ok(number >= 1 && number <= 100)
     assert.strictEqual(sent[0], 'Random Comic: https://imgs.xkcd.com/comics/random.png')
   })
 })

@@ -5,9 +5,9 @@
 //   hubot leaderboard - Shows the top 10 plusplus scores.
 //
 
-const PREFIX = 'plusplus:'
+import { pick, chance } from './lib/random.mjs'
 
-const pick = options => options[Math.floor(Math.random() * options.length)]
+const PREFIX = 'plusplus:'
 
 const TOP_COMMENTS = [
   '{thing} is untouchable right now.',
@@ -43,11 +43,11 @@ export default async (robot) => {
 
     const lines = scores.map((s, i) => `${i + 1}. ${s.thing}: ${s.score}`)
 
-    if (Math.random() < COMMENT_CHANCE) {
+    if (chance(COMMENT_CHANCE)) {
       lines.push('')
       lines.push(fillTemplate(pick(TOP_COMMENTS), scores[0].thing))
     }
-    if (scores.length > 1 && Math.random() < COMMENT_CHANCE) {
+    if (scores.length > 1 && chance(COMMENT_CHANCE)) {
       lines.push(fillTemplate(pick(BOTTOM_COMMENTS), scores[scores.length - 1].thing))
     }
 
