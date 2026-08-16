@@ -19,6 +19,7 @@
     "hubot-help": "^2.1.5",
     "hubot-redis-brain": "^3.0.1",
     "hubot-rules": "^2.1.1",
+    "most-common-words-by-language": "^3.0.14",
     "sentiment": "^5.0.2"
   }
 }
