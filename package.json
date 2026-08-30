@@ -3,14 +3,20 @@
   "version": "1.0.0",
   "description": "A simple helpful robot for your Company",
   "main": "index.js",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "start": "source .env && hubot --name donbot --adapter @hubot-friends/hubot-discord",
-    "test": "node --test tests/*.mjs"
+    "start:shell": "source .env 2>/dev/null; export REDIS_URL=redis://localhost:6379; hubot --name donbot --adapter Shell",
+    "redis:local": "docker compose up -d redis",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && node --test tests/*.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@hubot-friends/hubot-discord": "^4.2.0",
     "emojilib": "^4.0.3",
@@ -21,5 +27,9 @@
     "hubot-rules": "^2.1.1",
     "most-common-words-by-language": "^3.0.14",
     "sentiment": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
   }
 }
