@@ -3,6 +3,7 @@ import { beforeEach, afterEach, mock } from 'node:test'
 import { Robot } from 'hubot'
 import type { User } from 'hubot'
 
+import { setRandomSource } from '../../scripts/lib/random.ts'
 import dummyRobot from '../doubles/DummyAdapter.ts'
 import type { DummyAdapter } from '../doubles/DummyAdapter.ts'
 
@@ -47,6 +48,7 @@ export const setupRobot = (scriptFiles: string | string[], { envVars = [], defer
       else process.env[name] = originalEnv[name]
     }
     state.robot.shutdown()
+    setRandomSource(null)
     mock.reset()
   })
 

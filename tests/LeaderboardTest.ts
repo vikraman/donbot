@@ -1,7 +1,9 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+
+import { setRandomSource } from '../scripts/lib/random.ts'
 
 describe('Leaderboard testing Hubot scripts', () => {
   const state = setupRobot('Leaderboard.ts')
@@ -15,7 +17,7 @@ describe('Leaderboard testing Hubot scripts', () => {
   })
   it('should list scores in descending order without commentary', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     robot.brain.set('plusplus:tacos', 5)
     robot.brain.set('plusplus:pizza', 10)
     const user = brainUser(robot, 'test-user', 'test user')
@@ -25,7 +27,7 @@ describe('Leaderboard testing Hubot scripts', () => {
   })
   it('should support "top scores" as an alternate phrasing', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     robot.brain.set('plusplus:tacos', 5)
     const user = brainUser(robot, 'test-user', 'test user')
     const sent = collect(robot)
@@ -34,7 +36,7 @@ describe('Leaderboard testing Hubot scripts', () => {
   })
   it('should include commentary about the top scorer when the roll succeeds', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0)
+    setRandomSource(c => Math.floor(0 * c))
     robot.brain.set('plusplus:tacos', 5)
     robot.brain.set('plusplus:pizza', 10)
     const user = brainUser(robot, 'test-user', 'test user')

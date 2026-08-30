@@ -6,6 +6,8 @@ import type { DiscordClient } from 'hubot'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
+import { setRandomSource } from '../scripts/lib/random.ts'
+
 const ENTHUSIASTIC_LINES = [
   "That's more like it. Keep it coming.",
   "See, was that so hard? A little respect.",
@@ -177,7 +179,7 @@ describe('Praise testing Hubot scripts', () => {
 
   it('should still pick from the full pool for a flat "thanks"', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0)
+    setRandomSource(c => Math.floor(0 * c))
     const user = brainUser(robot, 'test-user', 'test user')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant thanks', 'test-room')

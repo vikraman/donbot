@@ -2,6 +2,8 @@ import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { setupRobot, brainUser } from './helpers/setup.ts'
+
+import { setRandomSource } from '../scripts/lib/random.ts'
 import { SENTIMENT_EMOJI } from '../scripts/ReactEmoji.ts'
 
 interface ToneEntry { comparative: number, ts: number }
@@ -11,7 +13,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
 
   it('should react when at least 2 keywords match', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.5)
+    setRandomSource(c => Math.floor(0.5 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -22,7 +24,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should not react when only a single keyword matches', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -32,7 +34,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should react to a different keyword category', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -43,7 +45,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should react with at most 5 distinct emojis', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -54,7 +56,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should not react when no keyword matches', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -64,7 +66,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should skip reacting entirely when the skip roll succeeds', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0)
+    setRandomSource(c => Math.floor(0 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -74,13 +76,13 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should not error when the raw message has no react method', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const user = brainUser(robot, 'test-user', 'test user')
     await assert.doesNotReject(robot.adapter.say(user, 'such a cute puppy', 'test-room'))
   })
   it('should react with a sentiment emoji for strong positive tone with no keyword match', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -92,7 +94,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should react with a sentiment emoji for strong negative tone with no keyword match', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -104,7 +106,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should populate and cap the per-room tone history', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async () => {} }
     })
@@ -121,7 +123,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should not react to a single negative outlier amid a positive-average room', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }
@@ -135,7 +137,7 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
   it('should not exceed the reaction cap when keywords and sentiment both fire', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.9)
+    setRandomSource(c => Math.floor(0.9 * c))
     const reacted: string[] = []
     const user = brainUser(robot, 'test-user', 'test user', {
       message: { react: async (emoji: string) => { reacted.push(emoji) } }

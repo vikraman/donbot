@@ -88,6 +88,7 @@ declare module 'hubot' {
     name: string
     alias?: string
     brain: Brain
+    logger: { info(msg: string): void; warn(msg: string): void; error(msg: string): void; debug(msg: string): void }
     commands: { unregister(name: string): void }
     listeners?: readonly unknown[]
     adapter: Adapter & { client?: DiscordClient; [key: string]: unknown }

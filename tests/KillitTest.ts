@@ -1,14 +1,16 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { setupRobot, brainUser } from './helpers/setup.ts'
+
+import { setRandomSource } from '../scripts/lib/random.ts'
 
 describe('Killit testing Hubot scripts', () => {
   const state = setupRobot('Killit.ts')
 
   it('should send the fire joke when the roll succeeds', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0)
+    setRandomSource(c => Math.floor(0 * c))
     const user = brainUser(robot, 'test-user', 'test user')
     let actual = ''
     robot.on('send', (envelope, ...strings) => {
@@ -19,7 +21,7 @@ describe('Killit testing Hubot scripts', () => {
   })
   it('should stay quiet when the roll fails', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0.999)
+    setRandomSource(c => Math.floor(0.999 * c))
     const user = brainUser(robot, 'test-user', 'test user')
     let sent = false
     robot.on('send', () => { sent = true })

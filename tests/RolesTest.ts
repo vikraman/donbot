@@ -1,7 +1,9 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+
+import { setRandomSource } from '../scripts/lib/random.ts'
 
 describe('Roles testing Hubot scripts', () => {
   const state = setupRobot('Roles.ts')
@@ -34,7 +36,7 @@ describe('Roles testing Hubot scripts', () => {
   })
   it('should say it knows nothing about an unknown user', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0)
+    setRandomSource(c => Math.floor(0 * c))
     const author = brainUser(robot, 'author-id', 'author')
     const sent = collect(robot)
     await robot.adapter.say(author, '@Dumbotheelephant nobody is a mystery', 'test-room')
@@ -42,7 +44,7 @@ describe('Roles testing Hubot scripts', () => {
   })
   it('should vary the response when a known user has no roles', async () => {
     const { robot } = state
-    mock.method(Math, 'random', () => 0)
+    setRandomSource(c => Math.floor(0 * c))
     const author = brainUser(robot, 'author-id', 'author')
     brainUser(robot, 'holman-id', 'holman')
     const sent = collect(robot)
