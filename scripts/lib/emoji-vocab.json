@@ -1,0 +1,4984 @@
+{
+ "names": {
+  "abacus": "🧮",
+  "airplane": "✈️",
+  "alembic": "⚗️",
+  "alien": "👽",
+  "ambulance": "🚑",
+  "amphora": "🏺",
+  "anchor": "⚓",
+  "astronaut": "🧑‍🚀",
+  "automobile": "🚗",
+  "avocado": "🥑",
+  "backpack": "🎒",
+  "bacon": "🥓",
+  "badger": "🦡",
+  "badminton": "🏸",
+  "bagel": "🥯",
+  "banana": "🍌",
+  "banjo": "🪕",
+  "baseball": "⚾",
+  "basket": "🧺",
+  "basketball": "🏀",
+  "bathtub": "🛁",
+  "battery": "🔋",
+  "bear": "🐻",
+  "bicycle": "🚲",
+  "bird": "🐦",
+  "blossom": "🌼",
+  "blowfish": "🐡",
+  "boar": "🐗",
+  "bookmark": "🔖",
+  "books": "📚",
+  "bowling": "🎳",
+  "bread": "🍞",
+  "brick": "🧱",
+  "briefcase": "💼",
+  "broccoli": "🥦",
+  "broom": "🧹",
+  "burrito": "🌯",
+  "butter": "🧈",
+  "butterfly": "🦋",
+  "cactus": "🌵",
+  "calendar": "📅",
+  "camel": "🐪",
+  "camera": "📷",
+  "camping": "🏕️",
+  "candle": "🕯️",
+  "candy": "🍬",
+  "canoe": "🛶",
+  "carrot": "🥕",
+  "castle": "🏰",
+  "chair": "🪑",
+  "cherries": "🍒",
+  "chestnut": "🌰",
+  "chicken": "🐔",
+  "chipmunk": "🐿️",
+  "chopsticks": "🥢",
+  "cityscape": "🏙️",
+  "clamp": "🗜️",
+  "clipboard": "📋",
+  "cloud": "☁️",
+  "coat": "🧥",
+  "coconut": "🥥",
+  "comet": "☄️",
+  "compass": "🧭",
+  "construction": "🚧",
+  "cookie": "🍪",
+  "cooking": "🍳",
+  "crab": "🦀",
+  "crayon": "🖍️",
+  "crocodile": "🐊",
+  "croissant": "🥐",
+  "crown": "👑",
+  "cucumber": "🥒",
+  "cupcake": "🧁",
+  "custard": "🍮",
+  "cyclone": "🌀",
+  "dagger": "🗡️",
+  "dango": "🍡",
+  "deer": "🦌",
+  "desert": "🏜️",
+  "dolphin": "🐬",
+  "door": "🚪",
+  "doughnut": "🍩",
+  "dove": "🕊️",
+  "dragon": "🐉",
+  "dress": "👗",
+  "droplet": "💧",
+  "drum": "🥁",
+  "duck": "🦆",
+  "dumpling": "🥟",
+  "eagle": "🦅",
+  "elephant": "🐘",
+  "envelope": "✉️",
+  "factory": "🏭",
+  "fairy": "🧚",
+  "falafel": "🧆",
+  "ferry": "⛴️",
+  "firecracker": "🧨",
+  "fireworks": "🎆",
+  "fish": "🐟",
+  "flamingo": "🦩",
+  "flashlight": "🔦",
+  "foggy": "🌁",
+  "fountain": "⛲",
+  "frog": "🐸",
+  "garlic": "🧄",
+  "genie": "🧞",
+  "ghost": "👻",
+  "giraffe": "🦒",
+  "glasses": "👓",
+  "gloves": "🧤",
+  "goat": "🐐",
+  "goggles": "🥽",
+  "gorilla": "🦍",
+  "grapes": "🍇",
+  "guitar": "🎸",
+  "hamburger": "🍔",
+  "hammer": "🔨",
+  "hamster": "🐹",
+  "handbag": "👜",
+  "headphone": "🎧",
+  "hedgehog": "🦔",
+  "helicopter": "🚁",
+  "herb": "🌿",
+  "hibiscus": "🌺",
+  "hippopotamus": "🦛",
+  "honeybee": "🐝",
+  "horse": "🐎",
+  "hospital": "🏥",
+  "hotel": "🏨",
+  "house": "🏠",
+  "houses": "🏘️",
+  "jeans": "👖",
+  "joystick": "🕹️",
+  "kangaroo": "🦘",
+  "keyboard": "⌨️",
+  "kimono": "👘",
+  "kite": "🪁",
+  "koala": "🐨",
+  "lacrosse": "🥍",
+  "laptop": "💻",
+  "ledger": "📒",
+  "lemon": "🍋",
+  "leopard": "🐆",
+  "lion": "🦁",
+  "lipstick": "💄",
+  "lizard": "🦎",
+  "llama": "🦙",
+  "lobster": "🦞",
+  "locked": "🔒",
+  "locomotive": "🚂",
+  "lollipop": "🍭",
+  "loudspeaker": "📢",
+  "luggage": "🧳",
+  "mage": "🧙",
+  "magnet": "🧲",
+  "mango": "🥭",
+  "megaphone": "📣",
+  "melon": "🍈",
+  "merperson": "🧜",
+  "metro": "🚇",
+  "microbe": "🦠",
+  "microphone": "🎤",
+  "microscope": "🔬",
+  "minibus": "🚐",
+  "moai": "🗿",
+  "monkey": "🐒",
+  "monorail": "🚝",
+  "mosquito": "🦟",
+  "motorcycle": "🏍️",
+  "motorway": "🛣️",
+  "mountain": "⛰️",
+  "mushroom": "🍄",
+  "necktie": "👔",
+  "newspaper": "📰",
+  "ninja": "🥷",
+  "notebook": "📓",
+  "octopus": "🐙",
+  "oden": "🍢",
+  "onion": "🧅",
+  "orangutan": "🦧",
+  "otter": "🦦",
+  "oyster": "🦪",
+  "pager": "📟",
+  "paintbrush": "🖌️",
+  "pancakes": "🥞",
+  "panda": "🐼",
+  "paperclip": "📎",
+  "parachute": "🪂",
+  "parrot": "🦜",
+  "peacock": "🦚",
+  "peanuts": "🥜",
+  "pear": "🍐",
+  "pencil": "✏️",
+  "penguin": "🐧",
+  "pineapple": "🍍",
+  "pizza": "🍕",
+  "poodle": "🐩",
+  "popcorn": "🍿",
+  "postbox": "📮",
+  "potato": "🥔",
+  "pretzel": "🥨",
+  "printer": "🖨️",
+  "purse": "👛",
+  "pushpin": "📌",
+  "rabbit": "🐇",
+  "raccoon": "🦝",
+  "radio": "📻",
+  "rainbow": "🌈",
+  "razor": "🪒",
+  "receipt": "🧾",
+  "rhinoceros": "🦏",
+  "ribbon": "🎀",
+  "robot": "🤖",
+  "rooster": "🐓",
+  "rosette": "🏵️",
+  "sailboat": "⛵",
+  "sake": "🍶",
+  "salt": "🧂",
+  "sandwich": "🥪",
+  "sari": "🥻",
+  "satellite": "🛰️",
+  "sauropod": "🦕",
+  "saxophone": "🎷",
+  "scarf": "🧣",
+  "school": "🏫",
+  "scissors": "✂️",
+  "scorpion": "🦂",
+  "scroll": "📜",
+  "seedling": "🌱",
+  "shamrock": "☘️",
+  "shark": "🦈",
+  "shield": "🛡️",
+  "ship": "🚢",
+  "shortcake": "🍰",
+  "shorts": "🩳",
+  "shower": "🚿",
+  "shrimp": "🦐",
+  "skateboard": "🛹",
+  "skis": "🎿",
+  "skunk": "🦨",
+  "sled": "🛷",
+  "sloth": "🦥",
+  "snail": "🐌",
+  "snake": "🐍",
+  "snowflake": "❄️",
+  "snowman": "☃️",
+  "soap": "🧼",
+  "socks": "🧦",
+  "softball": "🥎",
+  "spaghetti": "🍝",
+  "sparkler": "🎇",
+  "speedboat": "🚤",
+  "spider": "🕷️",
+  "sponge": "🧽",
+  "spoon": "🥄",
+  "squid": "🦑",
+  "stadium": "🏟️",
+  "stethoscope": "🩺",
+  "stopwatch": "⏱️",
+  "strawberry": "🍓",
+  "sunflower": "🌻",
+  "sunglasses": "🕶️",
+  "sunrise": "🌅",
+  "sunset": "🌇",
+  "superhero": "🦸",
+  "supervillain": "🦹",
+  "sushi": "🍣",
+  "swan": "🦢",
+  "taco": "🌮",
+  "tangerine": "🍊",
+  "taxi": "🚕",
+  "telephone": "☎️",
+  "telescope": "🔭",
+  "television": "📺",
+  "tennis": "🎾",
+  "tent": "⛺",
+  "thermometer": "🌡️",
+  "ticket": "🎫",
+  "tiger": "🐅",
+  "toilet": "🚽",
+  "tomato": "🍅",
+  "toolbox": "🧰",
+  "tornado": "🌪️",
+  "trackball": "🖲️",
+  "tractor": "🚜",
+  "tram": "🚊",
+  "troll": "🧌",
+  "trolleybus": "🚎",
+  "trumpet": "🎺",
+  "tulip": "🌷",
+  "turtle": "🐢",
+  "umbrella": "☂️",
+  "unicorn": "🦄",
+  "unlocked": "🔓",
+  "vampire": "🧛",
+  "videocassette": "📼",
+  "violin": "🎻",
+  "volcano": "🌋",
+  "volleyball": "🏐",
+  "waffle": "🧇",
+  "wastebasket": "🗑️",
+  "watermelon": "🍉",
+  "wedding": "💒",
+  "whale": "🐋",
+  "wolf": "🐺",
+  "wrench": "🔧",
+  "yarn": "🧶",
+  "zebra": "🦓",
+  "zombie": "🧟"
+ },
+ "related": {
+  "abaci": [
+   "🧮"
+  ],
+  "acorn": [
+   "🌰"
+  ],
+  "acrylic": [
+   "🎨"
+  ],
+  "adaptor": [
+   "🔌"
+  ],
+  "adder": [
+   "🐍"
+  ],
+  "aedes": [
+   "🦟"
+  ],
+  "aeroplane": [
+   "✈️"
+  ],
+  "ahab": [
+   "🐋"
+  ],
+  "aikido": [
+   "🥋"
+  ],
+  "aircraft": [
+   "✈️"
+  ],
+  "airline": [
+   "✈️"
+  ],
+  "airplay": [
+   "📻"
+  ],
+  "aladdin": [
+   "🧞"
+  ],
+  "alchemical": [
+   "⚗️"
+  ],
+  "aldrin": [
+   "🧑‍🚀"
+  ],
+  "ales": [
+   "🍻"
+  ],
+  "alicorn": [
+   "🦄"
+  ],
+  "aliens": [
+   "👽"
+  ],
+  "alligator": [
+   "🐊"
+  ],
+  "alligators": [
+   "🐊"
+  ],
+  "allium": [
+   "🧅",
+   "🧄"
+  ],
+  "allosaur": [
+   "🦖"
+  ],
+  "allosaurus": [
+   "🦖"
+  ],
+  "alpaca": [
+   "🦙"
+  ],
+  "alpine": [
+   "⛰️"
+  ],
+  "alps": [
+   "⛰️"
+  ],
+  "amanita": [
+   "🍄"
+  ],
+  "amex": [
+   "💳"
+  ],
+  "amoeba": [
+   "🦠"
+  ],
+  "amphorae": [
+   "🏺"
+  ],
+  "amtrak": [
+   "🚆"
+  ],
+  "ananas": [
+   "🍍"
+  ],
+  "anchors": [
+   "⚓"
+  ],
+  "andes": [
+   "⛰️"
+  ],
+  "andromeda": [
+   "🌌"
+  ],
+  "annular": [
+   "🌑"
+  ],
+  "anole": [
+   "🦎"
+  ],
+  "anopheles": [
+   "🦟"
+  ],
+  "antarctic": [
+   "🐧"
+  ],
+  "antarctica": [
+   "🐧"
+  ],
+  "antler": [
+   "🦌"
+  ],
+  "antlers": [
+   "🦌"
+  ],
+  "ants": [
+   "🐜"
+  ],
+  "anvil": [
+   "🔨"
+  ],
+  "apatosaurus": [
+   "🦕"
+  ],
+  "apes": [
+   "🦍"
+  ],
+  "appalachian": [
+   "⛰️"
+  ],
+  "aqualung": [
+   "🤿"
+  ],
+  "arabica": [
+   "☕"
+  ],
+  "arachnid": [
+   "🕷️"
+  ],
+  "archer": [
+   "🏹"
+  ],
+  "architeuthis": [
+   "🦑"
+  ],
+  "archvillain": [
+   "🦹"
+  ],
+  "arid": [
+   "🏜️"
+  ],
+  "armchair": [
+   "🪑"
+  ],
+  "arrivals": [
+   "🛬"
+  ],
+  "asimov": [
+   "🤖"
+  ],
+  "asteroid": [
+   "☄️"
+  ],
+  "astronomical": [
+   "🔭"
+  ],
+  "astronomy": [
+   "🔭"
+  ],
+  "aubergine": [
+   "🍆"
+  ],
+  "auscultation": [
+   "🩺"
+  ],
+  "autobahn": [
+   "🛣️"
+  ],
+  "autobus": [
+   "🚌"
+  ],
+  "automaker": [
+   "🚗"
+  ],
+  "automaton": [
+   "🤖"
+  ],
+  "automotive": [
+   "🚗"
+  ],
+  "autoroute": [
+   "🛣️"
+  ],
+  "avocados": [
+   "🥑"
+  ],
+  "axes": [
+   "🪓"
+  ],
+  "baboon": [
+   "🐒"
+  ],
+  "bacillus": [
+   "🦠"
+  ],
+  "backcountry": [
+   "🏕️"
+  ],
+  "backgammon": [
+   "🎲"
+  ],
+  "bacteria": [
+   "🦠"
+  ],
+  "bacterium": [
+   "🦠"
+  ],
+  "bactrian": [
+   "🐫"
+  ],
+  "baggage": [
+   "🧳"
+  ],
+  "baleen": [
+   "🐋"
+  ],
+  "ballet": [
+   "🩰"
+  ],
+  "balloonfish": [
+   "🐡"
+  ],
+  "ballpark": [
+   "⚾"
+  ],
+  "ballplayer": [
+   "⚾"
+  ],
+  "ballpoint": [
+   "🖊️"
+  ],
+  "bananas": [
+   "🍌"
+  ],
+  "banjoing": [
+   "🪕"
+  ],
+  "banjolele": [
+   "🪕"
+  ],
+  "banjolin": [
+   "🪕"
+  ],
+  "banjuke": [
+   "🪕"
+  ],
+  "banjulele": [
+   "🪕"
+  ],
+  "banker": [
+   "🏦"
+  ],
+  "banking": [
+   "🏦"
+  ],
+  "banks": [
+   "🏦"
+  ],
+  "barley": [
+   "🌾"
+  ],
+  "basalt": [
+   "🌋"
+  ],
+  "baseman": [
+   "⚾"
+  ],
+  "basketful": [
+   "🧺"
+  ],
+  "bath": [
+   "🛁"
+  ],
+  "bathing": [
+   "🛁"
+  ],
+  "baths": [
+   "🛁"
+  ],
+  "batsman": [
+   "🦗"
+  ],
+  "battercake": [
+   "🥞"
+  ],
+  "batteries": [
+   "🔋"
+  ],
+  "bedroom": [
+   "🛏️"
+  ],
+  "beds": [
+   "🛏️"
+  ],
+  "beefburger": [
+   "🍔"
+  ],
+  "beehive": [
+   "🐝"
+  ],
+  "beekeeping": [
+   "🐝"
+  ],
+  "beeper": [
+   "📟"
+  ],
+  "beers": [
+   "🍻"
+  ],
+  "bees": [
+   "🐝"
+  ],
+  "beigel": [
+   "🥯"
+  ],
+  "beluga": [
+   "🐋"
+  ],
+  "bengal": [
+   "🐅"
+  ],
+  "betrothal": [
+   "💒"
+  ],
+  "bialy": [
+   "🥯"
+  ],
+  "bifocals": [
+   "👓"
+  ],
+  "bike": [
+   "🚲"
+  ],
+  "biker": [
+   "🏍️"
+  ],
+  "billiard": [
+   "🎱"
+  ],
+  "billiards": [
+   "🎱"
+  ],
+  "birds": [
+   "🐦"
+  ],
+  "birdwatch": [
+   "🐦"
+  ],
+  "bivouacking": [
+   "🏕️"
+  ],
+  "blacktip": [
+   "🦈"
+  ],
+  "bleed": [
+   "🩸"
+  ],
+  "bleeper": [
+   "📟"
+  ],
+  "bloodsucker": [
+   "🧛"
+  ],
+  "blouse": [
+   "👚"
+  ],
+  "blubber": [
+   "🐋"
+  ],
+  "bluegrass": [
+   "🪕"
+  ],
+  "bobsled": [
+   "🛷"
+  ],
+  "boeing": [
+   "✈️"
+  ],
+  "bolete": [
+   "🍄"
+  ],
+  "boletus": [
+   "🍄"
+  ],
+  "bollywood": [
+   "🎥"
+  ],
+  "bolognese": [
+   "🍝"
+  ],
+  "bombilla": [
+   "🧉"
+  ],
+  "bookkeeping": [
+   "📒"
+  ],
+  "bookmarker": [
+   "🔖"
+  ],
+  "booze": [
+   "🥃"
+  ],
+  "borecole": [
+   "🥬"
+  ],
+  "bosc": [
+   "🍐"
+  ],
+  "bourbon": [
+   "🥃"
+  ],
+  "bovine": [
+   "🐄",
+   "🐂"
+  ],
+  "boxcar": [
+   "🚃"
+  ],
+  "boxla": [
+   "🥍"
+  ],
+  "brachiosaurus": [
+   "🦕"
+  ],
+  "bratwurst": [
+   "🌭"
+  ],
+  "breadstuff": [
+   "🍞"
+  ],
+  "bretzel": [
+   "🥨"
+  ],
+  "bricks": [
+   "🧱"
+  ],
+  "brickwork": [
+   "🧱"
+  ],
+  "bridal": [
+   "💒"
+  ],
+  "bride": [
+   "💒"
+  ],
+  "brinjal": [
+   "🍆"
+  ],
+  "briny": [
+   "🧂"
+  ],
+  "broccolini": [
+   "🥦"
+  ],
+  "brockely": [
+   "🥦"
+  ],
+  "brontosaurus": [
+   "🦕"
+  ],
+  "bronze": [
+   "🥉"
+  ],
+  "broomstick": [
+   "🧹"
+  ],
+  "bubbly": [
+   "🍾"
+  ],
+  "buckler": [
+   "🛡️"
+  ],
+  "budgerigar": [
+   "🦜"
+  ],
+  "bugle": [
+   "📯"
+  ],
+  "bugler": [
+   "📯"
+  ],
+  "bullettrain": [
+   "🚄",
+   "🚅"
+  ],
+  "bullfrog": [
+   "🐸"
+  ],
+  "bullhorn": [
+   "📣",
+   "📢"
+  ],
+  "bullock": [
+   "🐂"
+  ],
+  "bullseye": [
+   "🎯"
+  ],
+  "bumblebee": [
+   "🐝"
+  ],
+  "bumblebees": [
+   "🐝"
+  ],
+  "bunny": [
+   "🐇",
+   "🐰"
+  ],
+  "burger": [
+   "🍔"
+  ],
+  "burgers": [
+   "🍔"
+  ],
+  "burrita": [
+   "🌯"
+  ],
+  "buses": [
+   "🚌"
+  ],
+  "bushcricket": [
+   "🦗"
+  ],
+  "busstop": [
+   "🚏"
+  ],
+  "buttercup": [
+   "🌼"
+  ],
+  "butterfat": [
+   "🧈"
+  ],
+  "butterflies": [
+   "🦋"
+  ],
+  "cabbie": [
+   "🚕"
+  ],
+  "cableway": [
+   "🚡"
+  ],
+  "caboose": [
+   "🚃"
+  ],
+  "cacti": [
+   "🌵"
+  ],
+  "caffein": [
+   "☕"
+  ],
+  "caffeinated": [
+   "☕"
+  ],
+  "caffeine": [
+   "☕"
+  ],
+  "cahier": [
+   "📓"
+  ],
+  "caiman": [
+   "🐊"
+  ],
+  "calamari": [
+   "🦑"
+  ],
+  "calculator": [
+   "🧮"
+  ],
+  "caldera": [
+   "🌋"
+  ],
+  "calves": [
+   "🐄"
+  ],
+  "calzone": [
+   "🍕"
+  ],
+  "camcorder": [
+   "📹"
+  ],
+  "campground": [
+   "🏕️"
+  ],
+  "campsite": [
+   "🏕️"
+  ],
+  "canadian": [
+   "🍁"
+  ],
+  "candies": [
+   "🍬"
+  ],
+  "candlelight": [
+   "🕯️"
+  ],
+  "candles": [
+   "🕯️"
+  ],
+  "candlestick": [
+   "🕯️"
+  ],
+  "canine": [
+   "🐕"
+  ],
+  "canoeing": [
+   "🛶"
+  ],
+  "cantaloupe": [
+   "🍈"
+  ],
+  "capsaicin": [
+   "🌶️"
+  ],
+  "capuchin": [
+   "🐒"
+  ],
+  "carapace": [
+   "🦀",
+   "🐢"
+  ],
+  "carbonara": [
+   "🍝"
+  ],
+  "carmaker": [
+   "🚗"
+  ],
+  "carp": [
+   "🐟"
+  ],
+  "carrots": [
+   "🥕"
+  ],
+  "casaba": [
+   "🍈"
+  ],
+  "casette": [
+   "📼"
+  ],
+  "casino": [
+   "🎰"
+  ],
+  "casket": [
+   "⚰️"
+  ],
+  "casserole": [
+   "🥘",
+   "🍲"
+  ],
+  "cassette": [
+   "📼"
+  ],
+  "cats": [
+   "🐈"
+  ],
+  "cattle": [
+   "🐄"
+  ],
+  "cavendish": [
+   "🍌"
+  ],
+  "cello": [
+   "🎻"
+  ],
+  "celsius": [
+   "🌡️"
+  ],
+  "cephalopod": [
+   "🐙"
+  ],
+  "cereal": [
+   "🥣"
+  ],
+  "cereals": [
+   "🥣"
+  ],
+  "cessna": [
+   "✈️"
+  ],
+  "chain": [
+   "⛓️"
+  ],
+  "chairlift": [
+   "🚡"
+  ],
+  "chairs": [
+   "🪑"
+  ],
+  "champagne": [
+   "🍾",
+   "🥂"
+  ],
+  "chapel": [
+   "💒"
+  ],
+  "chard": [
+   "🥬"
+  ],
+  "charger": [
+   "🔌"
+  ],
+  "chateau": [
+   "🏰"
+  ],
+  "checkin": [
+   "🏨"
+  ],
+  "cheers": [
+   "🍻",
+   "🥂"
+  ],
+  "cheeseburger": [
+   "🍔"
+  ],
+  "chemise": [
+   "👚"
+  ],
+  "cherry": [
+   "🍒"
+  ],
+  "chestnuts": [
+   "🌰"
+  ],
+  "chick": [
+   "🐥"
+  ],
+  "chickens": [
+   "🐔"
+  ],
+  "chickpea": [
+   "🧆"
+  ],
+  "chili": [
+   "🌶️"
+  ],
+  "chilli": [
+   "🌶️"
+  ],
+  "chillies": [
+   "🌶️"
+  ],
+  "chime": [
+   "🔔"
+  ],
+  "chipmuck": [
+   "🐿️"
+  ],
+  "chirashizushi": [
+   "🍣"
+  ],
+  "chitmunk": [
+   "🐿️"
+  ],
+  "chive": [
+   "🧅"
+  ],
+  "chives": [
+   "🧅"
+  ],
+  "chopin": [
+   "🎹"
+  ],
+  "chopper": [
+   "🚁"
+  ],
+  "chopstick": [
+   "🥢"
+  ],
+  "chords": [
+   "🎸"
+  ],
+  "chromosomes": [
+   "🧬"
+  ],
+  "chronograph": [
+   "⏱️"
+  ],
+  "churning": [
+   "🧈"
+  ],
+  "chute": [
+   "🪂"
+  ],
+  "cigarettes": [
+   "🚬"
+  ],
+  "cinema": [
+   "🎥"
+  ],
+  "citadel": [
+   "🏰"
+  ],
+  "citron": [
+   "🍋"
+  ],
+  "clairvoyant": [
+   "🔮"
+  ],
+  "classroom": [
+   "🏫"
+  ],
+  "clef": [
+   "🎼"
+  ],
+  "clink": [
+   "🥂",
+   "🍻"
+  ],
+  "clippy": [
+   "📎"
+  ],
+  "clouds": [
+   "☁️"
+  ],
+  "cloudy": [
+   "☁️"
+  ],
+  "clover": [
+   "☘️"
+  ],
+  "clownfish": [
+   "🐠"
+  ],
+  "cluck": [
+   "🐔"
+  ],
+  "coala": [
+   "🐨"
+  ],
+  "cobweb": [
+   "🕸️"
+  ],
+  "cockatiel": [
+   "🦜"
+  ],
+  "cockatoo": [
+   "🦜"
+  ],
+  "cockbird": [
+   "🐓"
+  ],
+  "cockerel": [
+   "🐓"
+  ],
+  "cockle": [
+   "🐚"
+  ],
+  "cockleshell": [
+   "🐚"
+  ],
+  "cocoanut": [
+   "🥥"
+  ],
+  "codfish": [
+   "🐟"
+  ],
+  "coffee": [
+   "☕"
+  ],
+  "coffeemaker": [
+   "☕"
+  ],
+  "cogwheel": [
+   "⚙️"
+  ],
+  "colewort": [
+   "🥬"
+  ],
+  "coliseum": [
+   "🏟️"
+  ],
+  "collard": [
+   "🥬"
+  ],
+  "collards": [
+   "🥬"
+  ],
+  "columnist": [
+   "📰"
+  ],
+  "cometary": [
+   "☄️"
+  ],
+  "commode": [
+   "🚽"
+  ],
+  "condensation": [
+   "💧"
+  ],
+  "confection": [
+   "🍬"
+  ],
+  "confectionary": [
+   "🍬"
+  ],
+  "congee": [
+   "🥣"
+  ],
+  "conifer": [
+   "🌲"
+  ],
+  "coniferous": [
+   "🌲"
+  ],
+  "cookbook": [
+   "🍳"
+  ],
+  "cookery": [
+   "🍳"
+  ],
+  "cookies": [
+   "🍪"
+  ],
+  "coop": [
+   "🐔"
+  ],
+  "copier": [
+   "🖨️"
+  ],
+  "copra": [
+   "🥥"
+  ],
+  "copter": [
+   "🚁"
+  ],
+  "cornet": [
+   "🎺"
+  ],
+  "cornfield": [
+   "🌽"
+  ],
+  "coronation": [
+   "👑"
+  ],
+  "coronavirus": [
+   "🦠"
+  ],
+  "cosmetic": [
+   "💄"
+  ],
+  "cosmetics": [
+   "💄"
+  ],
+  "cosmonaut": [
+   "🧑‍🚀"
+  ],
+  "covid": [
+   "🦠"
+  ],
+  "cows": [
+   "🐄"
+  ],
+  "coyote": [
+   "🐺"
+  ],
+  "crabmeat": [
+   "🦀"
+  ],
+  "crabs": [
+   "🦀"
+  ],
+  "crapper": [
+   "🚽"
+  ],
+  "cravat": [
+   "👔"
+  ],
+  "crawfish": [
+   "🦞"
+  ],
+  "crayfish": [
+   "🦞"
+  ],
+  "crayola": [
+   "🖍️"
+  ],
+  "crayons": [
+   "🖍️"
+  ],
+  "crepes": [
+   "🥞"
+  ],
+  "crevette": [
+   "🦐"
+  ],
+  "croak": [
+   "🐸"
+  ],
+  "croc": [
+   "🐊"
+  ],
+  "crochet": [
+   "🧶"
+  ],
+  "crocodilian": [
+   "🐊"
+  ],
+  "croffle": [
+   "🥐"
+  ],
+  "crosse": [
+   "🥍"
+  ],
+  "crowing": [
+   "🐓"
+  ],
+  "cruffin": [
+   "🥐"
+  ],
+  "cruise": [
+   "🚢"
+  ],
+  "cruller": [
+   "🍩"
+  ],
+  "cucamelon": [
+   "🥒"
+  ],
+  "cueball": [
+   "🎱"
+  ],
+  "cuke": [
+   "🥒"
+  ],
+  "culex": [
+   "🦟"
+  ],
+  "culinary": [
+   "🍳"
+  ],
+  "cumulus": [
+   "☁️"
+  ],
+  "cutlery": [
+   "🍴"
+  ],
+  "cutlet": [
+   "🥩"
+  ],
+  "cuttlefish": [
+   "🦑"
+  ],
+  "cycling": [
+   "🚲"
+  ],
+  "cyclist": [
+   "🚲"
+  ],
+  "cyclonic": [
+   "🌀"
+  ],
+  "cygnet": [
+   "🦢"
+  ],
+  "daffy": [
+   "🦆"
+  ],
+  "daifuku": [
+   "🍡"
+  ],
+  "daisy": [
+   "🌼"
+  ],
+  "darts": [
+   "🎯"
+  ],
+  "dawn": [
+   "🌅"
+  ],
+  "daybreak": [
+   "🌅"
+  ],
+  "dealership": [
+   "🚗"
+  ],
+  "deere": [
+   "🚜"
+  ],
+  "dengue": [
+   "🦟"
+  ],
+  "denim": [
+   "👖"
+  ],
+  "denims": [
+   "👖"
+  ],
+  "departures": [
+   "🛫"
+  ],
+  "deserts": [
+   "🏜️"
+  ],
+  "detective": [
+   "🔍"
+  ],
+  "detergent": [
+   "🧼"
+  ],
+  "deveined": [
+   "🦐"
+  ],
+  "diadem": [
+   "👑"
+  ],
+  "diamond": [
+   "💎"
+  ],
+  "dice": [
+   "🎲"
+  ],
+  "dill": [
+   "🌿"
+  ],
+  "dinghy": [
+   "⛵"
+  ],
+  "dinosaur": [
+   "🦕",
+   "🦖"
+  ],
+  "dinosaurs": [
+   "🦕",
+   "🦖"
+  ],
+  "diplodocus": [
+   "🦕"
+  ],
+  "diploma": [
+   "🎓"
+  ],
+  "distillation": [
+   "⚗️"
+  ],
+  "distilled": [
+   "⚗️"
+  ],
+  "distillery": [
+   "🥃"
+  ],
+  "distilling": [
+   "⚗️"
+  ],
+  "diver": [
+   "🤿"
+  ],
+  "divers": [
+   "🤿"
+  ],
+  "djinn": [
+   "🧞"
+  ],
+  "djinni": [
+   "🧞"
+  ],
+  "djinny": [
+   "🧞"
+  ],
+  "doge": [
+   "🐕"
+  ],
+  "doggo": [
+   "🐕"
+  ],
+  "dogs": [
+   "🐕"
+  ],
+  "dojo": [
+   "🥋"
+  ],
+  "doner": [
+   "🥙"
+  ],
+  "donut": [
+   "🍩"
+  ],
+  "donuts": [
+   "🍩"
+  ],
+  "doorbell": [
+   "🔔"
+  ],
+  "doorknob": [
+   "🚪"
+  ],
+  "doors": [
+   "🚪"
+  ],
+  "doorway": [
+   "🚪"
+  ],
+  "dormouse": [
+   "🐁"
+  ],
+  "dory": [
+   "🐠"
+  ],
+  "downpour": [
+   "🌂",
+   "☔"
+  ],
+  "dracula": [
+   "🧛"
+  ],
+  "dressage": [
+   "🐎"
+  ],
+  "dresses": [
+   "👗"
+  ],
+  "driblet": [
+   "💧"
+  ],
+  "drip": [
+   "💧"
+  ],
+  "dromedary": [
+   "🐪"
+  ],
+  "droplets": [
+   "💧"
+  ],
+  "drumming": [
+   "🥁"
+  ],
+  "drumstick": [
+   "🍗"
+  ],
+  "ducks": [
+   "🦆"
+  ],
+  "dumpster": [
+   "🗑️"
+  ],
+  "dunes": [
+   "🏜️"
+  ],
+  "dusk": [
+   "🌇"
+  ],
+  "dustbin": [
+   "🗑️"
+  ],
+  "dustpan": [
+   "🧹"
+  ],
+  "dvorak": [
+   "⌨️"
+  ],
+  "dynamite": [
+   "🧨"
+  ],
+  "eagles": [
+   "🦅"
+  ],
+  "earbud": [
+   "🎧"
+  ],
+  "earphone": [
+   "🎧"
+  ],
+  "earphones": [
+   "🎧"
+  ],
+  "earpiece": [
+   "🎧"
+  ],
+  "echidna": [
+   "🦔"
+  ],
+  "echolocation": [
+   "🦇"
+  ],
+  "eclipse": [
+   "🌑"
+  ],
+  "eggo": [
+   "🧇"
+  ],
+  "eggshell": [
+   "🥚"
+  ],
+  "eiffel": [
+   "🗼"
+  ],
+  "electromagnet": [
+   "🧲"
+  ],
+  "electromagnetic": [
+   "🧲"
+  ],
+  "elephants": [
+   "🐘"
+  ],
+  "embroidery": [
+   "🧵"
+  ],
+  "emerald": [
+   "💎"
+  ],
+  "emollient": [
+   "🧴"
+  ],
+  "empanada": [
+   "🥟"
+  ],
+  "encampment": [
+   "🏕️"
+  ],
+  "enchirito": [
+   "🌯"
+  ],
+  "epigenetic": [
+   "🧬"
+  ],
+  "equilateral": [
+   "📐"
+  ],
+  "erupt": [
+   "🌋"
+  ],
+  "erupted": [
+   "🌋"
+  ],
+  "eruption": [
+   "🌋"
+  ],
+  "eruptive": [
+   "🌋"
+  ],
+  "escargot": [
+   "🐌"
+  ],
+  "espresso": [
+   "☕"
+  ],
+  "eucalyptus": [
+   "🐨"
+  ],
+  "evergreen": [
+   "🌲"
+  ],
+  "ewes": [
+   "🐑"
+  ],
+  "extinguish": [
+   "🧯"
+  ],
+  "extraterrestrial": [
+   "👽",
+   "🛸"
+  ],
+  "eyeglasses": [
+   "👓"
+  ],
+  "eyeliner": [
+   "💄"
+  ],
+  "eyepiece": [
+   "🔭"
+  ],
+  "eyesight": [
+   "👓"
+  ],
+  "eyewear": [
+   "👓"
+  ],
+  "facsimile": [
+   "📠"
+  ],
+  "faerie": [
+   "🧚"
+  ],
+  "faery": [
+   "🧚"
+  ],
+  "fahrenheit": [
+   "🌡️"
+  ],
+  "fairground": [
+   "🎡"
+  ],
+  "fairies": [
+   "🧚"
+  ],
+  "fairytale": [
+   "🧚"
+  ],
+  "falfel": [
+   "🧆"
+  ],
+  "fanfare": [
+   "🎺"
+  ],
+  "fangs": [
+   "🧛"
+  ],
+  "fastpitch": [
+   "🥎"
+  ],
+  "felafel": [
+   "🧆"
+  ],
+  "feline": [
+   "🐈"
+  ],
+  "fender": [
+   "🎸"
+  ],
+  "ferries": [
+   "⛴️"
+  ],
+  "ferryboat": [
+   "⛴️"
+  ],
+  "fiba": [
+   "🏀"
+  ],
+  "fiddle": [
+   "🎻"
+  ],
+  "fiddler": [
+   "🎻"
+  ],
+  "filmdom": [
+   "🎥"
+  ],
+  "finback": [
+   "🐋"
+  ],
+  "firebox": [
+   "🚂"
+  ],
+  "firecrackers": [
+   "🎆"
+  ],
+  "firedrake": [
+   "🐉"
+  ],
+  "firework": [
+   "🎆"
+  ],
+  "fishcake": [
+   "🍥"
+  ],
+  "flagon": [
+   "🍺"
+  ],
+  "flan": [
+   "🍮"
+  ],
+  "flannelcake": [
+   "🥞"
+  ],
+  "flapcake": [
+   "🥞"
+  ],
+  "flapjack": [
+   "🥞"
+  ],
+  "flapjacks": [
+   "🥞"
+  ],
+  "flatbread": [
+   "🥙"
+  ],
+  "fleece": [
+   "🐑"
+  ],
+  "floe": [
+   "🧊"
+  ],
+  "fluttering": [
+   "🍃"
+  ],
+  "fogginess": [
+   "🌫️"
+  ],
+  "footbath": [
+   "🛁"
+  ],
+  "footprints": [
+   "🐾"
+  ],
+  "fourposter": [
+   "🛏️"
+  ],
+  "foxes": [
+   "🦊"
+  ],
+  "frankfurter": [
+   "🌭"
+  ],
+  "freeway": [
+   "🛣️"
+  ],
+  "freight": [
+   "🚆"
+  ],
+  "frock": [
+   "👗"
+  ],
+  "frogs": [
+   "🐸"
+  ],
+  "frosty": [
+   "☃️"
+  ],
+  "frying": [
+   "🍳"
+  ],
+  "fuelpump": [
+   "⛽"
+  ],
+  "fugu": [
+   "🐡"
+  ],
+  "fullback": [
+   "🏈"
+  ],
+  "fungi": [
+   "🍄"
+  ],
+  "fungus": [
+   "🍄"
+  ],
+  "funicular": [
+   "🚞",
+   "🚡"
+  ],
+  "furin": [
+   "🎐"
+  ],
+  "galactic": [
+   "🌌"
+  ],
+  "galaxies": [
+   "🌌"
+  ],
+  "galloping": [
+   "🐎"
+  ],
+  "gamepad": [
+   "🎮"
+  ],
+  "gameplay": [
+   "🎮"
+  ],
+  "gaming": [
+   "🎮"
+  ],
+  "garbage": [
+   "🗑️"
+  ],
+  "garlick": [
+   "🧄"
+  ],
+  "garnet": [
+   "💎"
+  ],
+  "gasoline": [
+   "⛽"
+  ],
+  "gastropod": [
+   "🐌"
+  ],
+  "gaufrette": [
+   "🧇"
+  ],
+  "gauntlets": [
+   "🧤"
+  ],
+  "gavial": [
+   "🐊"
+  ],
+  "gazette": [
+   "📰"
+  ],
+  "gearbox": [
+   "⚙️"
+  ],
+  "gears": [
+   "⚙️"
+  ],
+  "gecko": [
+   "🦎"
+  ],
+  "gelati": [
+   "🍦"
+  ],
+  "gelato": [
+   "🍦"
+  ],
+  "gemstone": [
+   "💎"
+  ],
+  "gene": [
+   "🧬"
+  ],
+  "genetic": [
+   "🧬"
+  ],
+  "genetics": [
+   "🧬"
+  ],
+  "genmaicha": [
+   "🍵"
+  ],
+  "genome": [
+   "🧬"
+  ],
+  "genomic": [
+   "🧬"
+  ],
+  "gentoo": [
+   "🐧"
+  ],
+  "gerbil": [
+   "🐹"
+  ],
+  "germ": [
+   "🦠"
+  ],
+  "germinate": [
+   "🌱"
+  ],
+  "germination": [
+   "🌱"
+  ],
+  "germs": [
+   "🦠"
+  ],
+  "gharial": [
+   "🐊"
+  ],
+  "ghee": [
+   "🧈"
+  ],
+  "gherkin": [
+   "🥒"
+  ],
+  "ghosts": [
+   "👻"
+  ],
+  "ghoul": [
+   "👻"
+  ],
+  "gillette": [
+   "🪒"
+  ],
+  "gingersnap": [
+   "🍪"
+  ],
+  "gittar": [
+   "🎸"
+  ],
+  "glacial": [
+   "🧊"
+  ],
+  "glacier": [
+   "🧊"
+  ],
+  "globe": [
+   "🌍",
+   "🌎",
+   "🌏"
+  ],
+  "globefish": [
+   "🐡"
+  ],
+  "glove": [
+   "🧤"
+  ],
+  "goats": [
+   "🐐"
+  ],
+  "gobbler": [
+   "🦃"
+  ],
+  "goggle": [
+   "🥽"
+  ],
+  "goguma": [
+   "🍠"
+  ],
+  "gondola": [
+   "🚠"
+  ],
+  "gorilline": [
+   "🦍"
+  ],
+  "gown": [
+   "👗"
+  ],
+  "graduate": [
+   "🎓"
+  ],
+  "graduation": [
+   "🎓"
+  ],
+  "grandstand": [
+   "🏟️"
+  ],
+  "granola": [
+   "🥣"
+  ],
+  "grape": [
+   "🍇"
+  ],
+  "graphite": [
+   "✏️"
+  ],
+  "gregorian": [
+   "📅"
+  ],
+  "griddlecake": [
+   "🥞"
+  ],
+  "gridiron": [
+   "🏈"
+  ],
+  "grizzly": [
+   "🐻"
+  ],
+  "groom": [
+   "💒"
+  ],
+  "groundnut": [
+   "🥜"
+  ],
+  "guacamole": [
+   "🥑"
+  ],
+  "guanaco": [
+   "🦙"
+  ],
+  "guano": [
+   "🦇"
+  ],
+  "guesthouse": [
+   "🏨"
+  ],
+  "guitarist": [
+   "🎸"
+  ],
+  "guittar": [
+   "🎸"
+  ],
+  "gust": [
+   "🌬️"
+  ],
+  "gyoza": [
+   "🥟"
+  ],
+  "gyro": [
+   "🥙"
+  ],
+  "haircut": [
+   "💈"
+  ],
+  "hairdresser": [
+   "💈"
+  ],
+  "halfback": [
+   "🏈"
+  ],
+  "halley": [
+   "☄️"
+  ],
+  "hammerhead": [
+   "🦈"
+  ],
+  "hanafuda": [
+   "🎴"
+  ],
+  "handbasket": [
+   "🧺"
+  ],
+  "handlebars": [
+   "🚲"
+  ],
+  "handroll": [
+   "🍣"
+  ],
+  "handset": [
+   "☎️",
+   "📱"
+  ],
+  "hangar": [
+   "✈️"
+  ],
+  "hare": [
+   "🐇"
+  ],
+  "harpoon": [
+   "🐋"
+  ],
+  "harpsichord": [
+   "🎹"
+  ],
+  "harvester": [
+   "🚜"
+  ],
+  "hashi": [
+   "🥢"
+  ],
+  "hatchet": [
+   "🪓"
+  ],
+  "hatching": [
+   "🐥"
+  ],
+  "haunt": [
+   "👻"
+  ],
+  "haunted": [
+   "👻"
+  ],
+  "haunting": [
+   "👻"
+  ],
+  "haversack": [
+   "🎒"
+  ],
+  "hawksbill": [
+   "🐢"
+  ],
+  "haze": [
+   "🌫️"
+  ],
+  "headphones": [
+   "🎧"
+  ],
+  "hearse": [
+   "⚰️"
+  ],
+  "hedgepig": [
+   "🦔"
+  ],
+  "heels": [
+   "👠"
+  ],
+  "heifer": [
+   "🐄"
+  ],
+  "helianthus": [
+   "🌻"
+  ],
+  "heliport": [
+   "🚁"
+  ],
+  "helo": [
+   "🚁"
+  ],
+  "heraldic": [
+   "🛡️"
+  ],
+  "heraldry": [
+   "🛡️"
+  ],
+  "herring": [
+   "🐟"
+  ],
+  "highway": [
+   "🛣️"
+  ],
+  "hike": [
+   "🥾"
+  ],
+  "hiking": [
+   "🥾"
+  ],
+  "hinamatsuri": [
+   "🎎"
+  ],
+  "hippo": [
+   "🦛"
+  ],
+  "hiss": [
+   "🐍"
+  ],
+  "hive": [
+   "🐝"
+  ],
+  "hives": [
+   "🐝"
+  ],
+  "hocho": [
+   "🔪"
+  ],
+  "hoglet": [
+   "🦔"
+  ],
+  "honeycomb": [
+   "🐝"
+  ],
+  "honeydew": [
+   "🍈"
+  ],
+  "honeymoon": [
+   "💒"
+  ],
+  "hoop": [
+   "🏀"
+  ],
+  "hoops": [
+   "🏀"
+  ],
+  "horses": [
+   "🐎"
+  ],
+  "hosiery": [
+   "🧦"
+  ],
+  "hosomaki": [
+   "🍣"
+  ],
+  "hostel": [
+   "🏨"
+  ],
+  "hotcake": [
+   "🥞"
+  ],
+  "hotcakes": [
+   "🥞"
+  ],
+  "hotdog": [
+   "🌭"
+  ],
+  "hotsprings": [
+   "♨️"
+  ],
+  "hound": [
+   "🐕"
+  ],
+  "houseboat": [
+   "🚢"
+  ],
+  "housecat": [
+   "🐈"
+  ],
+  "hubble": [
+   "🔭"
+  ],
+  "humpback": [
+   "🐋"
+  ],
+  "hurricane": [
+   "🌀"
+  ],
+  "hwatu": [
+   "🎴"
+  ],
+  "hyperlink": [
+   "🔗"
+  ],
+  "hypotenuse": [
+   "📐"
+  ],
+  "iceberg": [
+   "🧊"
+  ],
+  "icecream": [
+   "🍦"
+  ],
+  "iditarod": [
+   "🛷"
+  ],
+  "iguana": [
+   "🦎"
+  ],
+  "imac": [
+   "🖥️"
+  ],
+  "inpatient": [
+   "🏥"
+  ],
+  "insect": [
+   "🐛"
+  ],
+  "intarweb": [
+   "🌐"
+  ],
+  "interbank": [
+   "🏦"
+  ],
+  "internets": [
+   "🌐"
+  ],
+  "interstate": [
+   "🛣️"
+  ],
+  "intertubes": [
+   "🌐"
+  ],
+  "interweb": [
+   "🌐"
+  ],
+  "iphone": [
+   "📱"
+  ],
+  "isosceles": [
+   "📐"
+  ],
+  "izakaya": [
+   "🏮"
+  ],
+  "jacket": [
+   "🧥"
+  ],
+  "jackrabbit": [
+   "🐇"
+  ],
+  "jaguar": [
+   "🐆"
+  ],
+  "jargonelle": [
+   "🍐"
+  ],
+  "jester": [
+   "🃏"
+  ],
+  "jetliner": [
+   "✈️"
+  ],
+  "jewel": [
+   "💎"
+  ],
+  "jewelry": [
+   "💍"
+  ],
+  "jiaozi": [
+   "🥟"
+  ],
+  "jigsaw": [
+   "🧩"
+  ],
+  "jinn": [
+   "🧞"
+  ],
+  "jinnee": [
+   "🧞"
+  ],
+  "jinni": [
+   "🧞"
+  ],
+  "jockey": [
+   "🐎"
+  ],
+  "journalism": [
+   "📰"
+  ],
+  "journalist": [
+   "📰"
+  ],
+  "joysticks": [
+   "🕹️"
+  ],
+  "judo": [
+   "🥋"
+  ],
+  "juice": [
+   "🧃"
+  ],
+  "jujitsu": [
+   "🥋"
+  ],
+  "juniper": [
+   "🌲"
+  ],
+  "jupiter": [
+   "🪐"
+  ],
+  "jurassic": [
+   "🦖",
+   "🦕"
+  ],
+  "justice": [
+   "⚖️"
+  ],
+  "kadomatsu": [
+   "🎍"
+  ],
+  "kail": [
+   "🥬"
+  ],
+  "kakapo": [
+   "🦜"
+  ],
+  "kale": [
+   "🥬"
+  ],
+  "kamaboko": [
+   "🍥"
+  ],
+  "kangaroos": [
+   "🦘"
+  ],
+  "kangeroo": [
+   "🦘"
+  ],
+  "kangooroo": [
+   "🦘"
+  ],
+  "kanguroo": [
+   "🦘"
+  ],
+  "kanguru": [
+   "🦘"
+  ],
+  "karaoke": [
+   "🎤"
+  ],
+  "karate": [
+   "🥋"
+  ],
+  "katydid": [
+   "🦗"
+  ],
+  "kayak": [
+   "🛶"
+  ],
+  "kayaking": [
+   "🛶"
+  ],
+  "kebab": [
+   "🥙"
+  ],
+  "kegs": [
+   "🍻"
+  ],
+  "kendo": [
+   "🥋"
+  ],
+  "kermit": [
+   "🐸"
+  ],
+  "kernels": [
+   "🌽"
+  ],
+  "keys": [
+   "🔑"
+  ],
+  "kickboxing": [
+   "🥋"
+  ],
+  "kindergarten": [
+   "🏫"
+  ],
+  "kipfel": [
+   "🥐"
+  ],
+  "kiting": [
+   "🪁"
+  ],
+  "kitten": [
+   "🐈",
+   "🐱"
+  ],
+  "kitty": [
+   "🐱"
+  ],
+  "kiwifruit": [
+   "🥝"
+  ],
+  "knickers": [
+   "🩲"
+  ],
+  "knife": [
+   "🔪"
+  ],
+  "knit": [
+   "🧶"
+  ],
+  "knitted": [
+   "🧶"
+  ],
+  "knitter": [
+   "🧶"
+  ],
+  "knitting": [
+   "🧶"
+  ],
+  "knives": [
+   "🔪"
+  ],
+  "kodak": [
+   "📷"
+  ],
+  "koinobori": [
+   "🎏"
+  ],
+  "koko": [
+   "🦍"
+  ],
+  "komodo": [
+   "🦎"
+  ],
+  "kraken": [
+   "🦑"
+  ],
+  "krater": [
+   "🏺"
+  ],
+  "krill": [
+   "🦐"
+  ],
+  "kyoto": [
+   "⛩️"
+  ],
+  "laboratory": [
+   "🥼"
+  ],
+  "labradoodle": [
+   "🐩"
+  ],
+  "laces": [
+   "👟"
+  ],
+  "ladybeetle": [
+   "🐞"
+  ],
+  "ladybird": [
+   "🐞"
+  ],
+  "ladybug": [
+   "🐞"
+  ],
+  "ladyclock": [
+   "🐞"
+  ],
+  "ladycow": [
+   "🐞"
+  ],
+  "laksa": [
+   "🍜"
+  ],
+  "lamb": [
+   "🐑"
+  ],
+  "lambchop": [
+   "🥩"
+  ],
+  "landfall": [
+   "🌀"
+  ],
+  "landline": [
+   "☎️"
+  ],
+  "larch": [
+   "🌲"
+  ],
+  "largemouth": [
+   "🐟"
+  ],
+  "laserdisc": [
+   "📀"
+  ],
+  "latched": [
+   "🔒"
+  ],
+  "lather": [
+   "🧼"
+  ],
+  "latrine": [
+   "🚽"
+  ],
+  "latte": [
+   "☕"
+  ],
+  "lava": [
+   "🌋"
+  ],
+  "lavatory": [
+   "🚽"
+  ],
+  "leatherback": [
+   "🐢"
+  ],
+  "leaves": [
+   "🍃"
+  ],
+  "leftovers": [
+   "🥡"
+  ],
+  "leica": [
+   "📷"
+  ],
+  "lemonade": [
+   "🍋",
+   "🥤"
+  ],
+  "lightning": [
+   "⛈️"
+  ],
+  "linebacker": [
+   "🏈"
+  ],
+  "linguine": [
+   "🍝"
+  ],
+  "lioness": [
+   "🦁"
+  ],
+  "lipbalm": [
+   "💄"
+  ],
+  "lippies": [
+   "💄"
+  ],
+  "liszt": [
+   "🎹"
+  ],
+  "literature": [
+   "📖"
+  ],
+  "lithium": [
+   "🔋"
+  ],
+  "llamas": [
+   "🦙"
+  ],
+  "loaf": [
+   "🍞"
+  ],
+  "loaves": [
+   "🍞"
+  ],
+  "lobo": [
+   "🐺"
+  ],
+  "lock": [
+   "🔒"
+  ],
+  "locking": [
+   "🔒"
+  ],
+  "lodestone": [
+   "🧲"
+  ],
+  "loggerhead": [
+   "🐢"
+  ],
+  "lolly": [
+   "🍬",
+   "🍭"
+  ],
+  "lollypop": [
+   "🍭"
+  ],
+  "londoneye": [
+   "🎡"
+  ],
+  "lorikeet": [
+   "🦜"
+  ],
+  "lorry": [
+   "🚛"
+  ],
+  "lotion": [
+   "🧴"
+  ],
+  "luck": [
+   "🍀"
+  ],
+  "lucky": [
+   "🍀"
+  ],
+  "luge": [
+   "🛷"
+  ],
+  "luncheon": [
+   "🍽️"
+  ],
+  "macaque": [
+   "🐒"
+  ],
+  "macaroni": [
+   "🍝"
+  ],
+  "macaw": [
+   "🦜"
+  ],
+  "mackerel": [
+   "🐟"
+  ],
+  "mages": [
+   "🧙"
+  ],
+  "magma": [
+   "🌋"
+  ],
+  "magnetic": [
+   "🧲"
+  ],
+  "magnetism": [
+   "🧲"
+  ],
+  "magnifier": [
+   "🔍"
+  ],
+  "magus": [
+   "🧙"
+  ],
+  "mainsail": [
+   "⛵"
+  ],
+  "maize": [
+   "🌽"
+  ],
+  "makeup": [
+   "💄"
+  ],
+  "maki": [
+   "🍣"
+  ],
+  "mako": [
+   "🦈"
+  ],
+  "mall": [
+   "🛍️"
+  ],
+  "mallard": [
+   "🦆"
+  ],
+  "mallet": [
+   "🔨"
+  ],
+  "mangoes": [
+   "🥭"
+  ],
+  "manju": [
+   "🍡"
+  ],
+  "mansion": [
+   "🏠"
+  ],
+  "manufactory": [
+   "🏭"
+  ],
+  "manufacturing": [
+   "🏭"
+  ],
+  "maraschino": [
+   "🍒"
+  ],
+  "mare": [
+   "🐎"
+  ],
+  "margarine": [
+   "🧈"
+  ],
+  "marinara": [
+   "🍝"
+  ],
+  "mariposa": [
+   "🦋"
+  ],
+  "marriott": [
+   "🏨"
+  ],
+  "marrying": [
+   "💒"
+  ],
+  "marsupial": [
+   "🦘"
+  ],
+  "martini": [
+   "🍸"
+  ],
+  "mascara": [
+   "💄"
+  ],
+  "mashed": [
+   "🥔"
+  ],
+  "masjid": [
+   "🕌"
+  ],
+  "masonry": [
+   "🧱"
+  ],
+  "massif": [
+   "⛰️"
+  ],
+  "mastercard": [
+   "💳"
+  ],
+  "matcha": [
+   "🍵"
+  ],
+  "matrimony": [
+   "💒"
+  ],
+  "mattress": [
+   "🛏️"
+  ],
+  "megalodon": [
+   "🦈"
+  ],
+  "melody": [
+   "🎵"
+  ],
+  "melongene": [
+   "🍆"
+  ],
+  "memoranda": [
+   "📝"
+  ],
+  "memorandum": [
+   "📝"
+  ],
+  "menthol": [
+   "🚬"
+  ],
+  "meow": [
+   "🐈",
+   "🐱"
+  ],
+  "merino": [
+   "🐑"
+  ],
+  "mermaid": [
+   "🧜"
+  ],
+  "merman": [
+   "🧜"
+  ],
+  "meteor": [
+   "☄️",
+   "🌠"
+  ],
+  "meteorite": [
+   "🌠"
+  ],
+  "meteoroid": [
+   "🌠"
+  ],
+  "mice": [
+   "🐁"
+  ],
+  "mickey": [
+   "🐁"
+  ],
+  "microbes": [
+   "🦠"
+  ],
+  "microbial": [
+   "🦠"
+  ],
+  "microbiology": [
+   "🦠",
+   "🧫"
+  ],
+  "microorganism": [
+   "🦠"
+  ],
+  "microscopic": [
+   "🔬"
+  ],
+  "microscopy": [
+   "🔬"
+  ],
+  "midday": [
+   "🕛"
+  ],
+  "milkshake": [
+   "🥤"
+  ],
+  "minaret": [
+   "🕌"
+  ],
+  "minidisc": [
+   "💽"
+  ],
+  "minidisk": [
+   "💽"
+  ],
+  "minidvd": [
+   "📀"
+  ],
+  "miniseries": [
+   "📺"
+  ],
+  "minivan": [
+   "🚐"
+  ],
+  "minnie": [
+   "🐁"
+  ],
+  "mist": [
+   "🌫️"
+  ],
+  "misty": [
+   "🌁"
+  ],
+  "mittens": [
+   "🧤"
+  ],
+  "mitts": [
+   "🧤"
+  ],
+  "moat": [
+   "🏰"
+  ],
+  "moby": [
+   "🐋"
+  ],
+  "mochi": [
+   "🍡"
+  ],
+  "moisturiser": [
+   "🧴"
+  ],
+  "moisturizer": [
+   "🧴"
+  ],
+  "mojave": [
+   "🏜️"
+  ],
+  "monarch": [
+   "👑"
+  ],
+  "monarchy": [
+   "👑"
+  ],
+  "moneybag": [
+   "💰"
+  ],
+  "moneybags": [
+   "💰"
+  ],
+  "monkeys": [
+   "🐒"
+  ],
+  "monoski": [
+   "🎿"
+  ],
+  "monsoon": [
+   "☔"
+  ],
+  "mooncake": [
+   "🥮"
+  ],
+  "moonface": [
+   "🌝"
+  ],
+  "morel": [
+   "🍄"
+  ],
+  "morello": [
+   "🍒"
+  ],
+  "mosquitoes": [
+   "🦟"
+  ],
+  "mosquitos": [
+   "🦟"
+  ],
+  "motel": [
+   "🏨"
+  ],
+  "motocross": [
+   "🏍️"
+  ],
+  "motorbike": [
+   "🏍️"
+  ],
+  "motorboat": [
+   "🚤",
+   "🛥️"
+  ],
+  "motorbus": [
+   "🚌"
+  ],
+  "motorcar": [
+   "🚗"
+  ],
+  "motorcoach": [
+   "🚌"
+  ],
+  "motorist": [
+   "🚗"
+  ],
+  "mountaineering": [
+   "🥾"
+  ],
+  "mountainous": [
+   "⛰️"
+  ],
+  "mountains": [
+   "⛰️"
+  ],
+  "mountainside": [
+   "⛰️"
+  ],
+  "mountaintop": [
+   "⛰️"
+  ],
+  "moviedom": [
+   "🎥"
+  ],
+  "moyai": [
+   "🗿"
+  ],
+  "mozzarella": [
+   "🍕"
+  ],
+  "mugicha": [
+   "🍵"
+  ],
+  "mural": [
+   "🎨"
+  ],
+  "murcott": [
+   "🍊"
+  ],
+  "muscadine": [
+   "🍇"
+  ],
+  "mushrooms": [
+   "🍄"
+  ],
+  "muskmelon": [
+   "🍈"
+  ],
+  "musubi": [
+   "🍙"
+  ],
+  "mycologist": [
+   "🍄"
+  ],
+  "naartjie": [
+   "🍊"
+  ],
+  "narutomaki": [
+   "🍥"
+  ],
+  "narwhal": [
+   "🐋"
+  ],
+  "neapolitan": [
+   "🍕"
+  ],
+  "neckwear": [
+   "👔"
+  ],
+  "nectar": [
+   "🍯",
+   "🐝"
+  ],
+  "nectarine": [
+   "🍑"
+  ],
+  "nemo": [
+   "🐠"
+  ],
+  "neptune": [
+   "🪐"
+  ],
+  "netbook": [
+   "💻"
+  ],
+  "newsprint": [
+   "📰"
+  ],
+  "newyork": [
+   "🗽"
+  ],
+  "nicotine": [
+   "🚬"
+  ],
+  "nightfall": [
+   "🌇"
+  ],
+  "nigiri": [
+   "🍣"
+  ],
+  "ninjutsu": [
+   "🥷"
+  ],
+  "nintendo": [
+   "🎮"
+  ],
+  "noodles": [
+   "🍜"
+  ],
+  "noon": [
+   "🕛"
+  ],
+  "noonday": [
+   "🕛"
+  ],
+  "noontide": [
+   "🕛"
+  ],
+  "nori": [
+   "🍣"
+  ],
+  "nosferatu": [
+   "🧛"
+  ],
+  "notepad": [
+   "📓"
+  ],
+  "novelist": [
+   "📖"
+  ],
+  "nuptials": [
+   "💒"
+  ],
+  "nylons": [
+   "🧦"
+  ],
+  "oasis": [
+   "🏜️"
+  ],
+  "oatmeal": [
+   "🥣"
+  ],
+  "oats": [
+   "🌾",
+   "🥣"
+  ],
+  "observatory": [
+   "🔭"
+  ],
+  "ocotillo": [
+   "🌵"
+  ],
+  "octapus": [
+   "🐙"
+  ],
+  "octopod": [
+   "🐙"
+  ],
+  "octopuses": [
+   "🐙"
+  ],
+  "odango": [
+   "🍡"
+  ],
+  "oink": [
+   "🐽",
+   "🐷"
+  ],
+  "okapi": [
+   "🦒"
+  ],
+  "olaf": [
+   "⛄",
+   "☃️"
+  ],
+  "omochi": [
+   "🍡"
+  ],
+  "omusubi": [
+   "🍙"
+  ],
+  "onigirazu": [
+   "🍙"
+  ],
+  "onigiri": [
+   "🍙"
+  ],
+  "onsen": [
+   "♨️"
+  ],
+  "orangotang": [
+   "🦧"
+  ],
+  "orangoutan": [
+   "🦧"
+  ],
+  "orangoutang": [
+   "🦧"
+  ],
+  "orangutang": [
+   "🦧"
+  ],
+  "orca": [
+   "🐋"
+  ],
+  "orcas": [
+   "🐋"
+  ],
+  "oreo": [
+   "🍪"
+  ],
+  "orienteering": [
+   "🧭"
+  ],
+  "otters": [
+   "🦦"
+  ],
+  "ourangoutang": [
+   "🦧"
+  ],
+  "outboard": [
+   "🚤"
+  ],
+  "outpatient": [
+   "🏥"
+  ],
+  "outrigger": [
+   "🛶"
+  ],
+  "overcast": [
+   "☁️"
+  ],
+  "overcoat": [
+   "🧥"
+  ],
+  "owls": [
+   "🦉"
+  ],
+  "oxen": [
+   "🐂"
+  ],
+  "oysters": [
+   "🦪"
+  ],
+  "paddling": [
+   "🛶"
+  ],
+  "padlock": [
+   "🔒"
+  ],
+  "paella": [
+   "🥘"
+  ],
+  "paganini": [
+   "🎻"
+  ],
+  "painting": [
+   "🖌️",
+   "🎨",
+   "🖼️"
+  ],
+  "palace": [
+   "🏰"
+  ],
+  "pancake": [
+   "🥞"
+  ],
+  "pandas": [
+   "🐼"
+  ],
+  "pandowdy": [
+   "🥧"
+  ],
+  "pants": [
+   "👖"
+  ],
+  "paperback": [
+   "📚",
+   "📖"
+  ],
+  "papyrus": [
+   "📜"
+  ],
+  "parakeet": [
+   "🦜"
+  ],
+  "paramedic": [
+   "🚑"
+  ],
+  "paranormal": [
+   "👻"
+  ],
+  "parasail": [
+   "🪂"
+  ],
+  "parasol": [
+   "⛱️"
+  ],
+  "paratrooper": [
+   "🪂"
+  ],
+  "parcel": [
+   "📦"
+  ],
+  "parchment": [
+   "📜"
+  ],
+  "parka": [
+   "🧥"
+  ],
+  "parrots": [
+   "🦜"
+  ],
+  "partyboat": [
+   "🚤"
+  ],
+  "pasta": [
+   "🍝"
+  ],
+  "pastry": [
+   "🥐"
+  ],
+  "pawn": [
+   "♟️"
+  ],
+  "pawns": [
+   "♟️"
+  ],
+  "peaches": [
+   "🍑"
+  ],
+  "peafowl": [
+   "🦚"
+  ],
+  "peahen": [
+   "🦚"
+  ],
+  "peaks": [
+   "⛰️"
+  ],
+  "peanut": [
+   "🥜"
+  ],
+  "pears": [
+   "🍐"
+  ],
+  "peccary": [
+   "🐗"
+  ],
+  "pegacorn": [
+   "🦄"
+  ],
+  "pence": [
+   "💷"
+  ],
+  "pencill": [
+   "✏️"
+  ],
+  "penguins": [
+   "🐧"
+  ],
+  "pensel": [
+   "✏️"
+  ],
+  "pensil": [
+   "✏️"
+  ],
+  "penumbral": [
+   "🌑"
+  ],
+  "pepperoni": [
+   "🍕"
+  ],
+  "petrol": [
+   "⛽"
+  ],
+  "phantom": [
+   "👻"
+  ],
+  "pharmacy": [
+   "💊"
+  ],
+  "photograph": [
+   "📷"
+  ],
+  "photographer": [
+   "📷"
+  ],
+  "photographing": [
+   "📷"
+  ],
+  "photography": [
+   "📷",
+   "📸"
+  ],
+  "pianist": [
+   "🎹"
+  ],
+  "piano": [
+   "🎹"
+  ],
+  "pianoforte": [
+   "🎹"
+  ],
+  "pickax": [
+   "⛏️"
+  ],
+  "pickaxe": [
+   "⛏️"
+  ],
+  "pickle": [
+   "🥒"
+  ],
+  "pickled": [
+   "🥒"
+  ],
+  "pickles": [
+   "🥒"
+  ],
+  "pierogi": [
+   "🥟"
+  ],
+  "pies": [
+   "🥧"
+  ],
+  "pigeon": [
+   "🕊️"
+  ],
+  "pigment": [
+   "🎨"
+  ],
+  "pigs": [
+   "🐖"
+  ],
+  "pillarbox": [
+   "📮"
+  ],
+  "pills": [
+   "💊"
+  ],
+  "pine": [
+   "🌲"
+  ],
+  "pineberry": [
+   "🍓"
+  ],
+  "pines": [
+   "🌲"
+  ],
+  "pingpong": [
+   "🏓"
+  ],
+  "pint": [
+   "🍺"
+  ],
+  "pints": [
+   "🍻"
+  ],
+  "pita": [
+   "🥙"
+  ],
+  "pitcher": [
+   "⚾"
+  ],
+  "pizzeria": [
+   "🍕"
+  ],
+  "plane": [
+   "✈️"
+  ],
+  "planes": [
+   "✈️"
+  ],
+  "planetary": [
+   "🪐"
+  ],
+  "planets": [
+   "🪐"
+  ],
+  "plantain": [
+   "🍌"
+  ],
+  "plantling": [
+   "🌱"
+  ],
+  "plasmid": [
+   "🧬"
+  ],
+  "playstation": [
+   "🎮"
+  ],
+  "plow": [
+   "🚜"
+  ],
+  "plumage": [
+   "🐦"
+  ],
+  "plush": [
+   "🧸"
+  ],
+  "plushy": [
+   "🧸"
+  ],
+  "pointe": [
+   "🩰"
+  ],
+  "pollination": [
+   "🐝"
+  ],
+  "polocrosse": [
+   "🥍"
+  ],
+  "pony": [
+   "🐎"
+  ],
+  "porbeagle": [
+   "🦈"
+  ],
+  "porcupinefish": [
+   "🐡"
+  ],
+  "porkchop": [
+   "🥩"
+  ],
+  "porpoise": [
+   "🐬"
+  ],
+  "porridge": [
+   "🥣"
+  ],
+  "postage": [
+   "✉️"
+  ],
+  "postal": [
+   "✉️"
+  ],
+  "potsticker": [
+   "🥟"
+  ],
+  "pottery": [
+   "🏺"
+  ],
+  "potty": [
+   "🚽"
+  ],
+  "powerboat": [
+   "🚤"
+  ],
+  "prawn": [
+   "🦐"
+  ],
+  "printout": [
+   "🖨️"
+  ],
+  "privy": [
+   "🚽"
+  ],
+  "psychic": [
+   "🔮"
+  ],
+  "puck": [
+   "🏒"
+  ],
+  "pudding": [
+   "🍮"
+  ],
+  "puffcorn": [
+   "🍿"
+  ],
+  "pufferfish": [
+   "🐡"
+  ],
+  "pumpkin": [
+   "🎃"
+  ],
+  "punter": [
+   "🏈"
+  ],
+  "puppy": [
+   "🐶",
+   "🐕"
+  ],
+  "putt": [
+   "⛳"
+  ],
+  "puzzle": [
+   "🧩"
+  ],
+  "pyroclastic": [
+   "🌋"
+  ],
+  "pyrotechnic": [
+   "🎆"
+  ],
+  "pyrotechnics": [
+   "🎆"
+  ],
+  "pythagorean": [
+   "📐"
+  ],
+  "python": [
+   "🐍"
+  ],
+  "quack": [
+   "🦆"
+  ],
+  "quagga": [
+   "🦓"
+  ],
+  "quarterback": [
+   "🏈"
+  ],
+  "quesarito": [
+   "🌯"
+  ],
+  "quiche": [
+   "🥧"
+  ],
+  "quid": [
+   "💷"
+  ],
+  "qwerty": [
+   "⌨️"
+  ],
+  "rabbits": [
+   "🐇"
+  ],
+  "racecourse": [
+   "🐎"
+  ],
+  "racehorse": [
+   "🐎"
+  ],
+  "racetrack": [
+   "🐎"
+  ],
+  "racoon": [
+   "🦝"
+  ],
+  "racquet": [
+   "🎾"
+  ],
+  "racquets": [
+   "🎾"
+  ],
+  "railcar": [
+   "🚃"
+  ],
+  "railroad": [
+   "🚆"
+  ],
+  "railway": [
+   "🚉"
+  ],
+  "raincoat": [
+   "🧥"
+  ],
+  "raining": [
+   "☔"
+  ],
+  "rainstorm": [
+   "☔"
+  ],
+  "rainy": [
+   "☔",
+   "🌂"
+  ],
+  "raisin": [
+   "🍇"
+  ],
+  "raisins": [
+   "🍇"
+  ],
+  "ramen": [
+   "🍜"
+  ],
+  "rashers": [
+   "🥓"
+  ],
+  "ratatouille": [
+   "🍆"
+  ],
+  "ratchet": [
+   "🔧"
+  ],
+  "rats": [
+   "🐀"
+  ],
+  "rattlesnake": [
+   "🐍"
+  ],
+  "razorback": [
+   "🐗"
+  ],
+  "receipts": [
+   "🧾"
+  ],
+  "recession": [
+   "📉"
+  ],
+  "rechargeable": [
+   "🔋"
+  ],
+  "recipes": [
+   "🍳"
+  ],
+  "recurve": [
+   "🏹"
+  ],
+  "regatta": [
+   "⛵"
+  ],
+  "reindeer": [
+   "🦌"
+  ],
+  "repast": [
+   "🍽️"
+  ],
+  "repellent": [
+   "🦟"
+  ],
+  "resorts": [
+   "🏨"
+  ],
+  "restroom": [
+   "🚽"
+  ],
+  "reveille": [
+   "📯"
+  ],
+  "rhino": [
+   "🦏"
+  ],
+  "rhinocerus": [
+   "🦏"
+  ],
+  "rhinos": [
+   "🦏"
+  ],
+  "riff": [
+   "🎸"
+  ],
+  "riffs": [
+   "🎸"
+  ],
+  "ringer": [
+   "🔕"
+  ],
+  "roadwork": [
+   "🚧"
+  ],
+  "robo": [
+   "🤖"
+  ],
+  "robotic": [
+   "🤖"
+  ],
+  "robotics": [
+   "🤖"
+  ],
+  "rodents": [
+   "🐀",
+   "🐁"
+  ],
+  "rollercoaster": [
+   "🎢"
+  ],
+  "rolodex": [
+   "📇"
+  ],
+  "romaine": [
+   "🥬"
+  ],
+  "romanesco": [
+   "🥦"
+  ],
+  "ropeway": [
+   "🚡"
+  ],
+  "rorqual": [
+   "🐋"
+  ],
+  "rosary": [
+   "📿"
+  ],
+  "roselle": [
+   "🌺"
+  ],
+  "roundball": [
+   "🏀"
+  ],
+  "royal": [
+   "👑"
+  ],
+  "royalty": [
+   "👑"
+  ],
+  "rubbish": [
+   "🗑️"
+  ],
+  "rucksack": [
+   "🎒"
+  ],
+  "saddle": [
+   "🐎"
+  ],
+  "saguaro": [
+   "🌵"
+  ],
+  "sahara": [
+   "🏜️"
+  ],
+  "sahuaro": [
+   "🌵"
+  ],
+  "sail": [
+   "⛵"
+  ],
+  "sailing": [
+   "⛵"
+  ],
+  "sails": [
+   "⛵"
+  ],
+  "salmonella": [
+   "🦠"
+  ],
+  "saltie": [
+   "🐊"
+  ],
+  "saltiness": [
+   "🧂"
+  ],
+  "salty": [
+   "🧂"
+  ],
+  "sambal": [
+   "🌶️"
+  ],
+  "sandal": [
+   "👡"
+  ],
+  "sandwiches": [
+   "🥪"
+  ],
+  "sanfrancisco": [
+   "🌉"
+  ],
+  "sanshou": [
+   "🥋"
+  ],
+  "sapling": [
+   "🌱"
+  ],
+  "sapphire": [
+   "💎"
+  ],
+  "saree": [
+   "🥻"
+  ],
+  "sashimi": [
+   "🍣"
+  ],
+  "saturn": [
+   "🪐"
+  ],
+  "sausage": [
+   "🌭"
+  ],
+  "scales": [
+   "⚖️"
+  ],
+  "scallion": [
+   "🧅"
+  ],
+  "scarves": [
+   "🧣"
+  ],
+  "schmear": [
+   "🥯"
+  ],
+  "schoolhouse": [
+   "🏫"
+  ],
+  "schooltime": [
+   "🏫"
+  ],
+  "scissor": [
+   "✂️"
+  ],
+  "scooter": [
+   "🛵"
+  ],
+  "scotch": [
+   "🥃"
+  ],
+  "screenplay": [
+   "🎥"
+  ],
+  "screenwriter": [
+   "🎥"
+  ],
+  "scrolls": [
+   "📜"
+  ],
+  "scuba": [
+   "🤿"
+  ],
+  "seashell": [
+   "🐚"
+  ],
+  "secateurs": [
+   "✂️"
+  ],
+  "sedan": [
+   "🚗"
+  ],
+  "seidel": [
+   "🍺"
+  ],
+  "semitrailer": [
+   "🚛"
+  ],
+  "senbei": [
+   "🍘"
+  ],
+  "sencha": [
+   "🍵"
+  ],
+  "sensei": [
+   "🥋"
+  ],
+  "serpent": [
+   "🐍"
+  ],
+  "settee": [
+   "🛋️"
+  ],
+  "sewing": [
+   "🧵"
+  ],
+  "shades": [
+   "🕶️"
+  ],
+  "shallot": [
+   "🧅"
+  ],
+  "shampoo": [
+   "🧴"
+  ],
+  "sharpener": [
+   "✏️"
+  ],
+  "sharpeners": [
+   "✏️"
+  ],
+  "shave": [
+   "🪒"
+  ],
+  "shaver": [
+   "🪒"
+  ],
+  "shaving": [
+   "🪒"
+  ],
+  "shawarma": [
+   "🥙"
+  ],
+  "shawl": [
+   "🧣"
+  ],
+  "shears": [
+   "✂️"
+  ],
+  "sheep": [
+   "🐑"
+  ],
+  "sheraton": [
+   "🏨"
+  ],
+  "shilling": [
+   "💷"
+  ],
+  "shinkansen": [
+   "🚄",
+   "🚅"
+  ],
+  "shipboard": [
+   "🚢"
+  ],
+  "shipbuilding": [
+   "🚢"
+  ],
+  "shipyard": [
+   "🚢"
+  ],
+  "shootfighting": [
+   "🥋"
+  ],
+  "shortstop": [
+   "⚾"
+  ],
+  "shroom": [
+   "🍄"
+  ],
+  "shul": [
+   "🕍"
+  ],
+  "shuriken": [
+   "🥷"
+  ],
+  "shuttlecock": [
+   "🏸"
+  ],
+  "silverback": [
+   "🦍"
+  ],
+  "silverware": [
+   "🍴"
+  ],
+  "singlet": [
+   "🎽"
+  ],
+  "sinterklaas": [
+   "🎅"
+  ],
+  "siren": [
+   "🚨"
+  ],
+  "sitcom": [
+   "📺"
+  ],
+  "skateboarder": [
+   "🛹"
+  ],
+  "skateboarding": [
+   "🛹"
+  ],
+  "skater": [
+   "🛹",
+   "⛸️"
+  ],
+  "skates": [
+   "⛸️"
+  ],
+  "skating": [
+   "⛸️"
+  ],
+  "skein": [
+   "🧶"
+  ],
+  "sketchbook": [
+   "📓"
+  ],
+  "skied": [
+   "🎿"
+  ],
+  "skier": [
+   "🎿"
+  ],
+  "skiers": [
+   "🎿"
+  ],
+  "skiing": [
+   "🎿"
+  ],
+  "skillet": [
+   "🍳"
+  ],
+  "skink": [
+   "🦎"
+  ],
+  "skirtini": [
+   "👙"
+  ],
+  "skydive": [
+   "🪂"
+  ],
+  "skydiving": [
+   "🪂"
+  ],
+  "skyline": [
+   "🏙️",
+   "🌆"
+  ],
+  "slaloms": [
+   "🎿"
+  ],
+  "sledding": [
+   "🛷"
+  ],
+  "sledgehammer": [
+   "🔨"
+  ],
+  "sleigh": [
+   "🛷"
+  ],
+  "slowpitch": [
+   "🥎"
+  ],
+  "smartphone": [
+   "📱"
+  ],
+  "smog": [
+   "🌫️"
+  ],
+  "smoking": [
+   "🚬"
+  ],
+  "smoothie": [
+   "🥤"
+  ],
+  "snails": [
+   "🐌"
+  ],
+  "snailshell": [
+   "🐚"
+  ],
+  "snakes": [
+   "🐍"
+  ],
+  "snare": [
+   "🥁"
+  ],
+  "sneaker": [
+   "👟"
+  ],
+  "sneakers": [
+   "👟"
+  ],
+  "snips": [
+   "✂️"
+  ],
+  "snooker": [
+   "🎱"
+  ],
+  "snorkel": [
+   "🤿"
+  ],
+  "snorkeling": [
+   "🤿"
+  ],
+  "snout": [
+   "🐽"
+  ],
+  "snowboy": [
+   "☃️"
+  ],
+  "snowing": [
+   "❄️"
+  ],
+  "snowlady": [
+   "☃️"
+  ],
+  "snowmen": [
+   "☃️"
+  ],
+  "snowperson": [
+   "☃️"
+  ],
+  "soapdish": [
+   "🧼"
+  ],
+  "soba": [
+   "🍜"
+  ],
+  "sock": [
+   "🧦"
+  ],
+  "soda": [
+   "🥤"
+  ],
+  "sofa": [
+   "🛋️"
+  ],
+  "sorcerer": [
+   "🧙"
+  ],
+  "sorceress": [
+   "🧙"
+  ],
+  "soupfin": [
+   "🦈"
+  ],
+  "sourdough": [
+   "🍞"
+  ],
+  "soyuz": [
+   "🧑‍🚀"
+  ],
+  "spaceman": [
+   "🧑‍🚀"
+  ],
+  "spaceship": [
+   "🧑‍🚀"
+  ],
+  "spacewalk": [
+   "🧑‍🚀"
+  ],
+  "spade": [
+   "♠️"
+  ],
+  "spades": [
+   "♠️"
+  ],
+  "spaghettini": [
+   "🍝"
+  ],
+  "spaghettoni": [
+   "🍝"
+  ],
+  "spanner": [
+   "🔧",
+   "🛠️"
+  ],
+  "speakerphone": [
+   "📞",
+   "📢"
+  ],
+  "spectacles": [
+   "👓"
+  ],
+  "specter": [
+   "👻"
+  ],
+  "spellcaster": [
+   "🧙"
+  ],
+  "spiders": [
+   "🕷️"
+  ],
+  "spiderweb": [
+   "🕸️"
+  ],
+  "spinet": [
+   "🎹"
+  ],
+  "spinnaker": [
+   "⛵"
+  ],
+  "spongecake": [
+   "🍰"
+  ],
+  "spooky": [
+   "👻"
+  ],
+  "spool": [
+   "🧵"
+  ],
+  "spoonful": [
+   "🥄"
+  ],
+  "spoons": [
+   "🥄"
+  ],
+  "sprout": [
+   "🌱"
+  ],
+  "sprouting": [
+   "🌱"
+  ],
+  "spruce": [
+   "🌲"
+  ],
+  "spud": [
+   "🥔"
+  ],
+  "sputnik": [
+   "🛰️"
+  ],
+  "spyglass": [
+   "🔭"
+  ],
+  "squall": [
+   "🌬️"
+  ],
+  "stables": [
+   "🐎"
+  ],
+  "stag": [
+   "🦌"
+  ],
+  "stallion": [
+   "🐎"
+  ],
+  "stargazing": [
+   "🔭"
+  ],
+  "steak": [
+   "🥩"
+  ],
+  "stegosaurus": [
+   "🦕"
+  ],
+  "stein": [
+   "🍺"
+  ],
+  "stew": [
+   "🍲"
+  ],
+  "stiletto": [
+   "👠"
+  ],
+  "stonewashed": [
+   "👖"
+  ],
+  "stormwind": [
+   "🌬️"
+  ],
+  "stove": [
+   "🍳"
+  ],
+  "stradivarius": [
+   "🎻"
+  ],
+  "stratovolcano": [
+   "🌋"
+  ],
+  "streetcar": [
+   "🚊"
+  ],
+  "streptococcus": [
+   "🦠"
+  ],
+  "stroopwafel": [
+   "🧇"
+  ],
+  "subway": [
+   "🚇"
+  ],
+  "succulent": [
+   "🌵"
+  ],
+  "suds": [
+   "🧼"
+  ],
+  "suitcase": [
+   "🧳"
+  ],
+  "sunface": [
+   "🌞"
+  ],
+  "sunfish": [
+   "🐟"
+  ],
+  "sunny": [
+   "☀️"
+  ],
+  "sunscreen": [
+   "🧴"
+  ],
+  "sunsetting": [
+   "🌇"
+  ],
+  "sunshade": [
+   "⛱️"
+  ],
+  "sunshine": [
+   "☀️"
+  ],
+  "sunup": [
+   "🌅"
+  ],
+  "superbowl": [
+   "🏈"
+  ],
+  "superheroes": [
+   "🦸"
+  ],
+  "superheroics": [
+   "🦸"
+  ],
+  "superhighway": [
+   "🛣️"
+  ],
+  "superman": [
+   "🦸"
+  ],
+  "superpower": [
+   "🦸"
+  ],
+  "superpowers": [
+   "🦸"
+  ],
+  "supper": [
+   "🍽️"
+  ],
+  "surimi": [
+   "🍥"
+  ],
+  "swallowtail": [
+   "🦋"
+  ],
+  "sweeper": [
+   "🧹"
+  ],
+  "sweets": [
+   "🍬"
+  ],
+  "swellfish": [
+   "🐡"
+  ],
+  "swimsuit": [
+   "👙"
+  ],
+  "swimwear": [
+   "👙"
+  ],
+  "swine": [
+   "🐖"
+  ],
+  "switchboard": [
+   "☎️"
+  ],
+  "synagog": [
+   "🕍"
+  ],
+  "tabloid": [
+   "📰"
+  ],
+  "tacos": [
+   "🌮"
+  ],
+  "taekwondo": [
+   "🥋"
+  ],
+  "taffy": [
+   "🍬"
+  ],
+  "taijiquan": [
+   "🥋"
+  ],
+  "takeoff": [
+   "✈️"
+  ],
+  "talisman": [
+   "🧿"
+  ],
+  "tangelo": [
+   "🍊"
+  ],
+  "tangor": [
+   "🍊"
+  ],
+  "tankard": [
+   "🍺"
+  ],
+  "tankini": [
+   "👙"
+  ],
+  "tanzaku": [
+   "🎋"
+  ],
+  "tarantula": [
+   "🕷️"
+  ],
+  "tater": [
+   "🥔"
+  ],
+  "taxicab": [
+   "🚕",
+   "🚖"
+  ],
+  "taxis": [
+   "🚕"
+  ],
+  "teaspoon": [
+   "🥄"
+  ],
+  "teddy": [
+   "🧸"
+  ],
+  "teevee": [
+   "📺"
+  ],
+  "telefax": [
+   "📠"
+  ],
+  "telly": [
+   "📺"
+  ],
+  "tempura": [
+   "🍤"
+  ],
+  "tenpin": [
+   "🎳"
+  ],
+  "tentacle": [
+   "🐙"
+  ],
+  "tentacles": [
+   "🐙",
+   "🦑"
+  ],
+  "tenting": [
+   "🏕️"
+  ],
+  "tents": [
+   "⛺",
+   "🏕️"
+  ],
+  "tepee": [
+   "⛺"
+  ],
+  "termater": [
+   "🍅"
+  ],
+  "terminus": [
+   "🚉"
+  ],
+  "terrapin": [
+   "🐢"
+  ],
+  "thanksgiving": [
+   "🦃"
+  ],
+  "theater": [
+   "🎭"
+  ],
+  "theatre": [
+   "🎭"
+  ],
+  "thermidor": [
+   "🦞"
+  ],
+  "thoroughbred": [
+   "🐎"
+  ],
+  "throne": [
+   "👑"
+  ],
+  "throughway": [
+   "🛣️"
+  ],
+  "thruway": [
+   "🛣️"
+  ],
+  "thumbtack": [
+   "📌"
+  ],
+  "thunder": [
+   "⛈️",
+   "🌩️"
+  ],
+  "thundergust": [
+   "🌬️"
+  ],
+  "ticketing": [
+   "🎫"
+  ],
+  "tidal": [
+   "🌊"
+  ],
+  "tigers": [
+   "🐅"
+  ],
+  "tiki": [
+   "🍹"
+  ],
+  "timepiece": [
+   "⌚"
+  ],
+  "timer": [
+   "⏳"
+  ],
+  "tinned": [
+   "🥫"
+  ],
+  "tinseltown": [
+   "🎥"
+  ],
+  "titania": [
+   "🧚"
+  ],
+  "titanic": [
+   "🚢"
+  ],
+  "toadstool": [
+   "🍄"
+  ],
+  "tobacco": [
+   "🚬"
+  ],
+  "toboggan": [
+   "🛷"
+  ],
+  "tomate": [
+   "🍅"
+  ],
+  "tomater": [
+   "🍅"
+  ],
+  "toner": [
+   "🖨️"
+  ],
+  "toolkit": [
+   "🧰"
+  ],
+  "tophat": [
+   "🎩"
+  ],
+  "tornadoes": [
+   "🌪️"
+  ],
+  "tortoise": [
+   "🐢"
+  ],
+  "totality": [
+   "🌑"
+  ],
+  "touchscreen": [
+   "📱"
+  ],
+  "townscape": [
+   "🏙️"
+  ],
+  "toyota": [
+   "🚗"
+  ],
+  "trains": [
+   "🚆"
+  ],
+  "tramcar": [
+   "🚊"
+  ],
+  "tramway": [
+   "🚊"
+  ],
+  "transmitter": [
+   "📻"
+  ],
+  "trapdoor": [
+   "🚪"
+  ],
+  "trash": [
+   "🗑️"
+  ],
+  "trashbox": [
+   "🗑️"
+  ],
+  "trekking": [
+   "🥾"
+  ],
+  "trex": [
+   "🦖"
+  ],
+  "triceratops": [
+   "🦖"
+  ],
+  "trimaran": [
+   "⛵"
+  ],
+  "trolley": [
+   "🚊"
+  ],
+  "trolling": [
+   "🧌"
+  ],
+  "trolls": [
+   "🧌"
+  ],
+  "trousers": [
+   "👖"
+  ],
+  "trout": [
+   "🐟"
+  ],
+  "trumpeter": [
+   "🎺"
+  ],
+  "tshirt": [
+   "👕"
+  ],
+  "tsukimi": [
+   "🎑"
+  ],
+  "tsunami": [
+   "🌊"
+  ],
+  "tuber": [
+   "🥔"
+  ],
+  "tubers": [
+   "🥔"
+  ],
+  "turrets": [
+   "🏰"
+  ],
+  "tusk": [
+   "🐘"
+  ],
+  "tusks": [
+   "🐘",
+   "🐗"
+  ],
+  "tusky": [
+   "🐗"
+  ],
+  "twister": [
+   "🌀",
+   "🌪️"
+  ],
+  "typhoon": [
+   "🌀"
+  ],
+  "tyrannosaur": [
+   "🦖"
+  ],
+  "tyrannosaurus": [
+   "🦖"
+  ],
+  "uber": [
+   "🚕"
+  ],
+  "udon": [
+   "🍜"
+  ],
+  "umpire": [
+   "⚾"
+  ],
+  "unbolted": [
+   "🔓"
+  ],
+  "undead": [
+   "🧟"
+  ],
+  "underkimono": [
+   "👘"
+  ],
+  "underpants": [
+   "🩲"
+  ],
+  "underwear": [
+   "🩲"
+  ],
+  "undies": [
+   "🩲"
+  ],
+  "unlatched": [
+   "🔓"
+  ],
+  "utensils": [
+   "🍴"
+  ],
+  "vaccination": [
+   "💉"
+  ],
+  "vaccine": [
+   "💉"
+  ],
+  "velociraptor": [
+   "🦖"
+  ],
+  "venison": [
+   "🦌"
+  ],
+  "venomous": [
+   "🐍"
+  ],
+  "vermicelli": [
+   "🍜"
+  ],
+  "vermouth": [
+   "🍸"
+  ],
+  "vespa": [
+   "🛵"
+  ],
+  "vicuna": [
+   "🦙"
+  ],
+  "vidalia": [
+   "🧅"
+  ],
+  "videodisc": [
+   "📀"
+  ],
+  "videodisk": [
+   "📀"
+  ],
+  "videotape": [
+   "📹",
+   "📼"
+  ],
+  "videotaping": [
+   "📼"
+  ],
+  "viewfinder": [
+   "📷"
+  ],
+  "vineyard": [
+   "🍇"
+  ],
+  "viola": [
+   "🎻"
+  ],
+  "violinist": [
+   "🎻"
+  ],
+  "violoncello": [
+   "🎻"
+  ],
+  "viper": [
+   "🐍"
+  ],
+  "vise": [
+   "🗜️"
+  ],
+  "volcanoes": [
+   "🌋"
+  ],
+  "volkswagen": [
+   "🚗"
+  ],
+  "vortex": [
+   "🌀"
+  ],
+  "vows": [
+   "💒"
+  ],
+  "wakey": [
+   "⏰"
+  ],
+  "wallaby": [
+   "🦘"
+  ],
+  "wallet": [
+   "👛"
+  ],
+  "walleye": [
+   "🐟"
+  ],
+  "warbler": [
+   "🐦"
+  ],
+  "warlock": [
+   "🧙"
+  ],
+  "wasabi": [
+   "🍣"
+  ],
+  "washroom": [
+   "🚽"
+  ],
+  "wastebin": [
+   "🗑️"
+  ],
+  "wastepaper": [
+   "🗑️"
+  ],
+  "waterfowl": [
+   "🦆"
+  ],
+  "wedlock": [
+   "💒"
+  ],
+  "weregorilla": [
+   "🦍"
+  ],
+  "werewolf": [
+   "🐺"
+  ],
+  "whaling": [
+   "🐋"
+  ],
+  "wheat": [
+   "🌾"
+  ],
+  "whippy": [
+   "🍦"
+  ],
+  "whipscorpion": [
+   "🦂"
+  ],
+  "whirlpool": [
+   "🌀"
+  ],
+  "whirlwind": [
+   "🌪️"
+  ],
+  "whirlybird": [
+   "🚁"
+  ],
+  "whiskey": [
+   "🥃"
+  ],
+  "whisky": [
+   "🥃"
+  ],
+  "wick": [
+   "🕯️"
+  ],
+  "wicket": [
+   "🦗"
+  ],
+  "wienerwurst": [
+   "🌭"
+  ],
+  "wimbledon": [
+   "🎾"
+  ],
+  "windflaw": [
+   "🌬️"
+  ],
+  "witch": [
+   "🧙"
+  ],
+  "wizard": [
+   "🧙"
+  ],
+  "wolves": [
+   "🐺"
+  ],
+  "wonton": [
+   "🥟"
+  ],
+  "woof": [
+   "🐶"
+  ],
+  "worksite": [
+   "🚧"
+  ],
+  "wraith": [
+   "👻"
+  ],
+  "wristwatch": [
+   "⌚"
+  ],
+  "xbox": [
+   "🎮"
+  ],
+  "yachting": [
+   "⛵"
+  ],
+  "yahtzee": [
+   "🎲"
+  ],
+  "yankees": [
+   "⚾"
+  ],
+  "yerba": [
+   "🧉"
+  ],
+  "yolk": [
+   "🥚"
+  ],
+  "yoyo": [
+   "🪀"
+  ],
+  "yucca": [
+   "🌵"
+  ],
+  "yukata": [
+   "👘"
+  ],
+  "yurt": [
+   "⛺"
+  ],
+  "zeebra": [
+   "🦓"
+  ],
+  "zest": [
+   "🍋"
+  ],
+  "zombi": [
+   "🧟"
+  ],
+  "zombies": [
+   "🧟"
+  ]
+ }
+}

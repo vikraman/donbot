@@ -1,148 +1,252 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it, mock, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { setupRobot, brainUser } from './helpers/setup.ts'
+import type { User } from 'hubot'
+
+import { setupRobot, brainUser, collect } from './helpers/setup.ts'
+import type { TestRobot } from './helpers/setup.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
-import { SENTIMENT_EMOJI } from '../scripts/ReactEmoji.ts'
+import { EMOJI_VOCAB } from '../scripts/lib/emojiVocab.ts'
+import { BASIC_EMOJI } from '../contrib/basicEmoji.ts'
+import { SENTIMENT_EMOJI, REACT_DELAY_MS, scoreMessage } from '../scripts/ReactEmoji.ts'
 
-interface ToneEntry { comparative: number, ts: number }
+interface FakeMessage {
+  reacted: string[]
+  cache: Map<string, unknown>
+  user: User
+}
+
+const POSITIVE = 'this is wonderful, amazing, so great, love it'
+const NEGATIVE = 'ugh this is dreadful, awful and disappointing'
+const NEUTRAL = 'just chatting about the plan for later'
+
+const sentimentIn = (reacted: string[], mood: 'positive' | 'negative') =>
+  reacted.filter(e => SENTIMENT_EMOJI[mood].includes(e))
+
+// lets the async timer callback finish
+const flush = () => new Promise(resolve => setImmediate(resolve))
+
+describe('ReactEmoji scoring', () => {
+  it('scores exact rare names', () => {
+    assert.strictEqual(scoreMessage('saw an octopus today'), '🐙')
+  })
+  it('scores related vocabulary and plurals', () => {
+    assert.strictEqual(scoreMessage('that tentacle was huge'), '🐙')
+    assert.strictEqual(scoreMessage('the lava was still glowing'), '🌋')
+    assert.strictEqual(scoreMessage('who wants tacos'), '🌮')
+  })
+  it('ignores common words and plain emotion', () => {
+    for (const text of ['had breakfast', 'love this, great work team, amazing!', 'my dog is here', 'see you at the meeting']) {
+      assert.strictEqual(scoreMessage(text), null, text)
+    }
+  })
+  it('accepts two mid-frequency words for the same emoji', () => {
+    const [word, emojis] = Object.entries(EMOJI_VOCAB.related)
+      .find(([w, es]) => es.length === 1 && /^[a-z]+$/.test(w) && scoreMessage(w) === null &&
+        Object.entries(EMOJI_VOCAB.related).some(([o, os]) => o !== w && os.length === 1 && os[0] === es[0] && scoreMessage(o) === null))!
+    const other = Object.entries(EMOJI_VOCAB.related).find(([o, os]) => o !== word && os.length === 1 && os[0] === emojis[0] && scoreMessage(o) === null)![0]
+    assert.strictEqual(scoreMessage(`${word} and ${other}`), emojis[0])
+  })
+  it('prefers the highest-scoring emoji', () => {
+    setRandomSource(() => 0)
+    assert.strictEqual(scoreMessage('an octopus with tentacles near some lava'), '🐙')
+    setRandomSource(null)
+  })
+})
+
+describe('ReactEmoji emoji data', () => {
+  it('keeps sentiment pools free of basic emojis', () => {
+    for (const emoji of [...SENTIMENT_EMOJI.positive, ...SENTIMENT_EMOJI.negative]) {
+      assert.ok(!BASIC_EMOJI.has(emoji), emoji)
+    }
+  })
+  it('maps words to non-empty emoji lists, never basic', () => {
+    for (const [word, emojis] of Object.entries(EMOJI_VOCAB.related)) {
+      assert.ok(Array.isArray(emojis) && emojis.length > 0, word)
+      for (const emoji of emojis) assert.ok(!BASIC_EMOJI.has(emoji), `${word} -> ${emoji}`)
+    }
+    for (const [word, emoji] of Object.entries(EMOJI_VOCAB.names)) {
+      assert.ok(!BASIC_EMOJI.has(emoji), `${word} -> ${emoji}`)
+    }
+  })
+})
 
 describe('ReactEmoji testing Hubot scripts', () => {
   const state = setupRobot('ReactEmoji.ts')
+  let now: number
 
-  it('should react when at least 2 keywords match', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.5 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
-    })
-    await robot.adapter.say(user, 'such a cute puppy', 'test-room')
-    assert.ok(reacted.length > 0)
-    assert.ok(reacted.every(e => ['🥺', '🐶', '🐾', '🙇', '🐯', '🐳'].includes(e)))
+  beforeEach(() => {
+    now = 1_000_000_000_000
+    mock.method(Date, 'now', () => now)
+    mock.timers.enable({ apis: ['setTimeout'] })
+    setRandomSource(() => 0)
   })
-  it('should not react when only a single keyword matches', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+
+  const fakeUser = (robot: TestRobot, id = 'test-user', name = 'test user'): FakeMessage => {
+    const fake = { reacted: [] as string[], cache: new Map<string, unknown>() } as FakeMessage
+    fake.user = brainUser(robot, id, name, {
+      message: { react: async (emoji: string) => { fake.reacted.push(emoji) }, reactions: { cache: fake.cache } }
     })
-    await robot.adapter.say(user, 'anyone want pizza later', 'test-room')
-    assert.deepStrictEqual(reacted, [])
+    return fake
+  }
+
+  const say = async (robot: TestRobot, fake: FakeMessage, text: string, room = 'test-room') => {
+    await robot.adapter.say(fake.user, text, room)
+  }
+
+  const settle = async () => {
+    mock.timers.tick(REACT_DELAY_MS)
+    await flush()
+  }
+
+  it('reacts with one vocabulary emoji, only after the delay', async () => {
+    const fake = fakeUser(state.robot)
+    await say(state.robot, fake, 'saw an octopus today')
+    assert.deepStrictEqual(fake.reacted, [])
+    await settle()
+    assert.deepStrictEqual(fake.reacted, ['🐙'])
   })
-  it('should react to a different keyword category', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+  it('does not react to common words', async () => {
+    const fake = fakeUser(state.robot)
+    await say(state.robot, fake, 'want cheese and toast for breakfast')
+    await say(state.robot, fake, 'great work team')
+    await settle()
+    assert.deepStrictEqual(fake.reacted, [])
+  })
+  it('does not react to upbeat text without enough room history', async () => {
+    const fake = fakeUser(state.robot)
+    await say(state.robot, fake, 'love this, great work team, amazing!')
+    await settle()
+    assert.deepStrictEqual(fake.reacted, [])
+  })
+  it('skips messages someone already reacted to', async () => {
+    const fake = fakeUser(state.robot)
+    await say(state.robot, fake, 'saw an octopus today')
+    fake.cache.set('👀', {})
+    await settle()
+    assert.deepStrictEqual(fake.reacted, [])
+  })
+  it('skips messages addressed to the bot', async () => {
+    const fake = fakeUser(state.robot)
+    await say(state.robot, fake, `${state.robot.name} tell me about the octopus`)
+    await settle()
+    assert.deepStrictEqual(fake.reacted, [])
+  })
+  it('does not throw without a react method or when react rejects', async () => {
+    const plain = brainUser(state.robot, 'plain', 'plain')
+    await assert.doesNotReject(state.robot.adapter.say(plain, 'saw an octopus today', 'test-room'))
+    const failing = brainUser(state.robot, 'failing', 'failing', {
+      message: { react: async () => { throw new Error('unknown message') }, reactions: { cache: new Map() } }
     })
-    await robot.adapter.say(user, 'want some pizza and cheese', 'test-room')
-    assert.ok(reacted.length > 0)
-    assert.ok(reacted.every(e => ['🥯', '🍕', '🥪', '🫕', '🪤'].includes(e)))
+    await state.robot.adapter.say(failing, 'saw an octopus today', 'test-room')
+    await assert.doesNotReject(settle())
   })
-  it('should react with at most 5 distinct emojis', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+
+  describe('conversation tone', () => {
+    it('reacts once when the room turns positive, not on every upbeat message', async () => {
+      const fake = fakeUser(state.robot)
+      for (let i = 0; i < 4; i++) await say(state.robot, fake, POSITIVE)
+      await settle()
+      assert.deepStrictEqual(fake.reacted, [])
+      await say(state.robot, fake, POSITIVE)
+      await settle()
+      assert.strictEqual(sentimentIn(fake.reacted, 'positive').length, 1)
+      for (let i = 0; i < 5; i++) await say(state.robot, fake, POSITIVE)
+      await settle()
+      assert.strictEqual(fake.reacted.length, 1)
     })
-    await robot.adapter.say(user, 'we shipped it, fixed the bug, huge success, love it, amazing work, party time, congrats team', 'test-room')
-    assert.ok(reacted.length <= 5)
-    assert.ok(reacted.length > 0)
-  })
-  it('should not react when no keyword matches', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+    it('reacts again after the room settles back to neutral', async () => {
+      const fake = fakeUser(state.robot)
+      for (let i = 0; i < 5; i++) await say(state.robot, fake, POSITIVE)
+      for (let i = 0; i < 20; i++) await say(state.robot, fake, NEUTRAL)
+      for (let i = 0; i < 5; i++) await say(state.robot, fake, POSITIVE)
+      await settle()
+      assert.strictEqual(sentimentIn(fake.reacted, 'positive').length, 2)
     })
-    await robot.adapter.say(user, 'zzz qwerty blah foobar', 'test-room')
-    assert.deepStrictEqual(reacted, [])
-  })
-  it('should skip reacting entirely when the skip roll succeeds', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+    it('reacts once when the room turns negative', async () => {
+      const fake = fakeUser(state.robot)
+      for (let i = 0; i < 6; i++) await say(state.robot, fake, NEGATIVE)
+      await settle()
+      assert.strictEqual(sentimentIn(fake.reacted, 'negative').length, 1)
+      assert.strictEqual(fake.reacted.length, 1)
     })
-    await robot.adapter.say(user, 'such a cute puppy', 'test-room')
-    assert.deepStrictEqual(reacted, [])
-  })
-  it('should not error when the raw message has no react method', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const user = brainUser(robot, 'test-user', 'test user')
-    await assert.doesNotReject(robot.adapter.say(user, 'such a cute puppy', 'test-room'))
-  })
-  it('should react with a sentiment emoji for strong positive tone with no keyword match', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+    it('ignores a single negative outlier in a positive room', async () => {
+      const fake = fakeUser(state.robot)
+      for (let i = 0; i < 6; i++) await say(state.robot, fake, POSITIVE)
+      await say(state.robot, fake, NEGATIVE)
+      await settle()
+      assert.deepStrictEqual(sentimentIn(fake.reacted, 'negative'), [])
     })
-    await robot.adapter.say(user, 'what a truly excellent and delightful outcome, everyone performed wonderfully', 'sentiment-room-pos')
-    assert.ok(reacted.length > 0)
-    assert.ok(reacted.length <= 5)
-    for (const emoji of reacted) assert.ok(SENTIMENT_EMOJI.positive.includes(emoji))
-  })
-  it('should react with a sentiment emoji for strong negative tone with no keyword match', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+    it('forgets messages older than the window', async () => {
+      const fake = fakeUser(state.robot)
+      for (let i = 0; i < 4; i++) await say(state.robot, fake, POSITIVE)
+      now += 31 * 60 * 1000
+      await say(state.robot, fake, POSITIVE)
+      await settle()
+      assert.deepStrictEqual(fake.reacted, [])
+      const stored = state.robot.brain.get<{ entries: unknown[] }>('reactemoji:tone:test-room')!
+      assert.strictEqual(stored.entries.length, 1)
     })
-    await robot.adapter.say(user, 'this outcome is dreadful and disappointing, everything went horribly wrong', 'sentiment-room-neg')
-    assert.ok(reacted.length > 0)
-    assert.ok(reacted.length <= 5)
-    for (const emoji of reacted) assert.ok(SENTIMENT_EMOJI.negative.includes(emoji))
-  })
-  it('should populate and cap the per-room tone history', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async () => {} }
+    it('caps the window and stores numbers only', async () => {
+      const fake = fakeUser(state.robot)
+      for (let i = 0; i < 25; i++) await say(state.robot, fake, `${NEUTRAL} ${i}`)
+      const stored = state.robot.brain.get<{ mood: string, entries: Record<string, unknown>[] }>('reactemoji:tone:test-room')!
+      assert.strictEqual(stored.entries.length, 20)
+      for (const entry of stored.entries) {
+        assert.deepStrictEqual(Object.keys(entry).sort(), ['comparative', 'ts'])
+        assert.strictEqual(typeof entry.comparative, 'number')
+      }
     })
-    for (let i = 0; i < 12; i++) {
-      await robot.adapter.say(user, `just chatting message number ${i}`, 'history-room')
-    }
-    const history = robot.brain.get<ToneEntry[]>('reactemoji:history:history-room')!
-    assert.strictEqual(history.length, 8)
-    for (const entry of history) {
-      assert.strictEqual(typeof entry.comparative, 'number')
-      assert.strictEqual(typeof entry.ts, 'number')
-      assert.strictEqual(Object.keys(entry).length, 2)
-    }
-  })
-  it('should not react to a single negative outlier amid a positive-average room', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+    it('adds at most one vocabulary and one sentiment emoji', async () => {
+      const fake = fakeUser(state.robot)
+      for (let i = 0; i < 4; i++) await say(state.robot, fake, POSITIVE)
+      await say(state.robot, fake, `${POSITIVE}, look at that octopus`)
+      await settle()
+      assert.strictEqual(fake.reacted.length, 2)
+      assert.strictEqual(fake.reacted[0], '🐙')
+      assert.strictEqual(sentimentIn(fake.reacted, 'positive').length, 1)
     })
-    for (let i = 0; i < 5; i++) {
-      await robot.adapter.say(user, 'this is wonderful, amazing, so great, love it', 'mixed-mood-room')
-    }
-    reacted.length = 0
-    await robot.adapter.say(user, 'ugh this is dreadful and disappointing', 'mixed-mood-room')
-    assert.ok(!reacted.some(e => SENTIMENT_EMOJI.negative.includes(e)))
   })
-  it('should not exceed the reaction cap when keywords and sentiment both fire', async () => {
-    const { robot } = state
-    setRandomSource(c => Math.floor(0.9 * c))
-    const reacted: string[] = []
-    const user = brainUser(robot, 'test-user', 'test user', {
-      message: { react: async (emoji: string) => { reacted.push(emoji) } }
+
+  describe('channel toggle', () => {
+    it('turns reactions off and on per channel', async () => {
+      const replies = collect(state.robot)
+      const fake = fakeUser(state.robot, 'toggler', 'toggler')
+      await say(state.robot, fake, `${state.robot.name} reactions off`)
+      assert.match(replies.at(-1)!, /off in this channel/)
+      await say(state.robot, fake, 'saw an octopus today')
+      await say(state.robot, fake, 'saw an octopus today', 'other-room')
+      await settle()
+      assert.deepStrictEqual(fake.reacted, ['🐙'])
+
+      await say(state.robot, fake, `${state.robot.name} reactions on`)
+      assert.match(replies.at(-1)!, /on in this channel/)
+      await say(state.robot, fake, 'saw an octopus today')
+      await settle()
+      assert.deepStrictEqual(fake.reacted, ['🐙', '🐙'])
     })
-    await robot.adapter.say(user, 'we shipped it, fixed the bug, huge success, love it, amazing work, party time, congrats team, wonderful, incredible, fantastic', 'cap-room')
-    assert.ok(reacted.length <= 5)
+    it('drops a pending reaction when the channel is turned off during the delay', async () => {
+      const fake = fakeUser(state.robot)
+      await say(state.robot, fake, 'saw an octopus today')
+      await say(state.robot, fake, `${state.robot.name} reactions off`)
+      await settle()
+      assert.deepStrictEqual(fake.reacted, [])
+    })
+    it('reports status with who turned it off', async () => {
+      const replies = collect(state.robot)
+      const fake = fakeUser(state.robot, 'toggler', 'toggler')
+      await say(state.robot, fake, `${state.robot.name} reactions`)
+      assert.match(replies.at(-1)!, /are on/)
+      await say(state.robot, fake, `${state.robot.name} reactions off`)
+      await say(state.robot, fake, `${state.robot.name} reactions status`)
+      assert.match(replies.at(-1)!, /are off .*toggler/)
+    })
+  })
+
+  it('removes legacy tone history on brain load', async () => {
+    state.robot.brain.set('reactemoji:history:old-room', [{ comparative: 1, ts: 1 }])
+    state.robot.brain.emit('loaded', state.robot.brain.data)
+    assert.strictEqual(state.robot.brain.get('reactemoji:history:old-room'), null)
   })
 })

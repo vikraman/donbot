@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isRareWord } from '../scripts/lib/wordRarity.ts'
+import { isRareWord, wordRank } from '../scripts/lib/wordRarity.ts'
 
 describe('wordRarity lib', () => {
   it('treats common English words as not rare', () => {
@@ -19,5 +19,20 @@ describe('wordRarity lib', () => {
   it('is case-insensitive', () => {
     assert.strictEqual(isRareWord('Functor'), true)
     assert.strictEqual(isRareWord('FASTER'), false)
+  })
+})
+
+describe('wordRank', () => {
+  it('ranks common words ahead of less common ones', () => {
+    assert.ok(wordRank('the') < wordRank('breakfast'))
+    assert.ok(wordRank('breakfast') < 10000)
+  })
+
+  it('returns infinity for words outside the list', () => {
+    assert.strictEqual(wordRank('tentacle'), Infinity)
+  })
+
+  it('is case-insensitive', () => {
+    assert.strictEqual(wordRank('Breakfast'), wordRank('breakfast'))
   })
 })

@@ -19,7 +19,6 @@
   "type": "module",
   "dependencies": {
     "@hubot-friends/hubot-discord": "^4.2.0",
-    "emojilib": "^4.0.3",
     "hubot": "^14.1.1",
     "hubot-diagnostics": "^2.1.3",
     "hubot-help": "^2.1.5",
@@ -30,6 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "emojilib": "^4.0.3",
     "typescript": "^7.0.2"
   }
 }
