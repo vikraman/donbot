@@ -9,7 +9,7 @@ import type { TestRobot } from './helpers/setup.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
 import { EMOJI_VOCAB } from '../scripts/lib/emojiVocab.ts'
 import { BASIC_EMOJI } from '../contrib/basicEmoji.ts'
-import { SENTIMENT_EMOJI, REACT_DELAY_MS, scoreMessage } from '../scripts/ReactEmoji.ts'
+import { SENTIMENT_EMOJI, REACT_DELAY_MS, REPEAT_WINDOW_MS, scoreMessage } from '../scripts/ReactEmoji.ts'
 
 interface FakeMessage {
   reacted: string[]
@@ -119,6 +119,20 @@ describe('ReactEmoji testing Hubot scripts', () => {
     await say(state.robot, fake, 'love this, great work team, amazing!')
     await settle()
     assert.deepStrictEqual(fake.reacted, [])
+  })
+  it('does not repeat an emoji in a room within the window', async () => {
+    const fake = fakeUser(state.robot)
+    await say(state.robot, fake, 'saw an octopus today')
+    await say(state.robot, fake, 'the octopus was huge')
+    await settle()
+    assert.deepStrictEqual(fake.reacted, ['🐙'])
+    await say(state.robot, fake, 'another octopus', 'other-room')
+    await settle()
+    assert.deepStrictEqual(fake.reacted, ['🐙', '🐙'])
+    now += REPEAT_WINDOW_MS
+    await say(state.robot, fake, 'octopus again')
+    await settle()
+    assert.deepStrictEqual(fake.reacted, ['🐙', '🐙', '🐙'])
   })
   it('skips messages someone already reacted to', async () => {
     const fake = fakeUser(state.robot)

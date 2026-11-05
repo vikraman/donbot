@@ -48,6 +48,8 @@ const TONE_RECENT = 5
 const TONE_MIN_AGREEING = 3
 
 export const REACT_DELAY_MS = 60 * 1000
+// same emoji not repeated in a room within this window
+export const REPEAT_WINDOW_MS = 30 * 60 * 1000
 
 const DISABLED_KEY = 'reactemoji:disabled'
 const TONE_KEY = (room: string): string => `reactemoji:tone:${room}`
@@ -159,6 +161,20 @@ const addressesBot = (robot: Robot, text: string): boolean => {
 }
 
 export default async (robot: Robot) => {
+  // room -> emoji -> last reacted at
+  const recent = new Map<string, Map<string, number>>()
+  // claims the emoji for the room unless used within the window
+  const claimFresh = (room: string, emoji: string | null): string | null => {
+    if (!emoji) return null
+    const now = Date.now()
+    const used = recent.get(room) ?? new Map<string, number>()
+    for (const [e, ts] of used) if (now - ts >= REPEAT_WINDOW_MS) used.delete(e)
+    recent.set(room, used)
+    if (used.has(emoji)) return null
+    used.set(emoji, now)
+    return emoji
+  }
+
   robot.brain.on('loaded', () => {
     for (const [suffix] of entriesWithPrefix(robot, LEGACY_HISTORY_PREFIX)) {
       robot.brain.remove(`${LEGACY_HISTORY_PREFIX}${suffix}`)
@@ -196,14 +212,17 @@ export default async (robot: Robot) => {
     const message = rawMessageOf(res)
     if (!message || typeof message.react !== 'function') return
 
-    const emojis = [...new Set([scoreMessage(text), mood && pick(SENTIMENT_EMOJI[mood])].filter((e): e is string => Boolean(e)))]
-    if (emojis.length === 0) return
+    const vocab = scoreMessage(text)
+    const sentiment = mood && pick(SENTIMENT_EMOJI[mood])
+    if (!vocab && !sentiment) return
 
     // reaction delay so people's reactions land first
     const timer = setTimeout(async () => {
       if (isDisabled(robot, room)) return
       if (message.reactions && message.reactions.cache.size > 0) return
       try {
+        // vocab emoji not repeated; sentiment is limited by mood switches
+        const emojis = [...new Set([claimFresh(room, vocab), sentiment].filter((e): e is string => Boolean(e)))]
         for (const emoji of emojis) await message.react(emoji)
       } catch (error) {
         robot.logger.debug(`reactemoji: react failed: ${String(error)}`)
