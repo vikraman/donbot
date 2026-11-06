@@ -14,6 +14,7 @@ import { entriesWithPrefix } from './lib/brainScan.ts'
 import { rawMessageOf } from './lib/discordMessage.ts'
 import { EMOJI_VOCAB } from './lib/emojiVocab.ts'
 import { pick } from './lib/random.ts'
+import { addressesBot, roomToggle } from './lib/roomToggle.ts'
 import { scoreTone } from './lib/sentiment.ts'
 import type { ToneResult } from './lib/sentiment.ts'
 import { wordRank } from './lib/wordRarity.ts'
@@ -67,11 +68,6 @@ interface ToneEntry {
 interface ToneState {
   mood: Mood
   entries: ToneEntry[]
-}
-
-interface DisabledBy {
-  by: string
-  at: number
 }
 
 const rankWeight = (word: string): number => {
@@ -148,18 +144,6 @@ const recordTone = (robot: Robot, room: string, { tone, comparative }: ToneResul
   return switched
 }
 
-const disabledRooms = (robot: Robot): Record<string, DisabledBy> => {
-  const stored = robot.brain.get(DISABLED_KEY)
-  return typeof stored === 'object' && stored !== null ? stored as Record<string, DisabledBy> : {}
-}
-
-const isDisabled = (robot: Robot, room: string): boolean => room in disabledRooms(robot)
-
-const addressesBot = (robot: Robot, text: string): boolean => {
-  const names = [robot.name, robot.alias].filter((n): n is string => Boolean(n)).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  return new RegExp(`^\\s*@?(?:${names.join('|')})\\b`, 'i').test(text)
-}
-
 export default async (robot: Robot) => {
   // room -> emoji -> last reacted at
   const recent = new Map<string, Map<string, number>>()
@@ -181,25 +165,7 @@ export default async (robot: Robot) => {
     }
   })
 
-  robot.respond(/reactions(?: (on|off|status))?$/i, async res => {
-    const room = res.message.room
-    const action = (res.match[1] || 'status').toLowerCase()
-    const rooms = disabledRooms(robot)
-
-    if (action === 'off') {
-      robot.brain.set(DISABLED_KEY, { ...rooms, [room]: { by: res.message.user.name, at: Date.now() } })
-      await res.send(`Emoji reactions off in this channel. \`${robot.name} reactions on\` brings them back.`)
-    } else if (action === 'on') {
-      const { [room]: _, ...rest } = rooms
-      robot.brain.set(DISABLED_KEY, rest)
-      await res.send('Emoji reactions on in this channel.')
-    } else {
-      const disabled = rooms[room]
-      await res.send(disabled
-        ? `Emoji reactions are off in this channel (turned off by ${disabled.by} on ${new Date(disabled.at).toISOString().slice(0, 10)}).`
-        : 'Emoji reactions are on in this channel.')
-    }
-  })
+  const { isDisabled } = roomToggle(robot, { command: 'reactions', brainKey: DISABLED_KEY, label: 'Emoji reactions' })
 
   // hears everything so the room's tone is tracked
   robot.hear(/.*/, async res => {
@@ -207,7 +173,7 @@ export default async (robot: Robot) => {
     const text = res.message.text || ''
     const mood = recordTone(robot, room, scoreTone(text))
 
-    if (isDisabled(robot, room) || addressesBot(robot, text)) return
+    if (isDisabled(room) || addressesBot(robot, text)) return
 
     const message = rawMessageOf(res)
     if (!message || typeof message.react !== 'function') return
@@ -218,7 +184,7 @@ export default async (robot: Robot) => {
 
     // reaction delay so people's reactions land first
     const timer = setTimeout(async () => {
-      if (isDisabled(robot, room)) return
+      if (isDisabled(room)) return
       if (message.reactions && message.reactions.cache.size > 0) return
       try {
         // vocab emoji not repeated; sentiment is limited by mood switches

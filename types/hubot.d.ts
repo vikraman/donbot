@@ -57,7 +57,8 @@ declare module 'hubot' {
     match: MatchArray
     envelope: unknown
     reply(message: string): Promise<void>
-    send(message: string): Promise<void>
+    // discord adapter resolves to the sent messages
+    send(message: string): Promise<unknown>
   }
 
   export class Brain {
