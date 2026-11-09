@@ -75,7 +75,8 @@ export const zulipClient = ({ site, email, apiKey }: ZulipConfig) => {
       event_types: ['message'],
       apply_markdown: false,
       // general chat arrives as subject "" instead of a localized label
-      client_capabilities: { empty_topic_name: true }
+      // required by the api
+      client_capabilities: { notification_settings_null: true, empty_topic_name: true }
     }, signal)
     return { queueId: String(body.queue_id), lastEventId: Number(body.last_event_id) }
   }
