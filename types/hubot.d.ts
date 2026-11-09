@@ -57,8 +57,7 @@ declare module 'hubot' {
     match: MatchArray
     envelope: unknown
     reply(message: string): Promise<void>
-    // discord adapter resolves to the sent messages
-    send(message: string): Promise<unknown>
+    send(message: string): Promise<void>
   }
 
   export class Brain {
@@ -73,7 +72,7 @@ declare module 'hubot' {
     remove(key: string): void
     userForId(id: string, options?: { name?: string }): User
     usersForFuzzyName(fuzzyName: string): User[]
-    on(event: 'connected' | 'loaded' | 'save', listener: (...args: unknown[]) => void): void
+    on(event: 'connected' | 'loaded' | 'save' | 'close', listener: (...args: unknown[]) => void): void
     emit(event: string, ...args: unknown[]): boolean
   }
 
@@ -144,6 +143,9 @@ declare module 'hubot' {
     channel: DiscordChannel
     content?: string
     author?: { id: string; username?: string }
+    member?: { displayName?: string } | null
+    mentions?: { users?: Map<string, { username?: string; globalName?: string | null }> }
+    attachments?: Map<string, { url: string }>
     reactions: { cache: Map<string, DiscordReaction> }
     react(emoji: string): Promise<DiscordReaction>
   }
