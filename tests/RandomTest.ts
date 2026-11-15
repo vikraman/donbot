@@ -1,11 +1,12 @@
 import { describe, it, beforeEach, afterEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { pick, shuffle, chance, randomId, secureRandomInt, randomInt, randomInts } from '../scripts/lib/random.ts'
+import { pick, shuffle, chance, randomId, secureRandomInt, randomInt, randomInts, useRandomPool } from '../scripts/lib/random.ts'
 
 import type { Robot } from 'hubot'
 
 interface Buffer { values: number[] }
+interface Pool { values: number[], failedAt: number }
 
 // randomInt/randomInts only touch robot.brain.get/set
 const fakeRobot = (): Robot => {
@@ -117,5 +118,56 @@ describe('randomInt/randomInts', () => {
     const robot = fakeRobot()
     const n = await randomInt(robot, 1, 6)
     assert.ok(n >= 1 && n <= 6)
+  })
+})
+
+// last: useRandomPool binds the module to this robot for the rest of the file
+describe('random pool', () => {
+  let originalKey: string | undefined
+  beforeEach(() => {
+    originalKey = process.env.RANDOM_ORG_API_KEY
+    process.env.RANDOM_ORG_API_KEY = 'test-key'
+  })
+  afterEach(() => {
+    if (originalKey === undefined) delete process.env.RANDOM_ORG_API_KEY
+    else process.env.RANDOM_ORG_API_KEY = originalKey
+    mock.reset()
+  })
+
+  const poolRobot = (values: number[]) => {
+    const robot = fakeRobot()
+    const warn = mock.fn()
+    Object.assign(robot, { logger: { warn } })
+    robot.brain.set('random:pool', { values, failedAt: 0 })
+    return { robot, warn }
+  }
+
+  const settle = () => new Promise(resolve => setImmediate(resolve))
+
+  it('does not ask random.org for zero values when the pool is already full', async () => {
+    const fetchMock = mock.method(global, 'fetch', async () => ({
+      ok: true,
+      json: async () => ({ error: { message: "Parameter 'n' is out of range" } })
+    }))
+    const { robot, warn } = poolRobot(Array.from({ length: 256 }, (_, i) => i))
+    useRandomPool(robot)
+    await settle()
+    assert.strictEqual(fetchMock.mock.calls.length, 0)
+    assert.strictEqual(warn.mock.calls.length, 0)
+    assert.strictEqual(robot.brain.get<Pool>('random:pool')!.failedAt, 0)
+  })
+
+  it('tops up a partly drained pool with exactly the missing count', async () => {
+    const fetchMock = mock.method(global, 'fetch', async (_url: string, init: RequestInit) => {
+      const { n } = JSON.parse(String(init.body)).params
+      return { ok: true, json: async () => ({ result: { random: { data: Array.from({ length: n }, () => 7) } } }) }
+    })
+    const { robot, warn } = poolRobot(Array.from({ length: 200 }, (_, i) => i))
+    useRandomPool(robot)
+    await settle()
+    assert.strictEqual(fetchMock.mock.calls.length, 1)
+    assert.strictEqual(JSON.parse(String(fetchMock.mock.calls[0]!.arguments[1]!.body)).params.n, 56)
+    assert.strictEqual(robot.brain.get<Pool>('random:pool')!.values.length, 256)
+    assert.strictEqual(warn.mock.calls.length, 0)
   })
 })

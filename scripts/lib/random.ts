@@ -41,9 +41,11 @@ const refillPool = (pool: Pool) => {
   const apiKey = process.env.RANDOM_ORG_API_KEY
   if (!apiKey || refilling || !poolRobot) return
   if (Date.now() - pool.failedAt < POOL_RETRY_AFTER_FAILURE_MS) return
+  const wanted = POOL_SIZE - pool.values.length
+  // random.org rejects n < 1; a full pool at startup would ask for 0
+  if (wanted < 1) return
 
   refilling = true
-  const wanted = POOL_SIZE - pool.values.length
   fetchFromRandomOrg(apiKey, wanted, 0, POOL_VALUE_CEILING - 1)
     .then(numbers => {
       const current = readPool()
