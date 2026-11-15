@@ -1,10 +1,10 @@
-import { describe, it } from 'node:test'
+import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 
 import type { DiscordClient } from 'hubot'
 
-import { setupRobot, collect } from './helpers/setup.ts'
+import { setupRobot, collect, sendReturnsIds } from './helpers/setup.ts'
 
 describe('StarReact testing Hubot scripts', () => {
   const state = setupRobot('StarReact.ts', { deferLoad: true })
@@ -65,5 +65,65 @@ describe('StarReact testing Hubot scripts', () => {
     await new Promise(resolve => setImmediate(resolve))
 
     assert.strictEqual(sent.length, 0)
+  })
+
+  describe('star spam', () => {
+    const setupClient = async () => {
+      const { robot } = state
+      const client = new EventEmitter()
+      robot.adapter.client = client as unknown as DiscordClient
+      sendReturnsIds(robot, 'announce')
+      await state.loadScript()
+      const sent = collect(robot)
+      const star = async (userId: string, messageId = 'msg-1', channelId = 'room-1') => {
+        const reaction = {
+          partial: false,
+          emoji: { name: '⭐' },
+          message: { id: messageId, channelId, author: { username: 'alice' } }
+        }
+        client.emit('messageReactionAdd', reaction, { id: userId, bot: false, username: userId })
+        await new Promise(resolve => setImmediate(resolve))
+      }
+      return { sent, star }
+    }
+
+    it('should announce once when the same user re-stars a message', async () => {
+      const { sent, star } = await setupClient()
+      for (let i = 0; i < 5; i++) await star('bob')
+      assert.strictEqual(sent.length, 1)
+    })
+
+    it('should stay quiet within the channel cooldown', async () => {
+      const { sent, star } = await setupClient()
+      await star('bob', 'msg-1')
+      await star('carol', 'msg-1')
+      await star('bob', 'msg-2')
+      assert.strictEqual(sent.length, 1)
+    })
+
+    it('should announce in a different channel during another channel\'s cooldown', async () => {
+      const { sent, star } = await setupClient()
+      await star('bob', 'msg-1', 'room-1')
+      await star('bob', 'msg-2', 'room-2')
+      assert.strictEqual(sent.length, 2)
+    })
+
+    it('should announce again once the channel cooldown expires', async () => {
+      const { sent, star } = await setupClient()
+      const now = mock.method(Date, 'now', () => 1_000_000)
+      await star('bob', 'msg-1')
+      now.mock.mockImplementation(() => 1_000_000 + 60 * 1000)
+      await star('bob', 'msg-2')
+      assert.strictEqual(sent.length, 2)
+    })
+
+    it('should ignore stars on its own announcements', async () => {
+      const { sent, star } = await setupClient()
+      const now = mock.method(Date, 'now', () => 1_000_000)
+      await star('bob', 'msg-1')
+      now.mock.mockImplementation(() => 1_000_000 + 60 * 1000)
+      await star('carol', 'announce-1')
+      assert.strictEqual(sent.length, 1)
+    })
   })
 })

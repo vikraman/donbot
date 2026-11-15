@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events'
 
 import type { DiscordClient } from 'hubot'
 
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, collect, brainUser, sendReturnsIds } from './helpers/setup.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
 
@@ -213,14 +213,7 @@ describe('Praise reaction spam', () => {
     const { robot } = state
     const client = Object.assign(new EventEmitter(), { user: { id: 'bot-id' } })
     robot.adapter.client = client as unknown as DiscordClient
-    const send = robot.adapter.send.bind(robot.adapter)
-    // like the discord adapter, resolve to the sent messages
-    const adapter = robot.adapter as unknown as { send: (...args: Parameters<typeof send>) => Promise<unknown> }
-    let nextAck = 0
-    mock.method(adapter, 'send', async (...args: Parameters<typeof send>) => {
-      await send(...args)
-      return [{ id: `ack-${++nextAck}` }]
-    })
+    sendReturnsIds(robot, 'ack')
     await state.loadScript()
     const sent = collect(robot)
     const react = async (emoji: string, userId: string, messageId = 'msg-1', channelId = 'room-1') => {

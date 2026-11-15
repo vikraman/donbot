@@ -18,10 +18,9 @@
 import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
 
 import { entriesWithPrefix, isScore, scoreAt } from './lib/brainScan.ts'
-import { cooldown } from './lib/cooldown.ts'
-import { sentIds } from './lib/discordMessage.ts'
 import { mentionFor } from './lib/mention.ts'
 import { pick } from './lib/random.ts'
+import { reactionGuard } from './lib/reactionGuard.ts'
 import { scoreTone } from './lib/sentiment.ts'
 
 const PRAISE_COUNT_KEY = 'praise:count'
@@ -46,10 +45,7 @@ const REACTIONS: Record<'grudging' | 'enthusiastic', readonly [string, ...string
 }
 const ALL_REACTIONS: readonly [string, ...string[]] = [...REACTIONS.grudging, ...REACTIONS.enthusiastic]
 
-// reaction spam guards
 const REACTION_REPLY_COOLDOWN_MS = 60 * 1000
-const MAX_SEEN_REACTIONS = 1000
-const MAX_ACKS = 200
 
 // only enthusiastic text narrows the pool
 const reactionsFor = (text?: string): readonly [string, ...string[]] => {
@@ -69,22 +65,12 @@ const recordPraise = (robot: Robot, userId?: string): number => {
   return count
 }
 
-// insertion-ordered set, oldest dropped past the cap
-const addCapped = (set: Set<string>, key: string, cap: number) => {
-  set.add(key)
-  if (set.size > cap) set.delete(set.values().next().value!)
-}
-
 export default async (robot: Robot) => {
-  // our own acknowledgements, never replied to
-  const acks = new Set<string>()
-  const rememberAcks = (sent: unknown) => {
-    for (const id of sentIds(sent)) addCapped(acks, id, MAX_ACKS)
-  }
+  const guard = reactionGuard(REACTION_REPLY_COOLDOWN_MS)
 
   robot.respond(/(?:cookie|good (?:bot|job)|good boy(?: donbot)?|thanks?(?: you)?)[.!]*$/i, async res => {
     recordPraise(robot, res.message.user.id)
-    rememberAcks(await res.send(pick(reactionsFor(res.message.text))))
+    guard.remember(await res.send(pick(reactionsFor(res.message.text))))
   })
 
   robot.respond(/praise count$/i, async res => {
@@ -113,9 +99,6 @@ export default async (robot: Robot) => {
   const client = robot.adapter && robot.adapter.client
   if (!client || typeof client.on !== 'function') return
 
-  const seenReactions = new Set<string>()
-  const replyCooldown = cooldown(REACTION_REPLY_COOLDOWN_MS)
-
   client.on('messageReactionAdd', async (reaction: DiscordReaction, user: DiscordUser) => {
     if (user.bot) return
     if (!PRAISE_EMOJI.includes(reaction.emoji.name)) return
@@ -131,14 +114,10 @@ export default async (robot: Robot) => {
     if (message.author?.id !== client.user?.id) return
 
     // once per user per message, across emoji and re-adds
-    const seenKey = `${message.id}:${user.id}`
-    if (seenReactions.has(seenKey)) return
-    addCapped(seenReactions, seenKey, MAX_SEEN_REACTIONS)
+    if (!guard.first(message.id, user.id)) return
 
     recordPraise(robot, user.id)
-    // replying to praise of a reply would chain
-    if (acks.has(message.id)) return
-    if (!replyCooldown.take(message.channelId)) return
-    rememberAcks(await robot.messageRoom(message.channelId, pick(ALL_REACTIONS)))
+    if (!guard.mayReply(message.id, message.channelId)) return
+    guard.remember(await robot.messageRoom(message.channelId, pick(ALL_REACTIONS)))
   })
 }

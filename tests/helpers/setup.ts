@@ -64,3 +64,14 @@ export const collect = (robot: Robot, event: string = 'send'): string[] => {
 
 export const brainUser = (robot: Robot, id: string, name: string, extra: Record<string, unknown> = {}): User =>
   robot.brain.userForId(id, { name, ...extra })
+
+// like the discord adapter, send resolves to the sent messages, ids `${prefix}-1`, ...
+export const sendReturnsIds = (robot: Robot, prefix: string) => {
+  const send = robot.adapter.send.bind(robot.adapter)
+  const adapter = robot.adapter as unknown as { send: (...args: Parameters<typeof send>) => Promise<unknown> }
+  let next = 0
+  mock.method(adapter, 'send', async (...args: Parameters<typeof send>) => {
+    await send(...args)
+    return [{ id: `${prefix}-${++next}` }]
+  })
+}

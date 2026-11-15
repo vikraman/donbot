@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { cooldown } from '../scripts/lib/cooldown.ts'
+import { burst, cooldown } from '../scripts/lib/cooldown.ts'
 
 describe('cooldown', () => {
   it('should be ready for an unmarked key', () => {
@@ -37,5 +37,37 @@ describe('cooldown', () => {
     assert.ok(c.ready('b', 1100))
     assert.ok(!c.ready('a', 1100))
     assert.ok(c.ready('a', 1500))
+  })
+})
+
+describe('burst', () => {
+  it('should allow up to the limit within the window', () => {
+    const b = burst(3, 1000)
+    assert.ok(b.take('a', 0))
+    assert.ok(b.take('a', 1))
+    assert.ok(b.take('a', 2))
+    assert.ok(!b.take('a', 3))
+  })
+
+  it('should free a slot as each hit leaves the window', () => {
+    const b = burst(2, 1000)
+    b.take('a', 0)
+    b.take('a', 500)
+    assert.ok(!b.take('a', 999))
+    assert.ok(b.take('a', 1000))
+    assert.ok(!b.take('a', 1001))
+  })
+
+  it('should not count refused takes', () => {
+    const b = burst(1, 1000)
+    b.take('a', 0)
+    assert.ok(!b.take('a', 500))
+    assert.ok(b.take('a', 1000))
+  })
+
+  it('should keep keys independent', () => {
+    const b = burst(1, 1000)
+    b.take('a', 0)
+    assert.ok(b.take('b', 0))
   })
 })
