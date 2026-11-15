@@ -144,7 +144,10 @@ declare module 'hubot' {
     content?: string
     author?: { id: string; username?: string }
     member?: { displayName?: string } | null
-    mentions?: { users?: Map<string, { username?: string; globalName?: string | null }> }
+    mentions?: {
+      users?: Map<string, { username?: string; globalName?: string | null }>
+      roles?: Map<string, { tags?: { botId?: string } | null }>
+    }
     attachments?: Map<string, { url: string }>
     reactions: { cache: Map<string, DiscordReaction> }
     react(emoji: string): Promise<DiscordReaction>
