@@ -5,7 +5,7 @@
 // Commands:
 //   hubot github subscribe <owner/repo> [issues|prs|pushes|ci|releases|comments|all ...] [every <5m>] - Posts the repo's activity here. Defaults to everything but comments.
 //   hubot github unsubscribe <owner/repo> [categories] - Stops some or all of a repo's activity here.
-//   hubot github subscriptions - Lists the repos this channel follows.
+//   hubot github subscriptions - Lists the repos this channel follows, with polling stats.
 //   hubot github poll [owner/repo] - Checks this channel's repos for news right now.
 //
 // Configuration:
@@ -39,8 +39,8 @@ const TICK_MS = 15 * 1000
 const MIN_SEC = 60
 const MAX_SEC = 3600
 const FORCE_GUARD_MS = 15 * 1000
-// 2 calls per repo per poll against the anonymous 60/h
-const ANON_SEC_PER_REPO = 120
+// 3 calls per repo per poll against the anonymous 60/h
+const ANON_SEC_PER_REPO = 180
 const RATE_FLOOR = 3
 const MAX_IDLE = 20
 const MAX_CI_KEYS = 200
@@ -49,6 +49,8 @@ const DISCORD_LIMIT = 2000
 const SUPPRESS_EMBEDS = 1 << 2
 const ZWSP = '​'
 const ZERO_SHA = /^0+$/
+// branch_deletion is skipped
+const ACTIVITY_TYPES = ['push', 'force_push', 'branch_creation', 'pr_merge']
 
 interface RoomSub {
   events: Category[]
@@ -65,6 +67,9 @@ export interface Cursor {
   since: number
   eventsEtag?: string
   seenEvents: string[]
+  activityEtag?: string
+  // unset until seeded
+  seenActivity?: string[]
   runsEtag?: string
   runsSeeded?: boolean
   seenRuns: string[]
@@ -72,14 +77,13 @@ export interface Cursor {
   pollInterval?: number
   idleTicks: number
   lastPollAt: number
+  lastPostAt?: number
+  lastError?: string
   nextPollAt: number
 }
 
 interface Payload {
   action?: string
-  ref?: string
-  head?: string
-  before?: string
   number?: number
   issue?: { number: number, title: string, html_url: string, pull_request?: unknown }
   comment?: { html_url: string, body?: string }
@@ -95,6 +99,16 @@ export interface GhEvent {
   public?: boolean
   actor: { login: string, display_login?: string }
   payload: Payload
+}
+
+export interface Activity {
+  id: number
+  before: string
+  after: string
+  ref: string
+  timestamp: string
+  activity_type: string
+  actor: { login: string } | null
 }
 
 export interface Run {
@@ -200,7 +214,6 @@ export const categoryOf = (e: GhEvent): Category | undefined => {
       if (state === 'approved' || state === 'changes_requested') return 'prs'
       return state === 'commented' && p.review?.body ? 'comments' : undefined
     }
-    case 'PushEvent': return p.ref?.startsWith('refs/heads/') && !ZERO_SHA.test(p.head || '') ? 'pushes' : undefined
     case 'ReleaseEvent': return p.action === 'published' ? 'releases' : undefined
     case 'IssueCommentEvent': return p.action === 'created' ? 'comments' : undefined
     case 'PullRequestReviewCommentEvent': return p.action === 'created' ? 'comments' : undefined
@@ -258,12 +271,54 @@ export const formatDuration = (sec: number): string => {
 
 const clockUtc = (ms: number): string => `${new Date(ms).toISOString().slice(11, 16)} UTC`
 
+const ago = (ms: number, now: number): string => `${formatDuration(Math.max(0, Math.round((now - ms) / 1000)))} ago`
+
+// intervals in seconds, times in ms
+export interface RepoStats {
+  name: string
+  events: Category[]
+  base: number
+  every: number
+  max: number
+  idleTicks: number
+  lastPollAt: number
+  nextPollAt: number
+  lastPostAt?: number
+  lastError?: string
+}
+
+export const formatRepoStatus = (s: RepoStats, now: number): string => {
+  const pace = s.every > s.base
+    ? `every ${formatDuration(s.every)}, backed off from ${formatDuration(s.base)} after ${plural(s.idleTicks, 'quiet poll')} (max ${formatDuration(s.max)})`
+    : `every ${formatDuration(s.base)}`
+  const next = s.nextPollAt > now ? `in ${formatDuration(Math.ceil((s.nextPollAt - now) / 1000))}` : 'now'
+  const last = s.lastPollAt ? `${ago(s.lastPollAt, now)} (${s.lastError ? `failed: ${esc(s.lastError)}` : 'ok'})` : 'never'
+  return [
+    `${repoLink(s.name)}: ${s.events.join(', ')}`,
+    `Polling: ${pace}`,
+    `Last poll: ${last}, next ${next}, last post ${s.lastPostAt ? ago(s.lastPostAt, now) : 'never'}`
+  ].join('\n')
+}
+
+export interface ApiStats {
+  authed: boolean
+  rate?: { remaining: number, limit?: number, reset: number }
+  pausedUntil: number
+}
+
+export const formatApiStatus = (s: ApiStats, now: number): string => {
+  const quota = s.rate ? `, ${s.rate.remaining}${s.rate.limit ? `/${s.rate.limit}` : ''} requests left, resets ${clockUtc(s.rate.reset)}` : ''
+  const paused = now < s.pausedUntil ? `, paused until ${clockUtc(s.pausedUntil)}` : ''
+  return `GitHub API: ${s.authed ? 'token' : 'no token'}${quota}${paused}`
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
 const errorText = (err: unknown): string => err instanceof Error ? err.message : String(err)
 
 export default async (robot: Robot) => {
   let rateBlockedUntil = 0
+  let rate: ApiStats['rate']
   let timer: ReturnType<typeof setInterval> | undefined
   let ticking = false
   const inflight = new Map<string, Promise<number>>()
@@ -309,6 +364,7 @@ export default async (robot: Robot) => {
   const call = async <T>(path: string, etag?: string): Promise<GithubResponse<T>> => {
     const res = await githubClient(config().token).get<T>(path, etag)
     const reset = (res.rateReset ?? 0) * 1000
+    if (res.rateRemaining !== undefined) rate = { remaining: res.rateRemaining, limit: res.rateLimit, reset }
     if (res.rateRemaining !== undefined && res.rateRemaining <= RATE_FLOOR && reset > Date.now()) rateBlockedUntil = reset
     if ((res.status === 403 || res.status === 429) && res.rateRemaining === 0) throw new RateLimited(reset)
     return res
@@ -361,13 +417,6 @@ export default async (robot: Robot) => {
         if (state === 'approved') return `${who} approved PR ${ticket(n, pr.title, p.review.html_url)}`
         if (state === 'changes_requested') return `${who} requested changes on PR ${ticket(n, pr.title, p.review.html_url)}`
         return `${who} reviewed PR ${ticket(n, pr.title, p.review.html_url)}: ${esc(truncate(p.review.body || '', 140))}`
-      }
-      case 'PushEvent': {
-        const branch = branchOf(p.ref || '')
-        const head = p.head || ''
-        if (!p.before || ZERO_SHA.test(p.before)) return `${who} pushed new branch ${branchLink(name, branch)} (${commitLink(name, head)})`
-        const res = await call<Compare>(`/repos/${name}/compare/${p.before}...${head}`)
-        return formatPush(name, e.actor, branch, head, res.body)
       }
       case 'ReleaseEvent': {
         const r = p.release
@@ -430,6 +479,47 @@ export default async (robot: Robot) => {
     return sent
   }
 
+  const describeActivity = async (name: string, a: Activity): Promise<string> => {
+    const actor = a.actor || { login: 'ghost' }
+    const who = `${repoLink(name)} ${userLink(actor)}`
+    const branch = branchOf(a.ref)
+    if (a.activity_type === 'branch_creation' || ZERO_SHA.test(a.before)) return `${who} pushed new branch ${branchLink(name, branch)} (${commitLink(name, a.after)})`
+    if (a.activity_type === 'force_push') return `${who} force-pushed ${branchLink(name, branch)} (${commitLink(name, a.after)})`
+    const res = await call<Compare>(`/repos/${name}/compare/${a.before}...${a.after}`)
+    return formatPush(name, actor, branch, a.after, res.body)
+  }
+
+  const fetchActivity = (cursor: Cursor) =>
+    call<Activity[]>(`/repos/${cursor.name}/activity?per_page=100`, cursor.seenActivity ? cursor.activityEtag : undefined)
+
+  // pushes come from /activity; /events can lag by days
+  const pollActivity = async (cursor: Cursor, rooms: Record<string, RoomSub>): Promise<number> => {
+    const res = await fetchActivity(cursor)
+    if (res.status === 304) return 0
+    if (res.status !== 200 || !Array.isArray(res.body)) throw new Error(`activity: GitHub said ${res.status}`)
+    cursor.activityEtag = res.etag
+    const seen = new Set(cursor.seenActivity)
+    cursor.seenActivity = res.body.map(a => String(a.id))
+    const fresh = res.body
+      .filter(a => !seen.has(String(a.id)) && Date.parse(a.timestamp) >= cursor.since &&
+        ACTIVITY_TYPES.includes(a.activity_type) && a.ref.startsWith('refs/heads/'))
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    let sent = 0
+    for (const a of fresh) {
+      let text: string | undefined
+      try {
+        text = await describeActivity(cursor.name, a)
+      } catch (err) {
+        if (err instanceof RateLimited) throw err
+        robot.logger.warn(`github: ${cursor.name}: couldn't describe ${a.activity_type} ${a.id}: ${errorText(err)}`)
+      }
+      if (!text) continue
+      for (const room of roomsFor(rooms, 'pushes')) await deliver(room, text)
+      sent++
+    }
+    return sent
+  }
+
   const pollRuns = async (cursor: Cursor, rooms: Record<string, RoomSub>): Promise<number> => {
     const res = await call<{ workflow_runs?: Run[] }>(`/repos/${cursor.name}/actions/runs?status=completed&per_page=30`, cursor.runsSeeded ? cursor.runsEtag : undefined)
     if (res.status === 304) return 0
@@ -473,12 +563,26 @@ export default async (robot: Robot) => {
       const events = await pollEvents(key, cursor, rooms)
       if (events === false) dropped = true
       else sent += events
+      if (!dropped) {
+        if (Object.values(rooms).some(r => r.events.includes('pushes'))) {
+          sent += await pollActivity(cursor, rooms)
+        } else {
+          // reseed if pushes come back
+          delete cursor.seenActivity
+          delete cursor.activityEtag
+        }
+      }
       if (!dropped && Object.values(rooms).some(r => r.events.includes('ci'))) sent += await pollRuns(cursor, rooms)
+      delete cursor.lastError
+    } catch (err) {
+      cursor.lastError = errorText(err)
+      throw err
     } finally {
       if (!dropped && getSubs()[key]) {
         const now = Date.now()
         cursor.idleTicks = sent > 0 || force ? 0 : Math.min(cursor.idleTicks + 1, MAX_IDLE)
         cursor.lastPollAt = now
+        if (sent > 0) cursor.lastPostAt = now
         cursor.nextPollAt = now + effectiveSeconds(key, cursor, getSubs()) * 1000
         setCursor(key, cursor)
       }
@@ -597,6 +701,17 @@ export default async (robot: Robot) => {
       }
     }
     cursor.name = name
+    if (events.includes('pushes') && !cursor.seenActivity) {
+      try {
+        const seed = await fetchActivity(cursor)
+        if (seed.status === 200 && Array.isArray(seed.body)) {
+          cursor.seenActivity = seed.body.map(a => String(a.id))
+          cursor.activityEtag = seed.etag
+        }
+      } catch (err) {
+        robot.logger.warn(`github: ${name}: couldn't seed activity: ${errorText(err)}`)
+      }
+    }
     if (events.includes('ci') && !cursor.runsSeeded) {
       await pollRuns(cursor, rooms).catch(err => robot.logger.warn(`github: ${name}: couldn't seed runs: ${errorText(err)}`))
     }
@@ -648,20 +763,28 @@ export default async (robot: Robot) => {
       : `Stopped following ${repoLink(name)} here.`)
   })
 
-  robot.respond(/github (?:subscriptions|subs|list)$/i, async res => {
+  const repoStats = (key: string, sub: RoomSub, subs: Subs): RepoStats => {
+    const cursor = getCursor(key) || freshCursor(key)
+    const base = baseSeconds(key, cursor, subs)
+    return {
+      ...cursor,
+      events: sub.events,
+      base,
+      every: effectiveSeconds(key, cursor, subs),
+      max: Math.max(config().maxSec, base)
+    }
+  }
+
+  robot.respond(/github (?:subscriptions|subs|list|status)$/i, async res => {
     const room = res.message.room
     const subs = getSubs()
-    const lines = Object.keys(subs).sort().flatMap(key => {
+    const now = Date.now()
+    const blocks = Object.keys(subs).sort().flatMap(key => {
       const sub = subs[key]?.[room]
-      if (!sub) return []
-      const cursor = getCursor(key) || freshCursor(key)
-      const base = baseSeconds(key, cursor, subs)
-      const now = effectiveSeconds(key, cursor, subs)
-      const pace = now > base ? `every ${formatDuration(base)}, ${formatDuration(now)} while quiet` : `every ${formatDuration(base)}`
-      return [`${repoLink(cursor.name)}: ${sub.events.join(', ')} (${pace})`]
+      return sub ? [formatRepoStatus(repoStats(key, sub, subs), now)] : []
     })
-    await res.send(lines.length
-      ? lines.join('\n')
+    await res.send(blocks.length
+      ? [...blocks, formatApiStatus({ authed: Boolean(config().token), rate, pausedUntil: rateBlockedUntil }, now)].join('\n\n')
       : `This channel doesn't follow any repos. Try \`${robot.name} github subscribe owner/repo\`.`)
   })
 

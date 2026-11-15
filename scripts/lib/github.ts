@@ -4,6 +4,7 @@ export interface GithubResponse<T> {
   status: number
   etag?: string
   pollInterval?: number
+  rateLimit?: number
   rateRemaining?: number
   rateReset?: number
   body?: T
@@ -34,6 +35,7 @@ export const githubClient = (token?: string): GithubClient => ({
       status: res.status,
       etag: res.headers.get('etag') ?? undefined,
       pollInterval: num(res.headers.get('x-poll-interval')),
+      rateLimit: num(res.headers.get('x-ratelimit-limit')),
       rateRemaining: num(res.headers.get('x-ratelimit-remaining')),
       rateReset: num(res.headers.get('x-ratelimit-reset')),
       body: res.status === 200 ? await res.json() as T : undefined

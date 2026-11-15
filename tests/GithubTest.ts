@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto'
 
 import type { DiscordClient, Envelope } from 'hubot'
 
-import { parseOptions, esc, link, formatDuration, categoryOf, formatPush, formatRunFailed } from '../scripts/Github.ts'
-import type { GhEvent, Run } from '../scripts/Github.ts'
+import * as Github from '../scripts/Github.ts'
+import type { Activity, GhEvent, Run } from '../scripts/Github.ts'
 import { parseRepo } from '../scripts/lib/github.ts'
 import { setupRobot, brainUser } from './helpers/setup.ts'
 import type { TestRobot } from './helpers/setup.ts'
@@ -24,6 +24,7 @@ interface Call { path: string, headers: Record<string, string> }
 interface RepoState {
   meta: { full_name: string, private: boolean, archived: boolean }
   events: GhEvent[]
+  activity: Activity[]
   runs: Run[]
   pulls: Record<number, { title: string, html_url: string, merged?: boolean }>
   compares: Record<string, unknown>
@@ -35,14 +36,14 @@ const fakeGithub = () => {
   const repos: Record<string, RepoState> = {}
   const calls: Call[] = []
   const add = (name: string, extra: Partial<RepoState['meta']> = {}): RepoState => {
-    const repo: RepoState = { meta: { full_name: name, private: false, archived: false, ...extra }, events: [], runs: [], pulls: {}, compares: {} }
+    const repo: RepoState = { meta: { full_name: name, private: false, archived: false, ...extra }, events: [], activity: [], runs: [], pulls: {}, compares: {} }
     repos[name.toLowerCase()] = repo
     return repo
   }
   const reply = (body: unknown, ifNoneMatch?: string, extra: Record<string, string> = {}) => {
     const json = JSON.stringify(body)
     const etag = `"${createHash('md5').update(json).digest('hex')}"`
-    const headers = { 'etag': etag, 'x-ratelimit-remaining': '4999', 'x-ratelimit-reset': String(START / 1000 + 3600), ...extra }
+    const headers = { 'etag': etag, 'x-ratelimit-limit': '5000', 'x-ratelimit-remaining': '4999', 'x-ratelimit-reset': String(START / 1000 + 3600), ...extra }
     if (ifNoneMatch === etag) return new Response(null, { status: 304, headers })
     return new Response(json, { status: 200, headers })
   }
@@ -58,6 +59,7 @@ const fakeGithub = () => {
     const etag = headers['If-None-Match']
     if (rest === '') return reply(repo.meta)
     if (rest === '/events') return reply([...repo.events].reverse(), etag, { 'x-poll-interval': '60' })
+    if (rest === '/activity') return reply([...repo.activity].reverse(), etag)
     if (rest === '/actions/runs') return reply({ total_count: repo.runs.length, workflow_runs: [...repo.runs].reverse() }, etag)
     const pr = rest.match(/^\/pulls\/(\d+)$/)
     if (pr && repo.pulls[Number(pr[1])]) return reply(repo.pulls[Number(pr[1])])
@@ -74,6 +76,10 @@ const ev = (type: string, payload: GhEvent['payload'], at = '2026-11-15T12:00:30
 
 const issue = (n: number, title: string, action = 'opened') =>
   ev('IssuesEvent', { action, issue: { number: n, title, html_url: `https://github.com/Octo/Demo/issues/${n}` } })
+
+let actSeq = 90000
+const act = (activity_type: string, before: string, after: string, ref = 'refs/heads/main', at = '2026-11-15T12:00:30Z', login = 'alice'): Activity =>
+  ({ id: ++actSeq, activity_type, before, after, ref, timestamp: at, actor: { login } })
 
 let runSeq = 500
 const run = (conclusion: string, name = 'build', branch = 'main', at = '2026-11-15T12:00:40Z'): Run =>
@@ -96,54 +102,71 @@ describe('Github helpers', () => {
   })
 
   it('parses categories and intervals', () => {
-    assert.deepStrictEqual(parseOptions(''), { categories: [], interval: undefined })
-    assert.deepStrictEqual(parseOptions(' pr, commits CI'), { categories: ['prs', 'pushes', 'ci'], interval: undefined })
-    assert.deepStrictEqual(parseOptions('all every 5m').categories.length, 6)
-    assert.strictEqual(parseOptions('issues every 5m').interval, 300)
-    assert.strictEqual(parseOptions('every 2 hours').error !== undefined, true)
-    assert.strictEqual(parseOptions('every 90 s').interval, 90)
-    assert.strictEqual(parseOptions('every 10').interval, 600)
-    assert.match(parseOptions('every 30s').error || '', /between 1m and 1h/)
-    assert.match(parseOptions('stars').error || '', /don't know "stars"/)
+    assert.deepStrictEqual(Github.parseOptions(''), { categories: [], interval: undefined })
+    assert.deepStrictEqual(Github.parseOptions(' pr, commits CI'), { categories: ['prs', 'pushes', 'ci'], interval: undefined })
+    assert.deepStrictEqual(Github.parseOptions('all every 5m').categories.length, 6)
+    assert.strictEqual(Github.parseOptions('issues every 5m').interval, 300)
+    assert.strictEqual(Github.parseOptions('every 2 hours').error !== undefined, true)
+    assert.strictEqual(Github.parseOptions('every 90 s').interval, 90)
+    assert.strictEqual(Github.parseOptions('every 10').interval, 600)
+    assert.match(Github.parseOptions('every 30s').error || '', /between 1m and 1h/)
+    assert.match(Github.parseOptions('stars').error || '', /don't know "stars"/)
   })
 
   it('escapes link text so titles cannot break out', () => {
-    assert.strictEqual(link('a](x) @everyone', 'https://github.com/o/r'), '[a\\]\\(x\\) @​everyone](<https://github.com/o/r>)')
-    assert.strictEqual(esc('`code` *b*\nnext'), '\\`code\\` \\*b\\* next')
-    assert.strictEqual(link('t', 'https://github.com/o/r/tree/a>b'), '[t](<https://github.com/o/r/tree/a%3Eb>)')
-    assert.strictEqual(esc('see https://x.io/a and HTTP://y.io'), 'see https\\://x.io/a and HTTP\\://y.io')
+    assert.strictEqual(Github.link('a](x) @everyone', 'https://github.com/o/r'), '[a\\]\\(x\\) @​everyone](<https://github.com/o/r>)')
+    assert.strictEqual(Github.esc('`code` *b*\nnext'), '\\`code\\` \\*b\\* next')
+    assert.strictEqual(Github.link('t', 'https://github.com/o/r/tree/a>b'), '[t](<https://github.com/o/r/tree/a%3Eb>)')
+    assert.strictEqual(Github.esc('see https://x.io/a and HTTP://y.io'), 'see https\\://x.io/a and HTTP\\://y.io')
+  })
+
+  it('formats repo and api status', () => {
+    const stats: Github.RepoStats = { name: 'Octo/Demo', events: ['issues', 'pushes'], base: 60, every: 960, max: 3600, idleTicks: 4, lastPollAt: START - 180_000, nextPollAt: START + 780_000 }
+    assert.strictEqual(Github.formatRepoStatus(stats, START), [
+      '**[Octo/Demo](<https://github.com/Octo/Demo>)**: issues, pushes',
+      'Polling: every 16m, backed off from 1m after 4 quiet polls (max 1h)',
+      'Last poll: 3m ago (ok), next in 13m, last post never'
+    ].join('\n'))
+    const fresh = Github.formatRepoStatus({ ...stats, every: 60, idleTicks: 0, lastPollAt: 0, nextPollAt: START - 1 }, START)
+    assert.match(fresh, /\nPolling: every 1m\nLast poll: never, next now, last post never$/)
+    const failed = Github.formatRepoStatus({ ...stats, lastError: 'events: GitHub said `502`', lastPostAt: START - 7_200_000 }, START)
+    assert.match(failed, /\nLast poll: 3m ago \(failed: events: GitHub said \\`502\\`\), next in 13m, last post 2h ago$/)
+    assertNoBareUrls(failed)
+    assert.strictEqual(Github.formatApiStatus({ authed: false, pausedUntil: 0 }, START), 'GitHub API: no token')
+    const rate = { remaining: 2, limit: 5000, reset: START + 3_600_000 }
+    assert.strictEqual(Github.formatApiStatus({ authed: true, rate, pausedUntil: rate.reset }, START), 'GitHub API: token, 2/5000 requests left, resets 13:00 UTC, paused until 13:00 UTC')
   })
 
   it('formats durations', () => {
-    assert.strictEqual(formatDuration(60), '1m')
-    assert.strictEqual(formatDuration(3600), '1h')
-    assert.strictEqual(formatDuration(5400), '1h30m')
+    assert.strictEqual(Github.formatDuration(60), '1m')
+    assert.strictEqual(Github.formatDuration(3600), '1h')
+    assert.strictEqual(Github.formatDuration(5400), '1h30m')
   })
 
   it('maps events to categories', () => {
-    assert.strictEqual(categoryOf(issue(1, 't')), 'issues')
-    assert.strictEqual(categoryOf(issue(1, 't', 'labeled')), undefined)
-    assert.strictEqual(categoryOf(ev('PushEvent', { ref: 'refs/tags/v1', head: 'a', before: 'b' })), undefined)
-    assert.strictEqual(categoryOf(ev('PushEvent', { ref: 'refs/heads/main', head: '0000000', before: 'b' })), undefined)
-    assert.strictEqual(categoryOf(ev('PullRequestReviewEvent', { action: 'created', review: { state: 'approved', html_url: 'x' }, pull_request: { number: 1 } })), 'prs')
-    assert.strictEqual(categoryOf(ev('PullRequestReviewEvent', { action: 'updated', review: { state: 'approved', html_url: 'x' }, pull_request: { number: 1 } })), undefined)
-    assert.strictEqual(categoryOf(ev('PullRequestReviewEvent', { action: 'created', review: { state: 'commented', html_url: 'x', body: '' }, pull_request: { number: 1 } })), undefined)
-    assert.strictEqual(categoryOf(ev('WatchEvent', { action: 'started' })), undefined)
+    assert.strictEqual(Github.categoryOf(issue(1, 't')), 'issues')
+    assert.strictEqual(Github.categoryOf(issue(1, 't', 'labeled')), undefined)
+    // pushes come from /activity
+    assert.strictEqual(Github.categoryOf(ev('PushEvent', {})), undefined)
+    assert.strictEqual(Github.categoryOf(ev('PullRequestReviewEvent', { action: 'created', review: { state: 'approved', html_url: 'x' }, pull_request: { number: 1 } })), 'prs')
+    assert.strictEqual(Github.categoryOf(ev('PullRequestReviewEvent', { action: 'updated', review: { state: 'approved', html_url: 'x' }, pull_request: { number: 1 } })), undefined)
+    assert.strictEqual(Github.categoryOf(ev('PullRequestReviewEvent', { action: 'created', review: { state: 'commented', html_url: 'x', body: '' }, pull_request: { number: 1 } })), undefined)
+    assert.strictEqual(Github.categoryOf(ev('WatchEvent', { action: 'started' })), undefined)
   })
 
   it('formats pushes and ci with only wrapped links', () => {
     const actor = { login: 'renovate[bot]', display_login: 'renovate' }
     const commits = ['one', 'two', 'three', 'four'].map((msg, i) => ({ sha: `${i}`.repeat(40), html_url: '', commit: { message: `${msg}\n\nbody` } }))
-    const text = formatPush('Octo/Demo', actor, 'feat/x', 'f'.repeat(40), { status: 'ahead', total_commits: 5, html_url: 'https://github.com/Octo/Demo/compare/a...b', commits })
+    const text = Github.formatPush('Octo/Demo', actor, 'feat/x', 'f'.repeat(40), { status: 'ahead', total_commits: 5, html_url: 'https://github.com/Octo/Demo/compare/a...b', commits })
     assert.match(text, /\[renovate\]\(<https:\/\/github\.com\/apps\/renovate>\) pushed \[5 commits\]/)
     assert.match(text, /to \[feat\/x\]\(<https:\/\/github\.com\/Octo\/Demo\/tree\/feat\/x>\)/)
     assert.doesNotMatch(text, /one/)
     assert.match(text, /\[`1111111`\]|\[\\`1111111\\`\]|\[1111111\]/)
     assert.match(text, /four\n…and 2 more$/)
     assertNoBareUrls(text)
-    const forced = formatPush('Octo/Demo', actor, 'main', 'f'.repeat(40), { status: 'diverged', total_commits: 1, html_url: '', commits: [] })
+    const forced = Github.formatPush('Octo/Demo', actor, 'main', 'f'.repeat(40), { status: 'diverged', total_commits: 1, html_url: '', commits: [] })
     assert.match(forced, /force-pushed/)
-    const failed = formatRunFailed('Octo/Demo', run('timed_out'))
+    const failed = Github.formatRunFailed('Octo/Demo', run('timed_out'))
     assert.match(failed, /❌ CI \[build\]\(<.+>\) timed out on \[main\]/)
     assertNoBareUrls(failed)
   })
@@ -208,7 +231,13 @@ describe('Github testing Hubot scripts', () => {
     await say(state.robot, 'github subscribe octo/demo ci every 5m')
     take()
     await say(state.robot, 'github subscriptions')
-    assert.deepStrictEqual(texts(), ['**[Octo/Demo](<https://github.com/Octo/Demo>)**: issues, ci (every 5m)'])
+    assert.deepStrictEqual(texts(), [[
+      '**[Octo/Demo](<https://github.com/Octo/Demo>)**: issues, ci',
+      'Polling: every 5m',
+      'Last poll: never, next in 1m, last post never',
+      '',
+      'GitHub API: token, 4999/5000 requests left, resets 13:00 UTC'
+    ].join('\n')])
   })
 
   it('rejects missing, private and archived repos and bad input', async () => {
@@ -287,7 +316,7 @@ describe('Github testing Hubot scripts', () => {
     const repo = gh.add('Octo/Demo')
     await say(state.robot, 'github subscribe octo/demo pushes')
     take()
-    repo.events.push(ev('PushEvent', { ref: 'refs/heads/main', before: 'a'.repeat(40), head: 'b'.repeat(40) }))
+    repo.activity.push(act('push', 'a'.repeat(40), 'b'.repeat(40)))
     repo.compares[`${'a'.repeat(40)}...${'b'.repeat(40)}`] = {
       status: 'ahead', total_commits: 1, html_url: 'https://github.com/Octo/Demo/compare/x...y',
       commits: [{ sha: 'b'.repeat(40), html_url: '', commit: { message: 'fix the thing\n\ndetails' } }]
@@ -298,6 +327,59 @@ describe('Github testing Hubot scripts', () => {
       '**[Octo/Demo](<https://github.com/Octo/Demo>)** [alice](<https://github.com/alice>) pushed [1 commit](<https://github.com/Octo/Demo/compare/x...y>) to [main](<https://github.com/Octo/Demo/tree/main>)',
       `[bbbbbbb](<https://github.com/Octo/Demo/commit/${'b'.repeat(40)}>) fix the thing`
     ].join('\n'))
+  })
+
+  it('posts force pushes, new branches and merges, but not deletions, tags or push events', async () => {
+    const repo = gh.add('Octo/Demo')
+    repo.activity.push(act('push', 'c'.repeat(40), 'd'.repeat(40), 'refs/heads/main', '2026-11-15T11:59:00Z'))
+    await say(state.robot, 'github subscribe octo/demo pushes')
+    take()
+    const zero = '0'.repeat(40)
+    repo.activity.push(act('force_push', 'a'.repeat(40), 'b'.repeat(40), 'refs/heads/feat', '2026-11-15T12:00:31Z', 'bob'))
+    repo.activity.push(act('branch_creation', zero, 'e'.repeat(40), 'refs/heads/new', '2026-11-15T12:00:30Z'))
+    repo.activity.push(act('branch_deletion', 'e'.repeat(40), zero, 'refs/heads/old'))
+    repo.activity.push(act('push', zero, 'f'.repeat(40), 'refs/tags/v1'))
+    repo.activity.push(act('pr_merge', 'a'.repeat(40), 'f'.repeat(40), 'refs/heads/main', '2026-11-15T12:00:32Z'))
+    repo.events.push(ev('PushEvent', { ref: 'refs/heads/main', before: 'a'.repeat(40), head: 'f'.repeat(40) } as GhEvent['payload']))
+    await advance(60_000)
+    const out = texts()
+    assert.strictEqual(out.length, 3)
+    assert.match(out[0] || '', /\[alice\].* pushed new branch \[new\]/)
+    assert.match(out[1] || '', /\[bob\].* force-pushed \[feat\]\(<https:\/\/github\.com\/Octo\/Demo\/tree\/feat>\) \(\[bbbbbbb\]/)
+    assert.match(out[2] || '', /\[alice\].* pushed to \[main\].*\(\[fffffff\]/)
+    out.forEach(assertNoBareUrls)
+  })
+
+  it('only polls activity for push subscribers and sends its etag', async () => {
+    const repo = gh.add('Octo/Demo')
+    await say(state.robot, 'github subscribe octo/demo issues')
+    await advance(60_000)
+    assert.ok(gh.calls.every(c => !c.path.includes('/activity')))
+    await say(state.robot, 'github subscribe octo/demo pushes')
+    take()
+    await advance(60_000)
+    const polls = gh.calls.filter(c => c.path.includes('/activity'))
+    assert.ok(polls.length >= 2)
+    assert.ok(polls.at(-1)?.headers['If-None-Match'])
+    repo.activity.push(act('force_push', 'a'.repeat(40), 'b'.repeat(40), 'refs/heads/main', '2026-11-15T12:01:50Z'))
+    now += 16_000
+    await say(state.robot, 'github poll')
+    assert.match(texts()[0] || '', /force-pushed/)
+  })
+
+  it('catches up on pushes since the subscription for cursors without activity', async () => {
+    const repo = gh.add('Octo/Demo')
+    await say(state.robot, 'github subscribe octo/demo issues pushes')
+    take()
+    const cursor = state.robot.brain.get('github:cursor:octo/demo') as Record<string, unknown>
+    delete cursor.seenActivity
+    delete cursor.activityEtag
+    repo.activity.push(act('force_push', 'a'.repeat(40), 'b'.repeat(40), 'refs/heads/main', '2026-11-15T11:00:00Z'))
+    repo.activity.push(act('force_push', 'a'.repeat(40), 'c'.repeat(40), 'refs/heads/main', '2026-11-15T12:00:10Z'))
+    await advance(60_000)
+    const out = texts()
+    assert.strictEqual(out.length, 1)
+    assert.match(out[0] || '', /ccccccc/)
   })
 
   it('reports ci failures and recoveries but not routine greens', async () => {
@@ -341,16 +423,16 @@ describe('Github testing Hubot scripts', () => {
     // quiet polls at 1m, 3m, 7m, 15m; 16m caps to 10m
     await advance(7 * 60_000)
     await say(state.robot, 'github subscriptions')
-    assert.match(texts()[0] || '', /every 1m, 8m while quiet/)
+    assert.match(texts()[0] || '', /\nPolling: every 8m, backed off from 1m after 3 quiet polls \(max 10m\)\nLast poll: 0s ago \(ok\), next in 8m, last post never\n/)
     await advance(9 * 60_000)
     await say(state.robot, 'github subscriptions')
-    assert.match(texts()[0] || '', /every 1m, 10m while quiet/)
+    assert.match(texts()[0] || '', /\nPolling: every 10m, backed off from 1m after 4 quiet polls \(max 10m\)\n/)
     repo.events.push(ev('IssuesEvent', { action: 'opened', issue: { number: 2, title: 't', html_url: 'u' } }, '2026-11-15T12:20:00Z'))
     // next quiet poll was due at 25m
     await advance(9 * 60_000)
     assert.strictEqual(texts().length, 1)
     await say(state.robot, 'github subscriptions')
-    assert.match(texts()[0] || '', /\(every 1m\)$/)
+    assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: 0s ago \(ok\), next in 1m, last post 0s ago\n/)
   })
 
   it('stretches the interval without a token', async () => {
@@ -361,8 +443,31 @@ describe('Github testing Hubot scripts', () => {
     await say(state.robot, 'github subscribe octo/other')
     take()
     await say(state.robot, 'github subscriptions')
-    assert.match(texts()[0] || '', /every 4m\)\n.*every 4m\)$/)
+    const out = texts()[0] || ''
+    assert.strictEqual(out.match(/\nPolling: every 6m\n/g)?.length, 2)
+    assert.match(out, /\n\nGitHub API: no token, /)
     assert.ok(gh.calls.every(c => !('Authorization' in c.headers)))
+  })
+
+  it('shows poll failures, last post and the rate limit pause', async () => {
+    const repo = gh.add('Octo/Demo')
+    await say(state.robot, 'github subscribe octo/demo issues')
+    repo.events.push(issue(5, 'hello'))
+    await advance(60_000)
+    take()
+    now += 5 * 60_000
+    repo.status = 502
+    await advance(120_000)
+    await say(state.robot, 'github status')
+    assert.match(texts()[0] || '', /\nLast poll: 2m ago \(failed: events: GitHub said 502\), next in 15s, last post 7m ago\n/)
+    repo.status = undefined
+    gh.calls.length = 0
+    mock.method(global, 'fetch', async () => new Response('[]', { status: 200, headers: { 'x-ratelimit-limit': '5000', 'x-ratelimit-remaining': '2', 'x-ratelimit-reset': String(START / 1000 + 3600) } }))
+    now += 16_000
+    await say(state.robot, 'github poll')
+    take()
+    await say(state.robot, 'github status')
+    assert.match(texts()[0] || '', /\n\nGitHub API: token, 2\/5000 requests left, resets 13:00 UTC, paused until 13:00 UTC$/)
   })
 
   it('polls on demand', async () => {
