@@ -3,6 +3,7 @@ services:
     image: ghcr.io/vikraman/donbot:latest
     container_name: donbot
     restart: unless-stopped
+    mem_limit: 256m
     env_file: .env
     depends_on:
       - redis
@@ -13,16 +14,18 @@ services:
     image: redis:7-alpine
     container_name: donbot-redis
     restart: unless-stopped
+    mem_limit: 64m
     ports:
       - 127.0.0.1:6379:6379
     volumes:
       - redis-data:/data
-    command: redis-server --save 60 1 --appendonly yes
+    command: redis-server --save 60 1 --appendonly yes --auto-aof-rewrite-min-size 8mb
 
   watchtower:
     image: nickfedor/watchtower:latest
     container_name: watchtower
     restart: unless-stopped
+    mem_limit: 64m
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${HOME}/.docker/config.json:/config.json:ro
