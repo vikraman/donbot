@@ -11,6 +11,7 @@
 import type { Robot } from 'hubot'
 
 import { entriesWithPrefix } from './lib/brainScan.ts'
+import { cooldown } from './lib/cooldown.ts'
 import { rawMessageOf } from './lib/discordMessage.ts'
 import { EMOJI_VOCAB } from './lib/emojiVocab.ts'
 import { pick } from './lib/random.ts'
@@ -145,19 +146,11 @@ const recordTone = (robot: Robot, room: string, { tone, comparative }: ToneResul
 }
 
 export default async (robot: Robot) => {
-  // room -> emoji -> last reacted at
-  const recent = new Map<string, Map<string, number>>()
+  // keyed by room:emoji
+  const emojiCooldown = cooldown(REPEAT_WINDOW_MS)
   // claims the emoji for the room unless used within the window
-  const claimFresh = (room: string, emoji: string | null): string | null => {
-    if (!emoji) return null
-    const now = Date.now()
-    const used = recent.get(room) ?? new Map<string, number>()
-    for (const [e, ts] of used) if (now - ts >= REPEAT_WINDOW_MS) used.delete(e)
-    recent.set(room, used)
-    if (used.has(emoji)) return null
-    used.set(emoji, now)
-    return emoji
-  }
+  const claimFresh = (room: string, emoji: string | null): string | null =>
+    emoji && emojiCooldown.take(`${room}:${emoji}`) ? emoji : null
 
   robot.brain.on('loaded', () => {
     for (const [suffix] of entriesWithPrefix(robot, LEGACY_HISTORY_PREFIX)) {

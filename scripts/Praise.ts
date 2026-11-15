@@ -10,12 +10,16 @@
 //   hubot who praised you - Lists who has praised the bot and how often.
 //
 // Also reacts to positive-affirmation emoji reactions on the bot's own messages. Discord only.
-// (⭐ excluded — StarReact.mjs owns it.)
+// (⭐ excluded — StarReact.mjs owns it.) Each user counts once per message; replies are
+// limited to one per channel per minute, and praise of its own acknowledgements is
+// counted without a reply.
 //
 
 import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
 
 import { entriesWithPrefix, isScore, scoreAt } from './lib/brainScan.ts'
+import { cooldown } from './lib/cooldown.ts'
+import { sentIds } from './lib/discordMessage.ts'
 import { mentionFor } from './lib/mention.ts'
 import { pick } from './lib/random.ts'
 import { scoreTone } from './lib/sentiment.ts'
@@ -42,6 +46,11 @@ const REACTIONS: Record<'grudging' | 'enthusiastic', readonly [string, ...string
 }
 const ALL_REACTIONS: readonly [string, ...string[]] = [...REACTIONS.grudging, ...REACTIONS.enthusiastic]
 
+// reaction spam guards
+const REACTION_REPLY_COOLDOWN_MS = 60 * 1000
+const MAX_SEEN_REACTIONS = 1000
+const MAX_ACKS = 200
+
 // only enthusiastic text narrows the pool
 const reactionsFor = (text?: string): readonly [string, ...string[]] => {
   if (text && scoreTone(text).tone === 'positive') return REACTIONS.enthusiastic
@@ -60,10 +69,22 @@ const recordPraise = (robot: Robot, userId?: string): number => {
   return count
 }
 
+// insertion-ordered set, oldest dropped past the cap
+const addCapped = (set: Set<string>, key: string, cap: number) => {
+  set.add(key)
+  if (set.size > cap) set.delete(set.values().next().value!)
+}
+
 export default async (robot: Robot) => {
+  // our own acknowledgements, never replied to
+  const acks = new Set<string>()
+  const rememberAcks = (sent: unknown) => {
+    for (const id of sentIds(sent)) addCapped(acks, id, MAX_ACKS)
+  }
+
   robot.respond(/(?:cookie|good (?:bot|job)|good boy(?: donbot)?|thanks?(?: you)?)[.!]*$/i, async res => {
     recordPraise(robot, res.message.user.id)
-    await res.send(pick(reactionsFor(res.message.text)))
+    rememberAcks(await res.send(pick(reactionsFor(res.message.text))))
   })
 
   robot.respond(/praise count$/i, async res => {
@@ -92,6 +113,9 @@ export default async (robot: Robot) => {
   const client = robot.adapter && robot.adapter.client
   if (!client || typeof client.on !== 'function') return
 
+  const seenReactions = new Set<string>()
+  const replyCooldown = cooldown(REACTION_REPLY_COOLDOWN_MS)
+
   client.on('messageReactionAdd', async (reaction: DiscordReaction, user: DiscordUser) => {
     if (user.bot) return
     if (!PRAISE_EMOJI.includes(reaction.emoji.name)) return
@@ -106,7 +130,15 @@ export default async (robot: Robot) => {
     const message = reaction.message
     if (message.author?.id !== client.user?.id) return
 
+    // once per user per message, across emoji and re-adds
+    const seenKey = `${message.id}:${user.id}`
+    if (seenReactions.has(seenKey)) return
+    addCapped(seenReactions, seenKey, MAX_SEEN_REACTIONS)
+
     recordPraise(robot, user.id)
-    await robot.messageRoom(message.channelId, pick(ALL_REACTIONS))
+    // replying to praise of a reply would chain
+    if (acks.has(message.id)) return
+    if (!replyCooldown.take(message.channelId)) return
+    rememberAcks(await robot.messageRoom(message.channelId, pick(ALL_REACTIONS)))
   })
 }

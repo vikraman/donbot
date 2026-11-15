@@ -12,6 +12,8 @@
 
 import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
 
+import { cooldown } from './lib/cooldown.ts'
+import { sentIds } from './lib/discordMessage.ts'
 import { JARGON } from './lib/punJargon.ts'
 import { pick, chance } from './lib/random.ts'
 import { addressesBot, roomToggle } from './lib/roomToggle.ts'
@@ -208,9 +210,6 @@ export const feedbackFor = (records: readonly PunRecord[], room: string, kind: P
 export const chanceFor = (feedback: number): number =>
   clamp(PUN_CHANCE * FEEDBACK_SPREAD ** feedback, MIN_CHANCE, MAX_CHANCE)
 
-const sentIds = (sent: unknown): string[] =>
-  Array.isArray(sent) ? sent.map(m => (m as { id?: unknown } | null)?.id).filter((id): id is string => typeof id === 'string') : []
-
 const signOf = (emoji: string): 1 | -1 | 0 => LIKE_EMOJI.has(emoji) ? 1 : DISLIKE_EMOJI.has(emoji) ? -1 : 0
 
 export default async (robot: Robot) => {
@@ -241,10 +240,9 @@ export default async (robot: Robot) => {
     robot.brain.set(SENT_KEY, records)
   }
 
-  // room -> last pun at
-  const lastPun = new Map<string, number>()
-  // room -> word -> punned at
-  const punned = new Map<string, Map<string, number>>()
+  const roomCooldown = cooldown(PUN_COOLDOWN_MS)
+  // keyed by room:word
+  const wordCooldown = cooldown(REPEAT_WINDOW_MS)
 
   robot.hear(/[a-z]/i, async res => {
     const room = res.message.room
@@ -252,20 +250,16 @@ export default async (robot: Robot) => {
     if (isDisabled(room) || addressesBot(robot, text)) return
 
     const now = Date.now()
-    if (now - (lastPun.get(room) ?? -Infinity) < PUN_COOLDOWN_MS) return
+    if (!roomCooldown.ready(room, now)) return
 
-    const words = punned.get(room) ?? new Map<string, number>()
-    for (const [w, ts] of words) if (now - ts >= REPEAT_WINDOW_MS) words.delete(w)
-    punned.set(room, words)
-
-    const fresh = findPuns(text, robot.name).filter(p => !words.has(p.word))
+    const fresh = findPuns(text, robot.name).filter(p => wordCooldown.ready(`${room}:${p.word}`, now))
     // specific jokes win over word-shape puns
     const specific = fresh.filter(p => p.kind !== 'her' && p.kind !== 'em')
     const pun = pick(specific.length > 0 ? specific : fresh)
     if (!pun || !chance(chanceIn(room, pun.kind))) return
 
-    lastPun.set(room, now)
-    words.set(pun.word, now)
+    roomCooldown.mark(room, now)
+    wordCooldown.mark(`${room}:${pun.word}`, now)
     remember(sentIds(await res.send(pun.text())), room, pun.kind, now)
   })
 

@@ -205,3 +205,90 @@ describe('Praise testing Hubot scripts', () => {
     assert.strictEqual(sent.length, 0)
   })
 })
+
+describe('Praise reaction spam', () => {
+  const state = setupRobot('Praise.ts', { deferLoad: true })
+
+  const setupClient = async () => {
+    const { robot } = state
+    const client = Object.assign(new EventEmitter(), { user: { id: 'bot-id' } })
+    robot.adapter.client = client as unknown as DiscordClient
+    const send = robot.adapter.send.bind(robot.adapter)
+    // like the discord adapter, resolve to the sent messages
+    const adapter = robot.adapter as unknown as { send: (...args: Parameters<typeof send>) => Promise<unknown> }
+    let nextAck = 0
+    mock.method(adapter, 'send', async (...args: Parameters<typeof send>) => {
+      await send(...args)
+      return [{ id: `ack-${++nextAck}` }]
+    })
+    await state.loadScript()
+    const sent = collect(robot)
+    const react = async (emoji: string, userId: string, messageId = 'msg-1', channelId = 'room-1') => {
+      const reaction = {
+        partial: false,
+        emoji: { name: emoji },
+        message: { id: messageId, channelId, author: { id: 'bot-id' } }
+      }
+      client.emit('messageReactionAdd', reaction, { id: userId, bot: false, username: userId })
+      await new Promise(resolve => setImmediate(resolve))
+    }
+    return { robot, sent, react }
+  }
+
+  it('should count and reply once when the same user re-reacts to a message', async () => {
+    const { robot, sent, react } = await setupClient()
+    for (let i = 0; i < 5; i++) await react('👍', 'bob')
+    await react('🔥', 'bob')
+    assert.strictEqual(sent.length, 1)
+    assert.strictEqual(robot.brain.get('praise:count'), 1)
+  })
+
+  it('should count other users but stay quiet within the channel cooldown', async () => {
+    const { robot, sent, react } = await setupClient()
+    await react('👍', 'bob')
+    await react('👍', 'alice')
+    await react('👍', 'bob', 'msg-2')
+    assert.strictEqual(sent.length, 1)
+    assert.strictEqual(robot.brain.get('praise:count'), 3)
+  })
+
+  it('should reply in a different channel during another channel\'s cooldown', async () => {
+    const { sent, react } = await setupClient()
+    await react('👍', 'bob', 'msg-1', 'room-1')
+    await react('👍', 'bob', 'msg-2', 'room-2')
+    assert.strictEqual(sent.length, 2)
+  })
+
+  it('should count but not reply to praise of its own reaction acknowledgement', async () => {
+    const { robot, sent, react } = await setupClient()
+    const now = mock.method(Date, 'now', () => 1_000_000)
+    await react('👍', 'bob', 'msg-1')
+    now.mock.mockImplementation(() => 1_000_000 + 60 * 1000)
+    await react('👍', 'bob', 'ack-1')
+    await react('👍', 'alice', 'ack-1')
+    assert.strictEqual(sent.length, 1)
+    assert.strictEqual(robot.brain.get('praise:count'), 3)
+  })
+
+  it('should not reply to praise of its acknowledgement of a text compliment', async () => {
+    const { robot, sent, react } = await setupClient()
+    const user = brainUser(robot, 'bob', 'bob')
+    await robot.adapter.say(user, '@Dumbotheelephant good bot', 'room-1')
+    await react('👍', 'bob', 'ack-1')
+    assert.strictEqual(sent.length, 1)
+    assert.strictEqual(robot.brain.get('praise:count'), 2)
+  })
+
+  it('should reply again once the channel cooldown expires', async () => {
+    const { sent, react } = await setupClient()
+    const now = mock.method(Date, 'now', () => 1_000_000)
+    try {
+      await react('👍', 'bob', 'msg-1')
+      now.mock.mockImplementation(() => 1_000_000 + 60 * 1000)
+      await react('👍', 'bob', 'msg-2')
+    } finally {
+      now.mock.restore()
+    }
+    assert.strictEqual(sent.length, 2)
+  })
+})
