@@ -7,4 +7,7 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-CMD ["npx", "hubot", "--name", "donbot", "--adapter", "@hubot-friends/hubot-discord"]
+# cap heap so gc runs before the container limit
+ENV NODE_OPTIONS=--max-old-space-size=128
+
+CMD ["node", "node_modules/.bin/hubot", "--name", "donbot", "--adapter", "@hubot-friends/hubot-discord"]
