@@ -4,21 +4,13 @@
 
 import type { Robot } from 'hubot'
 
+import { formatDuration } from './lib/duration.ts'
 import { pick, shuffle } from './lib/random.ts'
 
 const ROTATE_MS = 15 * 60 * 1000
 const REMINDERS_KEY = 'reminders'
 const LAST_MESSAGE_KEY = 'seen:last'
 
-const formatUptime = (seconds: number): string => {
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const parts = []
-  if (d > 0) parts.push(`${d}d`)
-  parts.push(`${h}h`, `${m}m`)
-  return parts.join(' ')
-}
 
 const EMOJI_MOODS = ['🤖', '🦾', '🍺', '👽', '💚', '🔥', '🎉', '🧠', '⚙️', '🚀'] as const
 
@@ -41,7 +33,7 @@ const DONBOT_QUOTES = [
 ] as const
 
 // fallback when every nullable status is empty
-const uptimeStatus = (): string => `Up ${formatUptime(process.uptime())}`
+const uptimeStatus = (): string => `Up ${formatDuration(process.uptime() * 1000)}`
 
 const buildStatuses = (robot: Robot): (() => string | null)[] => [
   uptimeStatus,

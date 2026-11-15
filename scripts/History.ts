@@ -18,6 +18,7 @@
 import type { Robot, DiscordChannel, DiscordReaction, DiscordUser } from 'hubot'
 
 import { rawMessageOf } from './lib/discordMessage.ts'
+import { formatAgo } from './lib/duration.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
 
@@ -105,14 +106,6 @@ const fetchText = async (channel: DiscordChannel, messageId: string): Promise<st
   }
 }
 
-const formatRelative = (ts: number): string => {
-  const minutes = Math.floor((Date.now() - ts) / 60000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
 
 const authorOf = (robot: Robot, entries: HistoryEntry[], messageId: string): string | null => {
   const entry = entries.find(e => e.id === messageId && e.kind === 'user-message')
@@ -285,10 +278,10 @@ export default async (robot: Robot) => {
     const text = await fetchText(channel, latest.id)
     const mention = mentionFor({ id: latest.authorId })
     if (text === null) {
-      await res.send(`${mention} said something ${formatRelative(latest.ts)}, but I can't find it anymore.`)
+      await res.send(`${mention} said something ${formatAgo(latest.ts)}, but I can't find it anymore.`)
       return
     }
-    await res.send(`${mention} said: "${text}" (${formatRelative(latest.ts)})`)
+    await res.send(`${mention} said: "${text}" (${formatAgo(latest.ts)})`)
   })
 
   robot.respond(/(most|least) active user(?: (today|day|this week|week|last week|this month|month|last month|this year|year|last year))?$/i, async res => {

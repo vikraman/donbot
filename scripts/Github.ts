@@ -16,6 +16,7 @@
 
 import type { Robot } from 'hubot'
 
+import { formatDuration, formatAgo } from './lib/duration.ts'
 import { githubClient, parseRepo, shortSha, branchOf } from './lib/github.ts'
 import type { GithubResponse } from './lib/github.ts'
 import { required } from './lib/match.ts'
@@ -261,17 +262,7 @@ export const parseOptions = (text: string): Options => {
   return { categories: CATEGORIES.filter(c => categories.has(c)), interval }
 }
 
-export const formatDuration = (sec: number): string => {
-  if (sec < 60) return `${sec}s`
-  if (sec < 3600) return `${Math.round(sec / 60)}m`
-  const h = Math.floor(sec / 3600)
-  const m = Math.round((sec % 3600) / 60)
-  return m ? `${h}h${m}m` : `${h}h`
-}
-
 const clockUtc = (ms: number): string => `${new Date(ms).toISOString().slice(11, 16)} UTC`
-
-const ago = (ms: number, now: number): string => `${formatDuration(Math.max(0, Math.round((now - ms) / 1000)))} ago`
 
 // intervals in seconds, times in ms
 export interface RepoStats {
@@ -289,14 +280,14 @@ export interface RepoStats {
 
 export const formatRepoStatus = (s: RepoStats, now: number): string => {
   const pace = s.every > s.base
-    ? `every ${formatDuration(s.every)}, backed off from ${formatDuration(s.base)} after ${plural(s.idleTicks, 'quiet poll')} (max ${formatDuration(s.max)})`
-    : `every ${formatDuration(s.base)}`
-  const next = s.nextPollAt > now ? `in ${formatDuration(Math.ceil((s.nextPollAt - now) / 1000))}` : 'now'
-  const last = s.lastPollAt ? `${ago(s.lastPollAt, now)} (${s.lastError ? `failed: ${esc(s.lastError)}` : 'ok'})` : 'never'
+    ? `every ${formatDuration(s.every * 1000)}, backed off from ${formatDuration(s.base * 1000)} after ${plural(s.idleTicks, 'quiet poll')} (max ${formatDuration(s.max * 1000)})`
+    : `every ${formatDuration(s.base * 1000)}`
+  const next = s.nextPollAt > now ? `in ${formatDuration(s.nextPollAt - now, { round: Math.ceil })}` : 'now'
+  const last = s.lastPollAt ? `${formatAgo(s.lastPollAt, now)} (${s.lastError ? `failed: ${esc(s.lastError)}` : 'ok'})` : 'never'
   return [
     `${repoLink(s.name)}: ${s.events.join(', ')}`,
     `Polling: ${pace}`,
-    `Last poll: ${last}, next ${next}, last post ${s.lastPostAt ? ago(s.lastPostAt, now) : 'never'}`
+    `Last poll: ${last}, next ${next}, last post ${s.lastPostAt ? formatAgo(s.lastPostAt, now) : 'never'}`
   ].join('\n')
 }
 
@@ -731,7 +722,7 @@ export default async (robot: Robot) => {
     cursor.nextPollAt = cursor.nextPollAt > now ? Math.min(cursor.nextPollAt, now + base * 1000) : now + base * 1000
     setCursor(key, cursor)
 
-    await res.send(`Following ${repoLink(name)} here: ${events.join(', ')} (checking every ${formatDuration(base)}). \`${robot.name} github poll\` checks right away.`)
+    await res.send(`Following ${repoLink(name)} here: ${events.join(', ')} (checking every ${formatDuration(base * 1000)}). \`${robot.name} github poll\` checks right away.`)
   })
 
   robot.respond(/github unsubscribe\s+(\S+)(.*)$/i, async res => {

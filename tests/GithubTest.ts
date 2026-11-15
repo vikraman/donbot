@@ -137,11 +137,6 @@ describe('Github helpers', () => {
     assert.strictEqual(Github.formatApiStatus({ authed: true, rate, pausedUntil: rate.reset }, START), 'GitHub API: token, 2/5000 requests left, resets 13:00 UTC, paused until 13:00 UTC')
   })
 
-  it('formats durations', () => {
-    assert.strictEqual(Github.formatDuration(60), '1m')
-    assert.strictEqual(Github.formatDuration(3600), '1h')
-    assert.strictEqual(Github.formatDuration(5400), '1h30m')
-  })
 
   it('maps events to categories', () => {
     assert.strictEqual(Github.categoryOf(issue(1, 't')), 'issues')
@@ -423,7 +418,7 @@ describe('Github testing Hubot scripts', () => {
     // quiet polls at 1m, 3m, 7m, 15m; 16m caps to 10m
     await advance(7 * 60_000)
     await say(state.robot, 'github subscriptions')
-    assert.match(texts()[0] || '', /\nPolling: every 8m, backed off from 1m after 3 quiet polls \(max 10m\)\nLast poll: 0s ago \(ok\), next in 8m, last post never\n/)
+    assert.match(texts()[0] || '', /\nPolling: every 8m, backed off from 1m after 3 quiet polls \(max 10m\)\nLast poll: just now \(ok\), next in 8m, last post never\n/)
     await advance(9 * 60_000)
     await say(state.robot, 'github subscriptions')
     assert.match(texts()[0] || '', /\nPolling: every 10m, backed off from 1m after 4 quiet polls \(max 10m\)\n/)
@@ -432,7 +427,7 @@ describe('Github testing Hubot scripts', () => {
     await advance(9 * 60_000)
     assert.strictEqual(texts().length, 1)
     await say(state.robot, 'github subscriptions')
-    assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: 0s ago \(ok\), next in 1m, last post 0s ago\n/)
+    assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: just now \(ok\), next in 1m, last post just now\n/)
   })
 
   it('resets the backoff on restart', async () => {
@@ -446,7 +441,7 @@ describe('Github testing Hubot scripts', () => {
     state.robot.brain.emit('close')
     state.robot.brain.emit('connected')
     await say(state.robot, 'github subscriptions')
-    assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: 0s ago \(ok\), next in 1m,/)
+    assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: just now \(ok\), next in 1m,/)
     repo.events.push(issue(8, 'after restart'))
     await advance(60_000)
     assert.match(texts()[0] || '', /opened issue \[#8 after restart\]/)
@@ -476,7 +471,7 @@ describe('Github testing Hubot scripts', () => {
     repo.status = 502
     await advance(120_000)
     await say(state.robot, 'github status')
-    assert.match(texts()[0] || '', /\nLast poll: 2m ago \(failed: events: GitHub said 502\), next in 15s, last post 7m ago\n/)
+    assert.match(texts()[0] || '', /\nLast poll: 1m 45s ago \(failed: events: GitHub said 502\), next in 15s, last post 7m ago\n/)
     repo.status = undefined
     gh.calls.length = 0
     mock.method(global, 'fetch', async () => new Response('[]', { status: 200, headers: { 'x-ratelimit-limit': '5000', 'x-ratelimit-remaining': '2', 'x-ratelimit-reset': String(START / 1000 + 3600) } }))

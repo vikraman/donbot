@@ -13,6 +13,7 @@
 
 import type { Robot, Response } from 'hubot'
 
+import { formatDuration } from './lib/duration.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
 import { randomId } from './lib/random.ts'
@@ -84,17 +85,6 @@ const resolveTarget = (robot: Robot, res: Response, who: string): Target => {
   return sole ? { id: sole.id, name: sole.name } : { name }
 }
 
-const formatRemaining = (ms: number): string => {
-  const totalSeconds = Math.max(Math.round(ms / 1000), 0)
-  const h = Math.floor(totalSeconds / 3600)
-  const m = Math.floor((totalSeconds % 3600) / 60)
-  const s = totalSeconds % 60
-  const parts = []
-  if (h > 0) parts.push(`${h}h`)
-  if (m > 0) parts.push(`${m}m`)
-  if (h === 0 && m === 0) parts.push(`${s}s`)
-  return parts.join(' ')
-}
 
 const handleList = async (robot: Robot, res: Response, { mineOnly }: { mineOnly: boolean }) => {
   const reminders = robot.brain.get<Reminder[]>(REMINDERS_KEY) || []
@@ -111,7 +101,7 @@ const handleList = async (robot: Robot, res: Response, { mineOnly }: { mineOnly:
     return
   }
 
-  const lines = pending.map(r => `in ${formatRemaining(r.dueAt - Date.now())} for ${mentionForReminder(r)}: ${r.message}`)
+  const lines = pending.map(r => `in ${formatDuration(r.dueAt - Date.now(), { round: Math.ceil })} for ${mentionForReminder(r)}: ${r.message}`)
   await res.send(lines.join('\n'))
 }
 

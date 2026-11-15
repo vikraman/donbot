@@ -11,16 +11,8 @@ import type { Robot } from 'hubot'
 
 import hubotPackage from 'hubot/package.json' with { type: 'json' }
 
-const formatUptime = (seconds: number): string => {
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = Math.floor(seconds % 60)
-  const parts = []
-  if (d > 0) parts.push(`${d}d`)
-  parts.push(`${h}h`, `${m}m`, `${s}s`)
-  return parts.join(' ')
-}
+import { formatDuration } from './lib/duration.ts'
+
 
 const redisHost = () => {
   const url = process.env.REDIS_URL || process.env.REDISTOGO_URL || process.env.REDISCLOUD_URL || process.env.BOXEN_REDIS_URL
@@ -76,7 +68,7 @@ const discordInfo = (robot: Robot): string | null => {
   const users = client.users && client.users.cache ? client.users.cache.size : 'unknown'
   const ping = client.ws && typeof client.ws.ping === 'number' ? `${client.ws.ping}ms` : 'unknown'
   const wsStatus = client.ws && typeof client.ws.status === 'number' ? WS_STATUS[client.ws.status] || `code ${client.ws.status}` : 'unknown'
-  const connUptime = typeof client.uptime === 'number' ? formatUptime(client.uptime / 1000) : 'unknown'
+  const connUptime = typeof client.uptime === 'number' ? formatDuration(client.uptime, { units: 3 }) : 'unknown'
 
   return [
     `Discord: logged in as ${tag}`,
@@ -87,12 +79,12 @@ const discordInfo = (robot: Robot): string | null => {
 
 export default async (robot: Robot) => {
   robot.respond(/uptime$/i, async res => {
-    await res.send(`Uptime: ${formatUptime(process.uptime())}`)
+    await res.send(`Uptime: ${formatDuration(process.uptime() * 1000)}`)
   })
 
   robot.respond(/(?:status|health(?:check)?|how are you(?: doing| feeling)?)(\s+verbose|\s+detailed)?$/i, async res => {
     const verbose = Boolean(res.match[1])
-    const uptime = formatUptime(process.uptime())
+    const uptime = formatDuration(process.uptime() * 1000, { units: verbose ? 3 : 2 })
     const brain = brainDetails(robot)
 
     if (!verbose) {

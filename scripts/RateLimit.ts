@@ -14,6 +14,7 @@
 import type { Robot, MiddlewareContext } from 'hubot'
 
 import { entriesWithPrefix } from './lib/brainScan.ts'
+import { formatDuration } from './lib/duration.ts'
 import { mentionFor } from './lib/mention.ts'
 import { pick } from './lib/random.ts'
 
@@ -32,12 +33,6 @@ const parseRateKeySuffix = (suffix: string): { userId: string, room: string } | 
   return { userId: suffix.slice(0, sep), room: suffix.slice(sep + 1) }
 }
 
-const formatDuration = (ms: number): string => {
-  const totalSeconds = Math.max(Math.ceil(ms / 1000), 0)
-  const m = Math.floor(totalSeconds / 60)
-  const s = totalSeconds % 60
-  return m > 0 ? `${m}m ${s}s` : `${s}s`
-}
 
 const roomName = (robot: Robot, room: string): string => {
   const client = robot.adapter && robot.adapter.client
@@ -149,7 +144,7 @@ export default async (robot: Robot) => {
     const lines = limited.map(({ userId, room, state }) => {
       const user = robot.brain.data.users && robot.brain.data.users[userId]
       const mention = mentionFor({ id: userId, name: user && user.name })
-      return `${mention} in ${roomName(robot, room)}: ${formatDuration(state.dismissedUntil - now)} left (offense #${state.offenseCount})`
+      return `${mention} in ${roomName(robot, room)}: ${formatDuration(state.dismissedUntil - now, { round: Math.ceil })} left (offense #${state.offenseCount})`
     })
     await res.send(lines.join('\n'))
   })

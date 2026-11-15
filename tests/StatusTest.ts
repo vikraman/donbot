@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
 import type { DiscordClient } from 'hubot'
@@ -55,12 +55,22 @@ describe('Status testing Hubot scripts', () => {
     await robot.adapter.say(user, '@Dumbotheelephant how are you', 'test-room')
     assert.match(sent[0]!, /^Uptime: .+ \| Brain: connected \| All good\.$/)
   })
+  it('should show seconds in uptime only when verbose', async () => {
+    const { robot } = state
+    mock.method(process, 'uptime', () => 11567.9)
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant status', 'test-room')
+    await robot.adapter.say(user, '@Dumbotheelephant status verbose', 'test-room')
+    assert.match(sent[0]!, /^Uptime: 3h 12m \|/)
+    assert.match(sent[1]!, /^Uptime: 3h 12m 47s\n/)
+  })
   it('should report uptime on its own with the uptime command', async () => {
     const { robot } = state
     const user = brainUser(robot, 'test-user', 'test user')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant uptime', 'test-room')
-    assert.match(sent[0]!, /^Uptime: \d+h \d+m \d+s$/)
+    assert.match(sent[0]!, /^Uptime: \d+[dhms]( \d+[dhms])?$/)
   })
   it('should not include discord info in the simple status', async () => {
     const { robot } = state
@@ -84,14 +94,14 @@ describe('Status testing Hubot scripts', () => {
       channels: { cache: { size: 12 } },
       users: { cache: { size: 50 } },
       ws: { ping: 42, status: 0 },
-      uptime: 90000
+      uptime: 11_567_000
     } as unknown as DiscordClient
     const user = brainUser(robot, 'test-user', 'test user')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant status verbose', 'test-room')
     assert.match(sent[0]!, /Discord: logged in as donbot#1234/)
     assert.match(sent[0]!, /Servers: 3, channels: 12, cached users: 50/)
-    assert.match(sent[0]!, /Gateway: Ready, ping 42ms, connected 0h 1m 30s/)
+    assert.match(sent[0]!, /Gateway: Ready, ping 42ms, connected 3h 12m 47s/)
   })
   it('should handle a discord client missing optional fields gracefully', async () => {
     const { robot } = state
