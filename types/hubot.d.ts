@@ -133,7 +133,7 @@ declare module 'hubot' {
 
   export interface DiscordChannel {
     name?: string
-    send(content: string): Promise<DiscordMessage>
+    send(content: string | { content: string; flags?: number; allowedMentions?: { parse: string[] } }): Promise<DiscordMessage>
     messages: { fetch(query: string | { message: string; cache?: boolean }): Promise<DiscordMessage> }
   }
 
