@@ -619,6 +619,16 @@ export default async (robot: Robot) => {
   robot.brain.on('connected', () => {
     if (timer) return
     if (!config().token) robot.logger.warn('github: no GITHUB_TOKEN; polling is limited to 60 requests an hour')
+    // a restart shouldn't inherit a long backoff
+    const subs = getSubs()
+    const now = Date.now()
+    for (const key of Object.keys(subs)) {
+      const cursor = getCursor(key)
+      if (!cursor) continue
+      cursor.idleTicks = 0
+      cursor.nextPollAt = Math.min(cursor.nextPollAt, now + baseSeconds(key, cursor, subs) * 1000)
+      setCursor(key, cursor)
+    }
     timer = setInterval(() => { tick() }, TICK_MS)
     timer.unref()
   })

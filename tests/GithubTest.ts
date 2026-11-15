@@ -435,6 +435,23 @@ describe('Github testing Hubot scripts', () => {
     assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: 0s ago \(ok\), next in 1m, last post 0s ago\n/)
   })
 
+  it('resets the backoff on restart', async () => {
+    const repo = gh.add('Octo/Demo')
+    await say(state.robot, 'github subscribe octo/demo issues')
+    take()
+    // quiet polls at 1m, 3m, 7m, 15m
+    await advance(15 * 60_000)
+    await say(state.robot, 'github subscriptions')
+    assert.match(texts()[0] || '', /\nPolling: every 16m, backed off from 1m after 4 quiet polls/)
+    state.robot.brain.emit('close')
+    state.robot.brain.emit('connected')
+    await say(state.robot, 'github subscriptions')
+    assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: 0s ago \(ok\), next in 1m,/)
+    repo.events.push(issue(8, 'after restart'))
+    await advance(60_000)
+    assert.match(texts()[0] || '', /opened issue \[#8 after restart\]/)
+  })
+
   it('stretches the interval without a token', async () => {
     delete process.env.GITHUB_TOKEN
     gh.add('Octo/Demo')
