@@ -40,6 +40,8 @@ describe('agda index', () => {
     assert.strictEqual(ascii('∥_∥₁'), '||_||1')
     assert.strictEqual(ascii('isPropΣ'), 'isPropSigma')
     assert.strictEqual(ascii('_⁻¹'), '_-1')
+    // ∙ composes like ∘, · multiplies
+    assert.strictEqual(ascii('p ∙ q ∘ f · g'), 'p . q . f * g')
   })
 
   describe('names', () => {
@@ -291,6 +293,11 @@ describe('agda index', () => {
     it('ranks instantiated copies after the definitions they come from', () => {
       setIndex([file('x', [{ ...entry('sym', 'Data.List.Relation.Binary.Equality.Propositional._'), copy: true }, entry('sym', 'Relation.Binary.PropositionalEquality.Core')])])
       assert.deepStrictEqual(names(lookupName('sym')), ['Relation.Binary.PropositionalEquality.Core.sym', 'Data.List.Relation.Binary.Equality.Propositional.sym'])
+    })
+
+    it('reads (p ⁻¹) ⁻¹ as p ⁻¹ ⁻¹', () => {
+      setIndex([file('x', [{ ...entry('symInvo', 'Cubical.Foundations.GroupoidLaws'), type: '{x y : A} (p : x ≡ y) → p ≡ ((p ⁻¹) ⁻¹)' }])])
+      assert.deepStrictEqual(names(searchType('p = p -1 -1')), ['Cubical.Foundations.GroupoidLaws.symInvo'])
     })
 
     it('keeps one copy of agda builtins', () => {

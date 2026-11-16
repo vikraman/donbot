@@ -70,7 +70,7 @@ const SYMBOLS: Record<string, string> = {
   '×': '*', '⊎': '|+|', 'Σ': 'Sigma', 'Π': 'Pi', '∥': '||', '∙': '.', '∘': '.', '⊔': '\\/',
   '≤': '<=', '≥': '>=', '¬': '~', '∀': 'forall', '∃': 'exists', 'λ': '\\',
   '⊤': 'Top', '⊥': 'Bot', '∈': '<-', '∉': '/<-', '∷': '::', '⟨': '<', '⟩': '>', '∞': 'inf',
-  '∧': '/\\', '∨': '\\/', '⊆': '<:=', '⊂': '<:', '∪': '\\/', '∩': '/\\', '⋆': '*', '·': '.',
+  '∧': '/\\', '∨': '\\/', '⊆': '<:=', '⊂': '<:', '∪': '\\/', '∩': '/\\', '⋆': '*', '·': '*',
   '⁻': '-', '−': '-', '′': "'", '″': "''"
 }
 
@@ -204,6 +204,9 @@ const splitTop = (toks: string[], sep: string): string[][] => {
 
 const SYMBOLIC = /^[^\p{L}\p{N}[\]]+$/u
 
+// ⁻¹ folded
+const POSTFIX = /^-\d+$/
+
 const operand = (t: string | undefined): boolean => t === undefined || SYMBOLIC.test(t)
 
 const RELATIONS = new Set(['->', '=', '/=', '~=', '=~', '~~', '<->', '=>', '<=', '>=', '<', '>', ':'])
@@ -235,7 +238,10 @@ const tidy = (toks: string[]): string[] => {
     const j = group(out, i)
     const inner = out.slice(i + 1, j)
     const whole = i === 0 && j === out.length - 1
-    if (whole || j === i + 2 || (operand(out[i - 1]) && operand(out[j + 1]) && topLevel(inner, t => RELATIONS.has(t)).length === 0)) {
+    // postfix binds tightest, (p ⁻¹) is p ⁻¹
+    const n = inner.length > 0 ? atom(inner) : 0
+    const postfixed = n > 0 && n < inner.length && inner.slice(n).every(t => POSTFIX.test(t))
+    if (whole || postfixed || j === i + 2 || (operand(out[i - 1]) && operand(out[j + 1]) && topLevel(inner, t => RELATIONS.has(t)).length === 0)) {
       out.splice(j, 1)
       out.splice(i--, 1)
     }
