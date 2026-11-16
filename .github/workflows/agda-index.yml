@@ -1,0 +1,159 @@
+name: agda index
+
+# builds the cubical and stdlib search index
+# every 6 days to keep cache alive
+on:
+  schedule:
+    - cron: '17 4 */6 * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: publish even if nothing changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}
+
+env:
+  GHC_VERSION: 9.12.2
+  CABAL_VERSION: 3.16.0.0
+  AGDA_VERSION: 2.9.0
+  TAG: agda-index
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/checkout@v7
+        with:
+          repository: agda/cubical
+          path: cubical
+
+      - uses: actions/checkout@v7
+        with:
+          repository: agda/agda-stdlib
+          path: stdlib
+
+      # skip if libraries, agda and the indexer are unchanged
+      - name: Check for changes
+        id: commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cubical=$(git -C cubical rev-parse HEAD)
+          stdlib=$(git -C stdlib rev-parse HEAD)
+          stamp="cubical $cubical stdlib $stdlib agda $AGDA_VERSION indexer ${{ hashFiles('agda-index/AgdaIndex.hs') }}"
+          {
+            echo "cubical=$cubical"
+            echo "stdlib=$stdlib"
+            echo "stamp=$stamp"
+          } >> "$GITHUB_OUTPUT"
+          last=$(gh release view "$TAG" --json body -q .body 2>/dev/null || true)
+          if [ "$last" = "$stamp" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache keys
+        id: keys
+        run: |
+          echo "cabal=cabal-$GHC_VERSION-$AGDA_VERSION-${{ hashFiles('agda-index/AgdaIndex.hs') }}" >> "$GITHUB_OUTPUT"
+          echo "agdai=agdai-$AGDA_VERSION-${{ steps.commits.outputs.cubical }}-${{ steps.commits.outputs.stdlib }}" >> "$GITHUB_OUTPUT"
+
+      - uses: haskell-actions/setup@v2
+        if: steps.commits.outputs.skip != 'true'
+        with:
+          ghc-version: ${{ env.GHC_VERSION }}
+          cabal-version: ${{ env.CABAL_VERSION }}
+          cabal-update: true
+
+      # skipped runs only look up, which keeps the caches from expiring
+      - name: Restore cabal cache
+        id: cabal
+        uses: actions/cache/restore@v4
+        with:
+          lookup-only: ${{ steps.commits.outputs.skip == 'true' }}
+          path: |
+            ~/.cabal/packages
+            ~/.cabal/store
+            ~/.cabal/script-builds
+          key: ${{ steps.keys.outputs.cabal }}
+          restore-keys: cabal-${{ env.GHC_VERSION }}-${{ env.AGDA_VERSION }}-
+
+      - name: Build indexer
+        if: steps.commits.outputs.skip != 'true'
+        run: |
+          cabal build --ghc-options='+RTS -M6G -RTS' agda-index/AgdaIndex.hs
+          echo "AGDA_INDEX=$(cabal list-bin agda-index/AgdaIndex.hs)" >> "$GITHUB_ENV"
+
+      - name: Save cabal cache
+        if: steps.commits.outputs.skip != 'true' && steps.cabal.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cabal/packages
+            ~/.cabal/store
+            ~/.cabal/script-builds
+          key: ${{ steps.keys.outputs.cabal }}
+
+      - name: Restore interface cache
+        uses: actions/cache/restore@v4
+        with:
+          lookup-only: ${{ steps.commits.outputs.skip == 'true' }}
+          path: |
+            cubical/_build
+            stdlib/_build
+            stdlib/doc/_build
+          key: ${{ steps.keys.outputs.agdai }}
+          restore-keys: agdai-${{ env.AGDA_VERSION }}-
+
+      - name: Index cubical
+        if: steps.commits.outputs.skip != 'true'
+        working-directory: cubical
+        run: |
+          ./generate-everything.sh > Cubical/Everything.agda
+          "$AGDA_INDEX" +RTS -M14G -RTS --index \
+            --index-lib=cubical \
+            --index-commit=${{ steps.commits.outputs.cubical }} \
+            --index-url=https://agda.github.io/cubical/ \
+            --index-out=../cubical.json \
+            Cubical/Everything.agda
+
+      - name: Index stdlib
+        if: steps.commits.outputs.skip != 'true'
+        working-directory: stdlib
+        run: |
+          cabal run GenerateEverything -- --out-dir doc
+          cd doc
+          "$AGDA_INDEX" +RTS -M14G -RTS --index \
+            --index-lib=stdlib \
+            --index-commit=${{ steps.commits.outputs.stdlib }} \
+            --index-url=https://agda.github.io/agda-stdlib/master/ \
+            --index-out=../../stdlib.json \
+            Everything.agda
+
+      - name: Save interface cache
+        if: always() && steps.commits.outputs.skip != 'true' && steps.keys.outputs.agdai
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            cubical/_build
+            stdlib/_build
+            stdlib/doc/_build
+          key: ${{ steps.keys.outputs.agdai }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Publish
+        if: steps.commits.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gzip -9 cubical.json stdlib.json
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "agda index" --notes "" --latest=false
+          gh release upload "$TAG" cubical.json.gz stdlib.json.gz --clobber
+          gh release edit "$TAG" --notes "${{ steps.commits.outputs.stamp }}"

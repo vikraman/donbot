@@ -144,3 +144,8 @@ vite.config.ts.timestamp-*
 
 # hubot
 .hubot_history
+
+# agda-index
+agda-index/build/
+agda-index/dist-newstyle/
+*.agdai
