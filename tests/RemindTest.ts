@@ -2,6 +2,7 @@ import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { parseRequest } from '../scripts/Remind.ts'
+import { MAX_PER_PERSON } from '../scripts/Remind.ts'
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
 // mon 2026-11-16 10:00 utc
@@ -189,5 +190,19 @@ describe('Remind testing Hubot scripts', () => {
     assert.equal(robot.brain.get('reminders'), null)
     await tick(80)
     assert.equal(sent[0], '<@bob-id> reminder: legacy')
+  })
+  it('limits reminders per person and hourly repeats for others', async () => {
+    const { robot } = state
+    delete process.env.OWNER_USER_ID
+    brainUser(robot, 'bob-id', 'bob')
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant remind bob every 10 minutes to drink water', 'test-room')
+    assert.equal(sent[0], 'Repeating reminders for someone else can be at most hourly.')
+    await robot.adapter.say(user, '@Dumbotheelephant remind me every 10 minutes to drink water', 'test-room')
+    assert.match(sent[1]!, /^Ok, I'll remind you every 10 minutes/)
+    robot.brain.set('schedule:remind', Array.from({ length: MAX_PER_PERSON }, (_, i) => ({ id: `r${i}`, at: Date.now() + 3_600_000, tz: 'UTC', data: { targetId: 'test-user', targetName: 'x', room: 'other', message: 'm', byId: 'test-user' } })))
+    await robot.adapter.say(user, '@Dumbotheelephant remind me in 5 minutes to stretch', 'test-room')
+    assert.match(sent[2]!, /^You already have 25 reminders set/)
   })
 })

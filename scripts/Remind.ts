@@ -20,11 +20,17 @@ import { mentionFor } from './lib/mention.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import type { Job } from './lib/schedule.ts'
-import { describeRepeat, formatWhen, parseWhen } from './lib/time.ts'
+import { describeRepeat, formatWhen, HOUR_MS, parseWhen } from './lib/time.ts'
 import type { When } from './lib/time.ts'
 import { tzNote, userTz } from './lib/timezone.ts'
 
 const LEGACY_KEY = 'reminders'
+
+// keep one person, or one channel, from burying everyone in reminders
+export const MAX_PER_PERSON = 25
+export const MAX_PER_ROOM = 100
+export const MIN_OTHERS_INTERVAL_MS = HOUR_MS
+const MAX_MESSAGE_LENGTH = 500
 
 interface Reminder {
   targetId?: string
@@ -176,7 +182,24 @@ export default async (robot: Robot) => {
     }
 
     const target = resolveTarget(robot, res, required(res.match, 1))
-    const data: Reminder = { targetId: target.id, targetName: target.name, room: res.message.room, message: parsed.message.trim(), byId: res.message.user.id }
+    const byId = res.message.user.id
+    if (byId !== process.env.OWNER_USER_ID) {
+      const all = reminders.list()
+      if (all.filter(j => j.data.byId === byId).length >= MAX_PER_PERSON) {
+        await res.send(`You already have ${MAX_PER_PERSON} reminders set. Cancel some first (\`${robot.name} list reminders\`).`)
+        return
+      }
+      if (roomJobs(all, res.message.room).length >= MAX_PER_ROOM) {
+        await res.send(`This channel already has ${MAX_PER_ROOM} reminders. Cancel some first.`)
+        return
+      }
+      const repeat = parsed.when.repeat
+      if (target.id !== byId && repeat?.kind === 'interval' && repeat.everyMs < MIN_OTHERS_INTERVAL_MS) {
+        await res.send('Repeating reminders for someone else can be at most hourly.')
+        return
+      }
+    }
+    const data: Reminder = { targetId: target.id, targetName: target.name, room: res.message.room, message: parsed.message.trim().slice(0, MAX_MESSAGE_LENGTH), byId }
     reminders.add({ at: parsed.when.at, tz, repeat: parsed.when.repeat, data })
 
     const whom = target.id === res.message.user.id ? 'you' : mentionOf(data)
