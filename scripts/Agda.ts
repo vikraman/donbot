@@ -123,7 +123,8 @@ export default async (robot: Robot) => {
   }
 
   robot.respond(/agda\s+([\s\S]+?)\s*$/i, async res => {
-    const q = res.match[1]!.replace(/\s+/g, ' ')
+    // discord clients escape markdown, _ arrives as \_
+    const q = res.match[1]!.replace(/\\([_*~`|>[\]])/g, '$1').replace(/\s+/g, ' ')
     if (q.length > MAX_QUERY) {
       await res.send(`That query is too long, keep it under ${MAX_QUERY} characters.`)
       return

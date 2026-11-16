@@ -51,6 +51,13 @@ describe('Agda', () => {
     assert.ok(sent[0]!.startsWith('`isProp→isSet`'))
   })
 
+  it('drops markdown escapes from discord clients', async () => {
+    const name = await ask('agda \\_++\\_')
+    assert.match(name[0]!, /^2 matches for `_\+\+_`:/)
+    const type = await ask('agda isProp A -> \\_')
+    assert.match(type[0]!, /^\d+ matches for `isProp A -> _`:\n`isProp→isSet`/)
+  })
+
   it('refuses very long queries', async () => {
     const sent = await ask(`agda type ${'A -> '.repeat(80)}A`)
     assert.strictEqual(sent[0], 'That query is too long, keep it under 300 characters.')
