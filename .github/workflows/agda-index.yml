@@ -66,6 +66,10 @@ jobs:
           echo "cabal=cabal-$GHC_VERSION-$AGDA_VERSION-${{ hashFiles('agda-index/AgdaIndex.hs') }}" >> "$GITHUB_OUTPUT"
           echo "agdai=agdai-$AGDA_VERSION-${{ steps.commits.outputs.cubical }}-${{ steps.commits.outputs.stdlib }}" >> "$GITHUB_OUTPUT"
 
+      # one place for packages, store and script builds, matching the cached paths
+      - name: Pin cabal dir
+        run: echo "CABAL_DIR=$HOME/.cabal" >> "$GITHUB_ENV"
+
       - uses: haskell-actions/setup@v2
         if: steps.commits.outputs.skip != 'true'
         with:
@@ -92,8 +96,17 @@ jobs:
           cabal build --ghc-options='+RTS -M6G -RTS' agda-index/AgdaIndex.hs
           echo "AGDA_INDEX=$(cabal list-bin agda-index/AgdaIndex.hs)" >> "$GITHUB_ENV"
 
+      # saved once agda is built, even if the script itself fails
+      - name: Check agda build
+        id: deps
+        if: always() && steps.commits.outputs.skip != 'true'
+        run: |
+          if ls -d "$CABAL_DIR"/store/*/Agda-"$AGDA_VERSION"-* >/dev/null 2>&1; then
+            echo "agda=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Save cabal cache
-        if: steps.commits.outputs.skip != 'true' && steps.cabal.outputs.cache-hit != 'true'
+        if: always() && steps.deps.outputs.agda == 'true' && steps.cabal.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
