@@ -1,5 +1,5 @@
 {- cabal:
-build-depends: base, Agda ==2.9.0, aeson, bytestring, containers, text, unordered-containers
+build-depends: base, Agda ==2.9.0, aeson, bytestring, containers, deepseq, text, unordered-containers
 default-language: GHC2021
 ghc-options: -O1 -rtsopts "-with-rtsopts=-A64m"
 -}
