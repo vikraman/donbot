@@ -82,6 +82,11 @@ declare module 'hubot' {
 
   export type Middleware = (context: MiddlewareContext) => boolean | Promise<boolean>
 
+  export interface ListenerMiddlewareContext {
+    listener: { regex?: RegExp }
+    response: Response
+  }
+
   export class Robot {
     constructor (adapter: string | AdapterModule, httpd?: boolean, name?: string, alias?: string)
 
@@ -97,6 +102,7 @@ declare module 'hubot' {
     respond(regex: RegExp, callback: (res: Response) => unknown): void
     hear(regex: RegExp, callback: (res: Response) => unknown): void
     receiveMiddleware(middleware: Middleware): void
+    listenerMiddleware(middleware: (context: ListenerMiddlewareContext) => boolean | Promise<boolean>): void
     messageRoom(room: string, message: string): Promise<void>
 
     // used by the test harness, not scripts
