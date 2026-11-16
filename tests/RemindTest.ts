@@ -106,7 +106,16 @@ describe('Remind testing Hubot scripts', () => {
     const user = brainUser(robot, 'test-user', 'test user')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant remind nobody-known in 5 minutes to stretch', 'test-room')
-    assert.equal(sent[0], "Ok, I'll remind @nobody-known in 5 minutes.")
+    assert.equal(sent[0], "Ok, I'll remind @\u200bnobody-known in 5 minutes.")
+  })
+  it('never turns an unknown name into an @everyone, @here or role ping', async () => {
+    const { robot } = state
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant remind everyone in 5 minutes to stretch', 'test-room')
+    await robot.adapter.say(user, '@Dumbotheelephant remind <@&42> in 5 minutes to stretch', 'test-room')
+    assert.equal(sent[0], "Ok, I'll remind @\u200beveryone in 5 minutes.")
+    assert.doesNotMatch(sent[1]!, /<@&42>/)
   })
   it('lists reminders in this room, numbered by due time', async () => {
     const { robot } = state
