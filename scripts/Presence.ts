@@ -5,7 +5,8 @@
 import type { Robot } from 'hubot'
 
 import { formatDuration } from './lib/duration.ts'
-import { pick, shuffle } from './lib/random.ts'
+import { bagPick } from './lib/lines.ts'
+import { shuffle } from './lib/random.ts'
 
 const ROTATE_MS = 15 * 60 * 1000
 const REMINDERS_KEY = 'schedule:remind'
@@ -46,7 +47,7 @@ const buildStatuses = (robot: Robot): (() => string | null)[] => [
     const count = users.length
     return count === 1 ? 'Watching over 1 person' : `Watching over ${count} people`
   },
-  () => pick(DONBOT_QUOTES),
+  () => bagPick('presence.quote', DONBOT_QUOTES) ?? null,
   () => {
     const client = robot.adapter && robot.adapter.client
     const count = client && client.guilds && client.guilds.cache ? client.guilds.cache.size : null
@@ -81,7 +82,7 @@ const buildStatuses = (robot: Robot): (() => string | null)[] => [
     return minutes === 1 ? 'Quiet for 1m' : `Quiet for ${minutes}m`
   },
   () => `Today: ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-  () => pick(EMOJI_MOODS)
+  () => bagPick('presence.mood', EMOJI_MOODS) ?? null
 ]
 
 const updatePresence = (robot: Robot) => {

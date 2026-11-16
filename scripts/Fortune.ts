@@ -7,7 +7,7 @@
 
 import type { Robot } from 'hubot'
 
-import { pick } from './lib/random.ts'
+import { bagPick } from './lib/lines.ts'
 
 export default async (robot: Robot) => {
   robot.respond(/fortune$/i, async res => {
@@ -20,7 +20,7 @@ export default async (robot: Robot) => {
 
     const data = await response.text();
     const fortunes = data.split('\n').filter(line => line.trim() !== '');
-    const fortune = pick(fortunes)
+    const fortune = bagPick('fortune', fortunes)
 
     if (!fortune) {
       await res.send(`No fortune found.`)

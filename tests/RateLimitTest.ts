@@ -260,4 +260,20 @@ describe('RateLimit testing Hubot scripts', () => {
     await robot.adapter.say(owner, "@Dumbotheelephant who's rate limited", 'test-room')
     assert.strictEqual(sent.at(-1), 'Nobody in the doghouse right now.')
   })
+  it('does not repeat a dismissal back to back', async () => {
+    const { robot } = state
+    const now = Date.now()
+    const clock = mock.method(Date, 'now', () => now)
+    const user = brainUser(robot, 'pest-id', 'pest')
+    const sent = collect(robot)
+    const dismissals: string[] = []
+    for (let round = 0; round < 6; round++) {
+      clock.mock.mockImplementation(() => now + round * 24 * 3_600_000)
+      const before = sent.length
+      for (let i = 0; i < 6; i++) await robot.adapter.say(user, '@Dumbotheelephant ping', 'test-room')
+      dismissals.push(...sent.slice(before).filter(s => s !== 'pong'))
+    }
+    assert.equal(dismissals.length, 6)
+    dismissals.forEach((line, i) => { if (i) assert.notStrictEqual(line, dismissals[i - 1]) })
+  })
 })

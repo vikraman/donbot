@@ -16,7 +16,8 @@ import type { Robot, MiddlewareContext } from 'hubot'
 import { entriesWithPrefix } from './lib/brainScan.ts'
 import { formatDuration } from './lib/duration.ts'
 import { mentionFor } from './lib/mention.ts'
-import { pick } from './lib/random.ts'
+import { defineLines } from './lib/lines.ts'
+import { userTz } from './lib/timezone.ts'
 
 const WINDOW_MS = 60 * 1000
 const MAX_COMMANDS_PER_WINDOW = 5
@@ -40,15 +41,27 @@ const roomName = (robot: Robot, room: string): string => {
   return (channel && channel.name) ? `#${channel.name}` : room
 }
 
-const DISMISSALS = [
-  "You're startin' to bore me, and I don't like being bored. Get lost.",
-  "That's enough outta you. Go find something useful to do before I lose my patience.",
-  "You keep flashing that mouth around and I'm gonna have to have a word with you. Beat it.",
-  "I got no more time for you today. Go do your job or whatever it is you're supposed to be doing.",
-  "You're testing my patience, and my patience has a real short fuse. Scram.",
-  "Alright, that's it. You're cut off. Go be productive somewhere I can't see you.",
-  "Nobody likes a pest. Go on, get outta here."
-] as const
+const dismissal = defineLines('ratelimit.dismissal', {
+  fallback: [
+    "You're startin' to bore me, and I don't like being bored. Get lost.",
+    "That's enough outta you. Go find something useful to do before I lose my patience.",
+    "You keep flashing that mouth around and I'm gonna have to have a word with you. Beat it.",
+    "I got no more time for you today. Go do your job or whatever it is you're supposed to be doing.",
+    "You're testing my patience, and my patience has a real short fuse. Scram.",
+    "Alright, that's it. You're cut off. Go be productive somewhere I can't see you.",
+    'Nobody likes a pest. Go on, get outta here.',
+    'I gave you an inch, you took a whole ruler. Take five.',
+    "My lawyer says I don't have to answer any more questions. Come back later.",
+    "Easy, chief. Even I need a cigarette break, and I don't smoke.",
+    'The window is closed. Try again when it opens. It opens later.',
+    "You're on the list now. The bad one. Cool it for a bit."
+  ],
+  rare: [
+    '📵 This line has been disconnected by order of the family. Please hang up and try again later.',
+    "🧊 I'm putting you on ice. Don't worry, it's temporary. Probably.",
+    "🎻 Hear that? That's the world's smallest violin, playing just for your rate limit."
+  ]
+})
 
 const escapeRegExp = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -113,7 +126,7 @@ export default async (robot: Robot) => {
       state.dismissedUntil = now + cooldownFor(state.offenseCount)
       state.hits = []
       robot.brain.set(key, state)
-      await context.response.send(pick(DISMISSALS))
+      await context.response.send(dismissal({}, { room: context.response.message.room, tz: userTz(robot, context.response.message.user.id) }))
       return false
     }
 

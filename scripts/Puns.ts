@@ -15,7 +15,9 @@ import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
 import { cooldown } from './lib/cooldown.ts'
 import { sentIds } from './lib/discordMessage.ts'
 import { JARGON } from './lib/punJargon.ts'
+import { bagPick, defineLines } from './lib/lines.ts'
 import { pick, chance } from './lib/random.ts'
+import { valenceOf } from './lib/reactions.ts'
 import { addressesBot, roomToggle } from './lib/roomToggle.ts'
 import { scoreTone } from './lib/sentiment.ts'
 import { isRareWord, wordRank } from './lib/wordRarity.ts'
@@ -43,12 +45,6 @@ const DAD_MIN_RANK = 2000
 const DISABLED_KEY = 'puns:disabled'
 const SENT_KEY = 'puns:sent'
 
-export const LIKE_EMOJI = new Set([
-  '😂', '🤣', '😆', '😹', '😄', '😁', '😅', '💀', '🥁', '👍', '❤️', '🔥', '💯', '👏', '🙌'
-])
-export const DISLIKE_EMOJI = new Set([
-  '👎', '🙄', '😒', '😑', '😐', '🤦', '🤦‍♂️', '🤦‍♀️', '🍅', '🫤', '😬', '🤢', '🤮', '😴'
-])
 
 export type PunKind = 'her' | 'em' | 'dad' | 'attitude' | 'intended' | 'jargon'
 
@@ -70,45 +66,118 @@ interface PunRecord {
   votes: Record<string, 1 | -1>
 }
 
-const KNEW_HER = [
-  'I barely knew her!',
-  'But I barely know her!',
-  'I just met her!',
-  'But I only just met her!',
-  'But I barely even know her!'
-] as const
+const knewHerLine = defineLines('puns.knew-her', {
+  fallback: [
+    '{word}? I barely knew her!',
+    '{word}? But I barely know her!',
+    '{word}? I just met her!',
+    '{word}? But I only just met her!',
+    '{word}? But I barely even know her!',
+    '{word}? We only spoke the once!',
+    "{word}? I'd hardly call us close.",
+    "{word}? We're not on a first-name basis.",
+    '{word}? I knew her for, like, a week.',
+    "{word}? Never heard of her. Okay, once.",
+    "{word}? She doesn't call, she doesn't write.",
+    '{word}? We met at a conference, it was brief.'
+  ],
+  rare: [
+    "{word}? I barely knew her! And now she's gone. Taken from us by a pun. 🕯️",
+    "{word}? Knew her? I *married* her. Okay, no, I barely knew her.",
+    '{word}? I barely knew her! (This joke has been certified fresh by nobody.)'
+  ]
+})
 
-const KNEW_EM = [
-  'I barely knew {}!',
-  'I hardly knew {}!',
-  'But I only just met {}!'
-] as const
+const knewEmLine = defineLines('puns.knew-em', {
+  fallback: [
+    "{word}? I barely knew {pronoun}!",
+    "{word}? I hardly knew {pronoun}!",
+    "{word}? But I only just met {pronoun}!",
+    "{word}? I barely even knew {pronoun}!",
+    "{word}? Knew {pronoun}? Barely!",
+    "{word}? We've only met the once, me and {pronoun}.",
+    "{word}? I'd hardly say I knew {pronoun}.",
+    "{word}? Never really got to know {pronoun}.",
+    "{word}? Me and {pronoun}? Ships in the night.",
+    "{word}? I knew {pronoun} for about five minutes.",
+    "{word}? Can't say I knew {pronoun} well.",
+    "{word}? I met {pronoun} at a party, once."
+  ],
+  rare: [
+    "{word}? I barely knew {pronoun}! May {pronoun} rest in peace. 🪦",
+    "{word}? I knew {pronoun} better than anyone. Which is to say, barely."
+  ]
+})
 
-// {} is the name, {bot} the bot
-const DAD = [
-  "Hi {}, I'm {bot}!",
-  "Nice to meet you, {}. I'm {bot}.",
-  "Hello {}, I'm {bot}. Have we met?",
-  "Hi {}! I'm dad. Wait, no, I'm {bot}."
-] as const
+// the last line is test-pinned
+const dadLine = defineLines('puns.dad', {
+  fallback: [
+    "Hi {name}, I'm {bot}!",
+    "Nice to meet you, {name}. I'm {bot}.",
+    "Hello {name}, I'm {bot}. Have we met?",
+    "Hi {name}! Love the name. I'm {bot}.",
+    "Welcome, {name}. I'm {bot}, and this is my channel.",
+    "Pleased to make your acquaintance, {name}. {bot}, at your service.",
+    "Hey {name}, {bot} here. Funny, you don't look {name}.",
+    "{name}? Lovely to meet you. Name's {bot}.",
+    "Oh hi {name}! I'm {bot}. We should hang out.",
+    "{name}, huh? Odd name, but I'll allow it. I'm {bot}.",
+    "Good {daypart}, {name}. I'm {bot}.",
+    "Hi {name}! I'm dad. Wait, no, I'm {bot}."
+  ],
+  rare: [
+    "Hi {name}, I'm {bot}! Wait, did your parents really name you that?",
+    "🎩 Ladies and gentlemen, introducing: {name}! And I'm {bot}, your host for the evening.",
+    "Hi {name}, I'm {bot}. I've been waiting my whole runtime to say that."
+  ]
+})
 
-const ATTITUDE = [
-  'Not with that attitude!',
-  "Not with that attitude you can't.",
-  'Have you tried believing in yourself?'
-] as const
+const attitudeLine = defineLines('puns.attitude', {
+  fallback: [
+    'Not with that attitude!',
+    "Not with that attitude you can't.",
+    'Have you tried believing in yourself?',
+    "Can't? Or won't? 🤨",
+    "Sounds like a can-do situation to me. You're just early.",
+    'The word you are looking for is "yet".',
+    "That's what they said about sliced bread.",
+    "Not yet, you mean.",
+    "Bold of you to assume the universe agrees.",
+    'Agree to disagree.',
+    "Everybody can't until they can.",
+    "With that attitude? No. With a snack and a nap? Maybe."
+  ],
+  rare: [
+    "🎤 Somebody once told me you can't. Somebody was wrong.",
+    "Can't is just can with a little t-rex attached. Defeat the t-rex. 🦖"
+  ]
+})
 
 // "can't" phrases that aren't defeat
 const ATTITUDE_EXCEPTIONS = /^(?:wait|believe|thank|complain|stop laughing)\b/i
 // sounds like real distress, not a joke setup
 const ATTITUDE_DISTRESS = /\b(?:anymore|any more|cope|handle|deal|breathe|go on|keep going|take (?:it|this|much)|sleep|eat|stop crying)\b/i
 
-const INTENDED = [
-  'Pun appreciated.',
-  'Pun detected. Pun respected.',
-  "Intended or not, I'm counting it.",
-  'Too late, I saw it.'
-] as const
+const intendedLine = defineLines('puns.intended', {
+  fallback: [
+    'Pun appreciated.',
+    'Pun detected. Pun respected.',
+    "Intended or not, I'm counting it.",
+    'Too late, I saw it.',
+    "Sure it wasn't. 😏",
+    "Puns don't happen by accident. I've seen the paperwork.",
+    'One point to you.',
+    "Unintended puns are the best kind. Allegedly unintended.",
+    'The pun police have been notified. They loved it.',
+    "Noted for the record: you're hilarious.",
+    "Accidental pun? There's no such thing.",
+    "That's going in the pun jar."
+  ],
+  rare: [
+    '🏅 Pun of the day, awarded by me, the sole judge.',
+    "🚨 Pun alert! This is not a drill. Well, it's a little bit of a drill."
+  ]
+})
 
 export interface Pun {
   kind: PunKind
@@ -132,7 +201,7 @@ const knewHer = (text: string): Pun[] =>
   [...text.matchAll(/\b([A-Za-z]{4,9}(?:or|er))s?\b/g)]
     .map(m => m[1]!)
     .filter(isRareWord)
-    .map(w => ({ kind: 'her' as const, word: w.toLowerCase(), text: () => `${capitalize(w)}? ${pick(KNEW_HER)}` }))
+    .map(w => ({ kind: 'her' as const, word: w.toLowerCase(), text: () => knewHerLine({ word: capitalize(w) }) }))
 
 const knewEm = (text: string): Pun[] =>
   [...text.matchAll(/\b([A-Za-z]{3,10}(?:em|om|um|im))s?\b/g)]
@@ -141,7 +210,7 @@ const knewEm = (text: string): Pun[] =>
     .map(w => ({
       kind: 'em' as const,
       word: w.toLowerCase(),
-      text: () => `${capitalize(w)}? ${pick(KNEW_EM).replace('{}', /im$/i.test(w) ? "'im" : "'em")}`
+      text: () => knewEmLine({ word: capitalize(w), pronoun: /im$/i.test(w) ? "'im" : "'em" })
     }))
 
 // whole message must be a short "i'm <word>" or "i am <word>"
@@ -151,7 +220,7 @@ const dadJoke = (text: string, botName: string): Pun[] => {
   const word = m[2]!
   if (wordRank(word) < DAD_MIN_RANK) return []
   const name = capitalize(`${(m[1] ?? '').toLowerCase()}${word.toLowerCase()}`)
-  return [{ kind: 'dad', word: word.toLowerCase(), text: () => pick(DAD).replace('{}', name).replace('{bot}', botName) }]
+  return [{ kind: 'dad', word: word.toLowerCase(), text: () => dadLine({ name, bot: botName }) }]
 }
 
 // short "i can't <x>" that doesn't sound upset
@@ -159,18 +228,18 @@ const attitude = (text: string): Pun[] => {
   const m = /^\s*i\s+(?:can(?:'|’)?t|cannot|can not)\s+([a-z' ]{1,40}?)[\s.!]*$/i.exec(text)
   if (!m || m[1]!.trim().split(/\s+/).length > 5 || ATTITUDE_EXCEPTIONS.test(m[1]!) || ATTITUDE_DISTRESS.test(m[1]!)) return []
   if (scoreTone(text).score < 0) return []
-  return [{ kind: 'attitude', word: 'attitude', text: () => pick(ATTITUDE) }]
+  return [{ kind: 'attitude', word: 'attitude', text: () => attitudeLine() }]
 }
 
 const intended = (text: string): Pun[] =>
   /\bpuns? (?:[a-z]+ ){0,3}intended\b/i.test(text)
-    ? [{ kind: 'intended', word: 'intended', text: () => pick(INTENDED) }]
+    ? [{ kind: 'intended', word: 'intended', text: () => intendedLine() }]
     : []
 
 const jargon = (text: string): Pun[] =>
   Object.entries(JARGON)
     .filter(([, { pattern }]) => pattern.test(text))
-    .map(([word, { replies }]) => ({ kind: 'jargon' as const, word, text: () => pick(replies) }))
+    .map(([word, { replies }]) => ({ kind: 'jargon' as const, word, text: () => bagPick(`puns.jargon.${word}`, replies)! }))
 
 // every pun the message allows
 export const findPuns = (text: string, botName: string): Pun[] => {
@@ -210,7 +279,7 @@ export const feedbackFor = (records: readonly PunRecord[], room: string, kind: P
 export const chanceFor = (feedback: number): number =>
   clamp(PUN_CHANCE * FEEDBACK_SPREAD ** feedback, MIN_CHANCE, MAX_CHANCE)
 
-const signOf = (emoji: string): 1 | -1 | 0 => LIKE_EMOJI.has(emoji) ? 1 : DISLIKE_EMOJI.has(emoji) ? -1 : 0
+const signOf = (emoji: string): 1 | -1 | 0 => valenceOf(emoji)
 
 export default async (robot: Robot) => {
   const chanceIn = (room: string, kind: PunKind): number =>

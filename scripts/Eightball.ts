@@ -7,7 +7,7 @@
 
 import type { Robot } from 'hubot'
 
-import { pick } from './lib/random.ts'
+import { bagPick } from './lib/lines.ts'
 
 const answers = [
   'It is certain.',
@@ -34,6 +34,7 @@ const answers = [
 
 export default async (robot: Robot) => {
   robot.respond(/(?:8ball|8-ball|magic 8 ?ball)\s+(.+)$/i, async res => {
-    await res.send(pick(answers))
+    // the canonical twenty, no repeats until all are used
+    await res.send(bagPick('eightball', answers)!)
   })
 }

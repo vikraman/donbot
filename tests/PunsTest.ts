@@ -7,12 +7,16 @@ import type { User, DiscordClient } from 'hubot'
 import { setupRobot, brainUser, collect } from './helpers/setup.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
+import { configureLines, resetLines } from '../scripts/lib/lines.ts'
 import { JARGON } from '../scripts/lib/punJargon.ts'
 import {
   findPuns, feedbackFor, chanceFor, PUN_CHANCE, MIN_CHANCE, MAX_CHANCE, PUN_COOLDOWN_MS, REPEAT_WINDOW_MS, FEEDBACK_HALF_LIFE_MS
 } from '../scripts/Puns.ts'
 
+// fresh bags, so each call sees each list's first line
 const texts = (text: string) => {
+  resetLines()
+  configureLines({ extras: false })
   setRandomSource(() => 0)
   const result = findPuns(text, 'donbot').map(p => p.text())
   setRandomSource(null)
@@ -44,6 +48,8 @@ describe('Puns detection', () => {
     }
   })
   it('varies dad-joke phrasing', () => {
+    resetLines()
+    configureLines({ extras: false })
     setRandomSource(c => c - 1)
     assert.deepStrictEqual(findPuns("I'm hungry", 'donbot').map(p => p.text()), ["Hi Hungry! I'm dad. Wait, no, I'm donbot."])
     setRandomSource(null)
@@ -174,7 +180,8 @@ describe('Puns testing Hubot scripts', () => {
     assert.strictEqual(sent.length, 2)
     now += PUN_COOLDOWN_MS
     await say('theorem')
-    assert.deepStrictEqual(sent.at(-1), "Theorem? I barely knew 'em!")
+    // second line of the no-repeat bag
+    assert.deepStrictEqual(sent.at(-1), "Theorem? I hardly knew 'em!")
   })
   it('does not pun the same word twice in a channel within the window', async () => {
     const sent = collect(state.robot)
@@ -208,7 +215,8 @@ describe('Puns testing Hubot scripts', () => {
       await say(`${state.robot.name} puns on`)
       assert.match(sent.at(-1)!, /^Puns on in this channel/)
       await say('functor')
-      assert.strictEqual(sent.at(-1), 'Functor? I barely knew her!')
+      // second knew-her line; the bag doesn't repeat
+      assert.strictEqual(sent.at(-1), 'Functor? But I barely know her!')
     })
     it('reports status with who turned it off', async () => {
       const sent = collect(state.robot)
@@ -340,6 +348,16 @@ describe('Puns reaction feedback', () => {
     const sent = collect(state.robot)
     await say('compressor')
     await say('theorem')
-    assert.deepStrictEqual(sent, ["Theorem? I barely knew 'em!"])
+    assert.strictEqual(sent.length, 1)
+    assert.match(sent[0]!, /^Theorem\? .*'em!$/)
+  })
+  it('does not repeat pun phrasing back to back', async () => {
+    const sent = collect(state.robot)
+    for (let i = 0; i < 24; i++) {
+      now += REPEAT_WINDOW_MS
+      await say('functor')
+    }
+    assert.strictEqual(sent.length, 24)
+    sent.forEach((line, i) => { if (i) assert.notStrictEqual(line, sent[i - 1]) })
   })
 })

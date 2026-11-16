@@ -3,6 +3,7 @@ import { beforeEach, afterEach, mock } from 'node:test'
 import { Robot } from 'hubot'
 import type { User } from 'hubot'
 
+import { configureLines, resetLines } from '../../scripts/lib/lines.ts'
 import { setRandomSource } from '../../scripts/lib/random.ts'
 import dummyRobot from '../doubles/DummyAdapter.ts'
 import type { DummyAdapter } from '../doubles/DummyAdapter.ts'
@@ -31,6 +32,9 @@ export const setupRobot = (scriptFiles: string | string[], { envVars = [], defer
 
   beforeEach(async () => {
     process.env.EXPRESS_PORT = '0'
+    // chance-based line extras off; whimsy tests opt back in
+    resetLines()
+    configureLines({ extras: false, aiAllowed: () => true })
     for (const name of envVars) originalEnv[name] = process.env[name]
     state.robot = new Robot(dummyRobot, true, 'Dumbotheelephant') as TestRobot
     await state.robot.loadAdapter()

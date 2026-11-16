@@ -7,6 +7,7 @@ import type { DiscordClient, Envelope } from 'hubot'
 import * as Github from '../scripts/Github.ts'
 import type { Activity, GhEvent, Run } from '../scripts/Github.ts'
 import { parseRepo } from '../scripts/lib/github.ts'
+import { setRandomSource } from '../scripts/lib/random.ts'
 import type { GithubLog } from '../scripts/Github.ts'
 import { setupRobot, brainUser } from './helpers/setup.ts'
 import type { TestRobot } from './helpers/setup.ts'
@@ -609,6 +610,7 @@ describe('Github testing Hubot scripts', () => {
   })
 
   it('announces merge milestones only when the count is known', async () => {
+    setRandomSource(() => 0)
     const repo = gh.add('Octo/Demo')
     for (let n = 1; n <= 9; n++) repo.prList.push({ number: n, state: 'closed', merged_at: '2026-11-01T00:00:00Z', user: { login: 'bob' } })
     await say(state.robot, 'github subscribe octo/demo prs')
@@ -653,7 +655,7 @@ describe('Github testing Hubot scripts', () => {
     await advance(60_000)
     const out = texts()
     assert.match(out.find(t => t.includes('published release')) || '', /published release \[Big one\]\(<.+>\)\n🚀 .*v1\.2/)
-    assert.match(out.find(t => t.includes('passing again')) || '', /passing again on \[main\].*\) (Nice save!|Back in the green\. 🎉|Crisis averted\.|Green again, well done\.)$/)
+    assert.match(out.find(t => t.includes('passing again')) || '', /passing again on \[main\].*\) \S.*$/)
     assert.deepStrictEqual(logged().map(e => [e.kind, e.actor, e.item ?? null]), [
       ['opened', 'alice', 'issue'], ['closed', 'bob', 'issue'], ['release', 'bob', null], ['ci-fixed', 'carol', null]
     ])
@@ -685,6 +687,7 @@ describe('Github testing Hubot scripts', () => {
   })
 
   it('nudges about prs waiting for review', async () => {
+    setRandomSource(() => 0)
     const repo = gh.add('Octo/Demo')
     await say(state.robot, 'github nudge')
     assert.match(texts()[0] || '', /doesn't follow any repo's PRs/)
@@ -729,5 +732,19 @@ describe('Github testing Hubot scripts', () => {
     // manual nudge ignores the toggle
     await say(state.robot, 'github nudge', 'room-b')
     assert.match(texts('room-b')[0] || '', /#7 PR 7/)
+  })
+
+  it('varies the nudge intro from day to day', async () => {
+    setRandomSource(() => 0)
+    const repo = gh.add('Octo/Demo')
+    repo.prList.push(openPr(6, 4))
+    await say(state.robot, 'github subscribe octo/demo prs')
+    take()
+    const intros: string[] = []
+    for (let i = 0; i < 3; i++) {
+      await say(state.robot, 'github nudge')
+      intros.push((texts()[0] || '').split('\n')[0]!)
+    }
+    assert.deepStrictEqual(intros, ['👀 These PRs are waiting for a review:', '👀 A few PRs could use a reviewer:', '👀 Review-hungry PRs, looking for a kind soul:'])
   })
 })

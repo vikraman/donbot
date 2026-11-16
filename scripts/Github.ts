@@ -29,7 +29,7 @@ import type { LogEntry } from './lib/eventLog.ts'
 import { githubClient, parseRepo, shortSha, branchOf } from './lib/github.ts'
 import type { GithubResponse } from './lib/github.ts'
 import { required } from './lib/match.ts'
-import { pick } from './lib/random.ts'
+import { defineLines } from './lib/lines.ts'
 import { roomToggle } from './lib/roomToggle.ts'
 import { scheduler } from './lib/schedule.ts'
 import { DAY_MS, nextOccurrence } from './lib/time.ts'
@@ -75,13 +75,114 @@ const NUDGE_MAX_AGE_MS = 30 * DAY_MS
 const NUDGE_PER_REPO = 3
 const NUDGE_CHECKS_PER_REPO = 6
 
-const FIRST_PR_CHEERS = [
-  '🎉 First merged PR from {who} here. Welcome aboard!',
-  '🎉 {who} just landed their first PR here. Nice one!',
-  "🎉 That's {who}'s first merged PR here. Welcome!"
-] as const
-const RELEASE_CHEERS = ['🚀 {tag} is out!', '🚀 {tag} has shipped. Congrats!', '🚀 Ship it! {tag} is live.'] as const
-const CI_CHEERS = ['Nice save!', 'Back in the green. 🎉', 'Crisis averted.', 'Green again, well done.'] as const
+const firstPrCheer = defineLines('github.first-pr', {
+  fallback: [
+    '🎉 First merged PR from {who} here. Welcome aboard!',
+    '🎉 {who} just landed their first PR here. Nice one!',
+    "🎉 That's {who}'s first merged PR here. Welcome!",
+    '🎉 {who} is officially a contributor. First PR, merged.',
+    '🎉 A wild first PR from {who} appears, and it got merged!',
+    '🎉 {who} has entered the commit history. Welcome!',
+    "🎉 First merge for {who}. The repo's family tree just grew.",
+    '🎉 {who} got their first PR in. May it be the first of many.',
+    '🎉 Welcome to the contributors list, {who}.',
+    '🎉 {who} shipped their first change here. Lovely stuff.',
+    '🎉 First PR from {who}, merged and everything. Take a bow.',
+    '🎉 {who} broke the seal: first merged PR here.'
+  ],
+  rare: [
+    '🎉 {who} landed their first PR. I have ordered a tiny commemorative plaque.',
+    '🎉 {who}\'s first merged PR! Somewhere a CI runner sheds a single tear of joy.'
+  ],
+  ai: { about: 'a welcome cheer for someone whose first pull request in a repository was just merged', slots: ['who'] }
+})
+
+const releaseCheer = defineLines('github.release', {
+  fallback: [
+    '🚀 {tag} is out!',
+    '🚀 {tag} has shipped. Congrats!',
+    '🚀 Ship it! {tag} is live.',
+    '🚀 {tag} is out in the world. Go forth, little release.',
+    '🚀 {tag} just left the launchpad.',
+    '🚀 {tag} is live. Changelog readers, rejoice.',
+    '🚀 Say hello to {tag}.',
+    '🚀 {tag} is out the door. Nicely done, everyone.',
+    '🚀 Fresh off the press: {tag}.',
+    '🚀 {tag} has been released into the wild.',
+    '🚀 {tag} shipped. Time for a small celebration.',
+    '🚀 Another one: {tag} is out.'
+  ],
+  rare: ['🚀 {tag} is out! I would throw confetti, but I am a bot and have no hands.'],
+  ai: { about: 'a short celebration for a newly published software release, naming the version tag', slots: ['tag'] }
+})
+
+const ciCheer = defineLines('github.ci-fixed', {
+  fallback: [
+    'Nice save!',
+    'Back in the green. 🎉',
+    'Crisis averted.',
+    'Green again, well done.',
+    'The build gremlins have been evicted.',
+    'Order restored.',
+    'Fixed. Everyone can breathe again.',
+    'Green is a good colour on you.',
+    'CI is happy, so I am happy.',
+    'That red was getting awkward. Thanks.',
+    'Pipeline mended.',
+    'All checks passing. As nature intended.'
+  ],
+  rare: ['Green again. I lit a small candle for the flaky test that gave its life.']
+})
+
+const milestoneLine = defineLines('github.milestone', {
+  fallback: [
+    '🏆 That makes {count} merged PRs in {repo}!',
+    '🏆 {repo} just hit {count} merged PRs.',
+    '🏆 Merged PR number {count} for {repo}. Milestone!',
+    '🏆 {count} merged PRs in {repo}. That\'s a lot of reviewing.',
+    '🏆 {repo} reached {count} merged PRs. Cake is traditional.',
+    '🏆 And that\'s {count} merged PRs in {repo}!',
+    '🏆 {count} PRs merged into {repo} so far. Keep them coming.',
+    '🏆 Milestone: {repo} now has {count} merged PRs.',
+    '🏆 {repo} has {count} merged PRs under its belt.',
+    '🏆 Round number alert: {count} merged PRs in {repo}.',
+    '🏆 {count} merges in {repo}. The history books are thick.',
+    '🏆 {repo}: {count} merged PRs and counting.'
+  ]
+})
+
+const nudgeIntro = defineLines('github.nudge', {
+  fallback: [
+    '👀 These PRs are waiting for a review:',
+    '👀 A few PRs could use a reviewer:',
+    '👀 Review-hungry PRs, looking for a kind soul:',
+    '👀 Got ten minutes? These PRs need eyes:',
+    '👀 Some PRs have been waiting patiently for a review:',
+    '👀 Reviews wanted:',
+    '👀 These PRs are gathering dust. A review would help:',
+    '👀 Your daily review menu:',
+    '👀 Someone\'s work is waiting on you, maybe:',
+    '👀 Review o\'clock. These are waiting:',
+    '👀 Unreviewed and hopeful:',
+    '👀 These PRs would love some attention:'
+  ],
+  rare: ['👀 These PRs have been waiting so long they have started writing poetry about it:']
+})
+
+const nudgeClear = defineLines('github.nudge-clear', {
+  fallback: [
+    'No PRs here have been waiting more than {days} for a review. 🎉',
+    'Nothing has been waiting more than {days} for a review. Tidy! 🎉',
+    'Review queue is clear (nothing older than {days}). 🎉',
+    'All caught up: no PR has waited more than {days}. 🎉',
+    'Every PR older than {days} has a review. Lovely. 🎉',
+    'No neglected PRs here. Nothing over {days} without a review. 🎉',
+    'Clean slate: no PRs waiting more than {days}. 🎉',
+    'Reviews are up to date, nothing older than {days}. 🎉',
+    'Not a single PR left waiting over {days}. 🎉',
+    'Nobody\'s waiting on a review for more than {days}. 🎉'
+  ]
+})
 
 interface RoomSub {
   events: Category[]
@@ -378,9 +479,6 @@ const errorText = (err: unknown): string => err instanceof Error ? err.message :
 
 const isBot = (login: string): boolean => /\[bot\]$/i.test(login)
 
-const fill = (template: string, values: Record<string, string>): string =>
-  template.replace(/\{(\w+)\}/g, (all, k: string) => values[k] ?? all)
-
 export const isMergeMilestone = (n: number): boolean => MERGE_MILESTONES.includes(n) || (n >= 1000 && n % 1000 === 0)
 
 const DIGEST_SPANS: Record<string, number> = { week: 7 * DAY_MS, month: 30 * DAY_MS }
@@ -522,11 +620,11 @@ export default async (robot: Robot) => {
     const login = author.toLowerCase()
     if (!isBot(author) && !state.logins.includes(login)) {
       state.logins.push(login)
-      lines.push(fill(pick(FIRST_PR_CHEERS), { who: userLink({ login: author }) }))
+      lines.push(firstPrCheer({ who: userLink({ login: author }) }, { tz: defaultTz() }))
     }
     if (state.count !== undefined) {
       state.count++
-      if (isMergeMilestone(state.count)) lines.push(`🏆 That makes ${state.count} merged PRs in ${repoLink(name)}!`)
+      if (isMergeMilestone(state.count)) lines.push(milestoneLine({ count: state.count, repo: repoLink(name) }, { tz: defaultTz() }))
     }
     robot.brain.set(MERGED_PREFIX + key, state)
     return lines
@@ -571,7 +669,7 @@ export default async (robot: Robot) => {
         if (!r) return undefined
         const url = r.html_url || `${GH}/${name}/releases/tag/${encodeURIComponent(r.tag_name)}`
         const title = r.name || r.tag_name
-        const cheer = fill(pick(RELEASE_CHEERS), { tag: esc(r.tag_name) })
+        const cheer = releaseCheer({ tag: esc(r.tag_name) }, { tz: defaultTz() })
         return { text: `${who} published release ${link(title, url)}\n${cheer}`, log: { kind: 'release', actor: e.actor.login, title, url } }
       }
       case 'IssueCommentEvent': {
@@ -698,7 +796,7 @@ export default async (robot: Robot) => {
       if (seeding) continue
       const fixed = outcome === 'success' && prev === 'failure'
       const text = outcome === 'failure' ? formatRunFailed(cursor.name, run)
-        : fixed ? `${formatRunFixed(cursor.name, run)} ${pick(CI_CHEERS)}` : undefined
+        : fixed ? `${formatRunFixed(cursor.name, run)} ${ciCheer({}, { tz: defaultTz() })}` : undefined
       if (!text) continue
       for (const room of roomsFor(rooms, 'ci')) {
         await deliver(room, text)
@@ -856,7 +954,7 @@ export default async (robot: Robot) => {
     }
     const out = new Map<string, string>()
     for (const [room, list] of lines) {
-      if (list.length) out.set(room, ['👀 These PRs are waiting for a review:', ...list].join('\n'))
+      if (list.length) out.set(room, [nudgeIntro({}, { room, tz: defaultTz() }), ...list].join('\n'))
     }
     return out
   }
@@ -885,7 +983,7 @@ export default async (robot: Robot) => {
     }
     const text = (await collectNudges(room)).get(room)
     if (text) await deliver(room, text)
-    else await res.send(`No PRs here have been waiting more than ${count(nudgeDays(), 'day')} for a review. 🎉`)
+    else await res.send(nudgeClear({ days: count(nudgeDays(), 'day') }, { room, tz: defaultTz() }))
   })
 
   robot.respond(/github digest(?: (week|month))?$/i, async res => {

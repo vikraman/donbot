@@ -61,4 +61,11 @@ describe('Roles testing Hubot scripts', () => {
     await robot.adapter.say(author, '@Dumbotheelephant what time is it for holman', 'test-room')
     assert.deepEqual(sent, [])
   })
+  it('should not repeat an unknown-user reply back to back', async () => {
+    const { robot } = state
+    const author = brainUser(robot, 'author-id', 'author')
+    const sent = collect(robot)
+    for (let i = 0; i < 20; i++) await robot.adapter.say(author, '@Dumbotheelephant nobody is a mystery', 'test-room')
+    sent.forEach((line, i) => { if (i) assert.notStrictEqual(line, sent[i - 1]) })
+  })
 })

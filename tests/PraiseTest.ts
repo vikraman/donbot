@@ -7,13 +7,8 @@ import type { DiscordClient } from 'hubot'
 import { setupRobot, collect, brainUser, sendReturnsIds } from './helpers/setup.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
+import { ENTHUSIASTIC_LINES } from '../scripts/Praise.ts'
 
-const ENTHUSIASTIC_LINES = [
-  "That's more like it. Keep it coming.",
-  "See, was that so hard? A little respect.",
-  "I'll add that to my tab. You owe me plenty more.",
-  "I do good work. Glad somebody noticed."
-]
 
 describe('Praise testing Hubot scripts', () => {
   const state = setupRobot('Praise.ts')
@@ -174,7 +169,7 @@ describe('Praise testing Hubot scripts', () => {
     for (let i = 0; i < 10; i++) {
       await robot.adapter.say(user, '@Dumbotheelephant what a fantastic, brilliant, outstanding effort, good job!!!', 'test-room')
     }
-    for (const line of sent) assert.ok(ENTHUSIASTIC_LINES.includes(line))
+    for (const line of sent) assert.ok((ENTHUSIASTIC_LINES as readonly string[]).includes(line), line)
   })
 
   it('should still pick from the full pool for a flat "thanks"', async () => {
@@ -283,5 +278,13 @@ describe('Praise reaction spam', () => {
       now.mock.restore()
     }
     assert.strictEqual(sent.length, 2)
+  })
+
+  it('should not repeat a reply back to back', async () => {
+    const { robot } = state
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
+    for (let i = 0; i < 30; i++) await robot.adapter.say(user, '@Dumbotheelephant cookie', 'test-room')
+    sent.forEach((line, i) => { if (i) assert.notStrictEqual(line, sent[i - 1]) })
   })
 })

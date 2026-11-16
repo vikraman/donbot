@@ -19,39 +19,63 @@ import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
 
 import { entriesWithPrefix, isScore, scoreAt } from './lib/brainScan.ts'
 import { mentionFor } from './lib/mention.ts'
-import { pick } from './lib/random.ts'
+import { defineLines } from './lib/lines.ts'
 import { reactionGuard } from './lib/reactionGuard.ts'
+import { isApproval } from './lib/reactions.ts'
 import { scoreTone } from './lib/sentiment.ts'
+import { defaultTz, userTz } from './lib/timezone.ts'
 
 const PRAISE_COUNT_KEY = 'praise:count'
 const PRAISE_BY_USER_PREFIX = 'praise:user:'
-const PRAISE_EMOJI = [
-  '👍', '❤️', '🎉', '🙌', '👏', '💯', '🔥', '😍', '🥳',
-  '👌', '💪', '🙏', '💖', '💕', '😻', '🫡', '✨', '🏆', '🎖️', '🥇', '👑', '💐', '🤩', '😎', '🤌'
-]
 
-const REACTIONS: Record<'grudging' | 'enthusiastic', readonly [string, ...string[]]> = {
-  grudging: [
-    "Heh, yeah, I know I'm good.",
-    "Not bad yourself, for a mark.",
-    "Alright, alright, don't wear it out."
-  ],
-  enthusiastic: [
-    "That's more like it. Keep it coming.",
-    "See, was that so hard? A little respect.",
-    "I'll add that to my tab. You owe me plenty more.",
-    "I do good work. Glad somebody noticed."
-  ]
-}
-const ALL_REACTIONS: readonly [string, ...string[]] = [...REACTIONS.grudging, ...REACTIONS.enthusiastic]
+export const GRUDGING_LINES = [
+  "Heh, yeah, I know I'm good.",
+  'Not bad yourself, for a mark.',
+  "Alright, alright, don't wear it out.",
+  "Flattery. Noted. Filed. Mostly ignored.",
+  "I'll allow it.",
+  "Sure, sure. Put it on the list with the others.",
+  "You're only saying that 'cause it's true.",
+  "Don't get sentimental on me, kid.",
+  "Yeah, yeah. Now beat it, I'm busy.",
+  "Compliment received. Ego unchanged. Mostly.",
+  "Careful, I might start to like you.",
+  "That and a dollar gets you a bad coffee. But thanks."
+] as const
+
+export const ENTHUSIASTIC_LINES = [
+  "That's more like it. Keep it coming.",
+  'See, was that so hard? A little respect.',
+  "I'll add that to my tab. You owe me plenty more.",
+  'I do good work. Glad somebody noticed.',
+  'Finally, someone with taste.',
+  "Now that's the kind of talk I like to hear.",
+  "Keep this up and you're getting a promotion. Unpaid, but a promotion.",
+  "You just made a robot very smug. Hope you're happy.",
+  "Respect like that, I don't forget.",
+  'Music to my audio sensors.',
+  'Say it louder, for the folks in the back.',
+  "You've got a good eye. I'll remember your face. In a nice way."
+] as const
+
+const PRAISE_RARE = [
+  "🍪 I'm putting this cookie in a tiny frame on my tiny desk.",
+  '📜 Praise logged in the permanent family record. Your name is now in the good book.',
+  "🎩 Tips hat. I don't have a hat. I'm tipping it anyway.",
+  "🤖 Error 200: OK. Extremely OK. Pleased, even.",
+  '🌹 *dabs at optical sensor* Somebody cut onions in the server room.'
+] as const
+
+const PRAISE_AI = { about: 'donbot, a dry-witted robot with mafia-boss swagger, accepting a compliment or a cookie from a teammate', slots: [] } as const
+
+// flat thanks draws from both tones
+const reply = defineLines('praise.reply', { fallback: [...GRUDGING_LINES, ...ENTHUSIASTIC_LINES], rare: PRAISE_RARE, flair: true, ai: PRAISE_AI })
+const enthusiastic = defineLines('praise.enthusiastic', { fallback: ENTHUSIASTIC_LINES, rare: PRAISE_RARE, flair: true, ai: { ...PRAISE_AI, about: `${PRAISE_AI.about}, especially effusive praise` } })
 
 const REACTION_REPLY_COOLDOWN_MS = 60 * 1000
 
 // only enthusiastic text narrows the pool
-const reactionsFor = (text?: string): readonly [string, ...string[]] => {
-  if (text && scoreTone(text).tone === 'positive') return REACTIONS.enthusiastic
-  return ALL_REACTIONS
-}
+const linesFor = (text?: string) => text && scoreTone(text).tone === 'positive' ? enthusiastic : reply
 
 const recordPraise = (robot: Robot, userId?: string): number => {
   const count = scoreAt(robot, PRAISE_COUNT_KEY) + 1
@@ -70,7 +94,8 @@ export default async (robot: Robot) => {
 
   robot.respond(/(?:cookie|good (?:bot|job)|good boy(?: donbot)?|thanks?(?: you)?)[.!]*$/i, async res => {
     recordPraise(robot, res.message.user.id)
-    guard.remember(await res.send(pick(reactionsFor(res.message.text))))
+    const line = linesFor(res.message.text)({}, { room: res.message.room, tz: userTz(robot, res.message.user.id) })
+    guard.remember(await res.send(line))
   })
 
   robot.respond(/praise count$/i, async res => {
@@ -101,7 +126,7 @@ export default async (robot: Robot) => {
 
   client.on('messageReactionAdd', async (reaction: DiscordReaction, user: DiscordUser) => {
     if (user.bot) return
-    if (!PRAISE_EMOJI.includes(reaction.emoji.name)) return
+    if (!isApproval(reaction.emoji.name)) return
     if (reaction.partial) {
       try {
         await reaction.fetch()
@@ -118,6 +143,6 @@ export default async (robot: Robot) => {
 
     recordPraise(robot, user.id)
     if (!guard.mayReply(message.id, message.channelId)) return
-    guard.remember(await robot.messageRoom(message.channelId, pick(ALL_REACTIONS)))
+    guard.remember(await robot.messageRoom(message.channelId, reply({}, { room: message.channelId, tz: defaultTz() })))
   })
 }

@@ -14,6 +14,7 @@ import { entriesWithPrefix } from './lib/brainScan.ts'
 import { cooldown } from './lib/cooldown.ts'
 import { rawMessageOf } from './lib/discordMessage.ts'
 import { EMOJI_VOCAB } from './lib/emojiVocab.ts'
+import { bagPick } from './lib/lines.ts'
 import { pick } from './lib/random.ts'
 import { addressesBot, roomToggle } from './lib/roomToggle.ts'
 import { scoreTone } from './lib/sentiment.ts'
@@ -172,7 +173,7 @@ export default async (robot: Robot) => {
     if (!message || typeof message.react !== 'function') return
 
     const vocab = scoreMessage(text)
-    const sentiment = mood && pick(SENTIMENT_EMOJI[mood])
+    const sentiment = mood && bagPick(`reactemoji.${mood}`, SENTIMENT_EMOJI[mood])
     if (!vocab && !sentiment) return
 
     // reaction delay so people's reactions land first

@@ -20,6 +20,7 @@ import type { Robot, DiscordChannel, DiscordReaction, DiscordUser } from 'hubot'
 import { rawMessageOf } from './lib/discordMessage.ts'
 import { formatAgo } from './lib/duration.ts'
 import { required } from './lib/match.ts'
+import { valenceOf } from './lib/reactions.ts'
 import { mentionFor } from './lib/mention.ts'
 
 type EntryKind = 'bot-message' | 'user-message' | 'reaction-feedback'
@@ -35,10 +36,6 @@ interface HistoryEntry {
 const HISTORY_KEY_PREFIX = 'history:'
 const HISTORY_KEY = (room: string): string => `${HISTORY_KEY_PREFIX}${room}`
 
-const REACTION_VALENCE: Record<string, number> = {
-  '👍': 1, '❤️': 1, '🎉': 1, '🥳': 1, '😍': 1, '👏': 1, '💯': 1, '🔥': 1, '🙌': 1, '✨': 1,
-  '👎': -1, '😢': -1, '😞': -1, '😡': -1, '😠': -1, '💔': -1, '😕': -1, '🤦': -1
-}
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const WINDOWS: Record<string, number> = {
@@ -167,7 +164,7 @@ export default async (robot: Robot) => {
   if (client && typeof client.on === 'function') {
     const recordFeedback = (removed: boolean) => async (reaction: DiscordReaction, user: DiscordUser) => {
       if (user.bot) return
-      const valence = REACTION_VALENCE[reaction.emoji.name]
+      const valence = valenceOf(reaction.emoji.name)
       if (!valence) return
       if (reaction.partial) {
         try {

@@ -79,6 +79,8 @@ const drawBelow = (ceiling: number): number => {
   return value % ceiling
 }
 
+export const randomBelow = (ceiling: number): number => drawBelow(ceiling)
+
 // call once at startup so the sync helpers can reach the brain
 export const useRandomPool = (robot: Robot) => {
   poolRobot = robot
