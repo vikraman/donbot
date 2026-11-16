@@ -1,5 +1,5 @@
 // Description:
-//   A weekly recap of the channel: kudos, wins, focus time, standups, GitHub and chat activity.
+//   A weekly recap of the channel: kudos, wins, focus time, standups, GitHub, chat activity and running streaks.
 //
 // Commands:
 //   hubot recap - Posts the last 7 days' recap now.
@@ -14,8 +14,10 @@ import { formatDuration } from './lib/duration.ts'
 import { eventsSince } from './lib/eventLog.ts'
 import type { LogEntry } from './lib/eventLog.ts'
 import { defineLines } from './lib/lines.ts'
+import { userForGithubLogin } from './lib/githubUsers.ts'
 import { mentionFor } from './lib/mention.ts'
 import { scheduler } from './lib/schedule.ts'
+import { getStreak, STREAK_KINDS, streakLabel, streakPeriod } from './lib/streak.ts'
 import { DAY_MS, describeRepeat, formatWhen, MINUTE_MS, parseWhen } from './lib/time.ts'
 import { defaultTz, tzNote, userTz } from './lib/timezone.ts'
 
@@ -111,6 +113,10 @@ const tally = <T>(items: T[], keyOf: (item: T) => string | undefined, weight: (i
   return [...counts].sort((a, b) => b[1] - a[1])
 }
 
+// running streaks shown in the recap
+export const MIN_RECAP_STREAK = 3
+const MAX_RECAP_STREAKS = 5
+
 export const buildRecap = (robot: Robot, room: string, now = Date.now(), tz = defaultTz()): string => {
   const since = now - WEEK_MS
   const sections: string[] = []
@@ -169,6 +175,24 @@ export const buildRecap = (robot: Robot, room: string, now = Date.now(), tz = de
   if (messages.length) {
     const [chattiest] = tally(messages, h => h.authorId)
     sections.push(`💬 ${plural(messages.length, 'message')}${chattiest ? `, most from ${mentionFor({ id: chattiest[0] })}` : ''}.`)
+  }
+
+  // streaks are global, so only people seen in this room this week
+  const active = new Set<string>([
+    ...kudos.flatMap(k => [k.userId, k.targetId]),
+    ...wins.map(w => w.userId),
+    ...focus.map(f => f.userId),
+    ...standups.map(s => s.userId),
+    ...messages.map(m => m.authorId),
+    ...github.map(g => g.actor && userForGithubLogin(robot, g.actor))
+  ].filter((id): id is string => Boolean(id)))
+  const streaks = [...active].flatMap(userId => STREAK_KINDS.map(kind => ({ userId, kind, current: getStreak(robot, kind, userId, now)?.current ?? 0 })))
+    .filter(s => s.current >= MIN_RECAP_STREAK)
+    // weeks outrank days
+    .sort((a, b) => b.current * (streakPeriod(b.kind) === 'week' ? 7 : 1) - a.current * (streakPeriod(a.kind) === 'week' ? 7 : 1))
+    .slice(0, MAX_RECAP_STREAKS)
+  if (streaks.length) {
+    sections.push(`🔥 Streaks going: ${streaks.map(s => `${mentionFor({ id: s.userId })} ${s.current}-${streakPeriod(s.kind)} ${streakLabel(s.kind)}`).join(', ')}.`)
   }
 
   if (sections.length === 0) return quietWeek({}, opts)

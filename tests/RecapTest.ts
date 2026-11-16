@@ -2,6 +2,8 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
+import { dayKey, weekKey } from '../scripts/lib/time.ts'
+import { defaultTz } from '../scripts/lib/timezone.ts'
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
 const DAY = 86_400_000
@@ -113,5 +115,26 @@ describe('Recap', () => {
     for (let i = 0; i < 20; i++) await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
     assert.ok(sent.every(s => /quiet week/.test(s)))
     assert.ok(new Set(sent).size > 4)
+  })
+  it('lists running streaks of people active in the room, weeks first', async () => {
+    const { robot } = state
+    const user = brainUser(robot, 'u1', 'alice')
+    const now = Date.now()
+    robot.brain.set('log:win', [
+      { ts: now - DAY, room: 'room', userId: 'u1', text: 'a' },
+      { ts: now - DAY, room: 'room', userId: 'u2', text: 'b' },
+      { ts: now - DAY, room: 'other', userId: 'u3', text: 'c' }
+    ])
+    const today = dayKey(now, defaultTz())
+    const monday = weekKey(now, defaultTz())
+    robot.brain.set('streak:focus:u1', { current: 9, best: 9, lastDay: today })
+    robot.brain.set('streak:standup:u2', { current: 3, best: 3, lastDay: monday })
+    robot.brain.set('streak:win:u2', { current: 2, best: 2, lastDay: today })
+    // active elsewhere only
+    robot.brain.set('streak:focus:u3', { current: 30, best: 30, lastDay: today })
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
+    assert.match(sent[0]!, /🔥 Streaks going: <@u2> 3-week standup, <@u1> 9-day focus\./)
+    assert.doesNotMatch(sent[0]!, /u3/)
   })
 })
