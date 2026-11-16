@@ -248,4 +248,20 @@ describe('Ask testing Hubot scripts', () => {
     assert.strictEqual(sent[0], 'Direct wiki answer. [Wikipedia]')
     assert.strictEqual(sent.length, 1)
   })
+
+  it('should try the next gemini model when one is busy', async () => {
+    const { robot } = state
+    process.env.GEMINI_API_KEY = 'test-key'
+    const models: string[] = []
+    mock.method(global, 'fetch', async (url: string) => {
+      models.push(url.match(/models\/([\w.-]+):/)?.[1] ?? url)
+      if (url.includes('gemini-flash-latest')) return { ok: false, status: 503 } as unknown as Response
+      return geminiResponse('Lite answer.')
+    })
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant ask gg what is a monad', 'test-room')
+    assert.deepEqual(models, ['gemini-flash-latest', 'gemini-flash-lite-latest'])
+    assert.match(sent[0]!, /Lite answer\./)
+  })
 })

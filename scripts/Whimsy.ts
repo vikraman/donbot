@@ -13,7 +13,7 @@
 //
 // Configuration:
 //   GEMINI_API_KEY - Needed for AI-written lines; without it only built-in lines are used.
-//   GEMINI_LINE_MODELS - Comma-separated models to try in order. Defaults to gemini-flash-latest, gemini-flash-lite-latest, gemini-2.5-flash-lite.
+//   GEMINI_MODELS - Comma-separated models to try in turn (shared with ask). Defaults to gemini-flash-latest, gemini-flash-lite-latest, gemini-2.5-flash-lite.
 //   GEMINI_LINE_DAILY_CALLS - Most Gemini requests per day for lines. Defaults to 20, to stay well inside the free tier.
 //   OWNER_USER_ID - Discord user ID allowed to run whimsy refill.
 //

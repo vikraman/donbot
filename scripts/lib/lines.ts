@@ -1,5 +1,6 @@
 import type { Robot } from 'hubot'
 
+import { GeminiError, geminiText } from './gemini.ts'
 import { chance, randomBelow } from './random.ts'
 import { zonedParts } from './time.ts'
 import { defaultTz } from './timezone.ts'
@@ -49,21 +50,8 @@ export const AI_RETRY_MS = 30 * 60 * 1000
 export const AI_BUSY_RETRY_MS = 15 * 60 * 1000
 // 429 means a quota ran out
 export const AI_QUOTA_RETRY_MS = 2 * 60 * 60 * 1000
-// tried in order while the previous one is overloaded or unknown; GEMINI_LINE_MODELS overrides
-export const AI_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'] as const
-
-// slow replies count as busy, so the next model gets a turn
-export const AI_TIMEOUT_MS = 30 * 1000
 
 const dailyCalls = (): number => Number(process.env.GEMINI_LINE_DAILY_CALLS) || AI_DAILY_CALLS
-
-export const aiModels = (): string[] => {
-  const configured = (process.env.GEMINI_LINE_MODELS || '').split(',').map(m => m.trim()).filter(Boolean)
-  return configured.length ? configured : [...AI_MODELS]
-}
-
-// worth trying the next model
-const SKIPPABLE = new Set([404, 429, 503])
 export const AI_MAX_LENGTH = 180
 // lines scored at or below this are mostly skipped
 export const RETIRE_SCORE = -2
@@ -262,22 +250,11 @@ const VOICE = [
   'Plain text, at most one emoji, no hashtags, no links, no mentions.'
 ].join(' ')
 
-interface GeminiResponse {
-  candidates?: { content?: { parts?: { text?: string }[] } }[]
-}
-
-class GeminiError extends Error {
-  status: number
-  constructor (status: number) {
-    super(`gemini responded ${status}`)
-    this.status = status
-  }
-
-  get retryMs (): number {
-    if (this.status === 429) return AI_QUOTA_RETRY_MS
-    if (this.status === 503) return AI_BUSY_RETRY_MS
-    return AI_RETRY_MS
-  }
+const retryAfter = (error: unknown): number => {
+  const status = error instanceof GeminiError ? error.status : 0
+  if (status === 429) return AI_QUOTA_RETRY_MS
+  if (status === 503) return AI_BUSY_RETRY_MS
+  return AI_RETRY_MS
 }
 
 const generate = async (kind: string, spec: LineSpec, count: number): Promise<string[]> => {
@@ -292,31 +269,11 @@ const generate = async (kind: string, spec: LineSpec, count: number): Promise<st
     `For flavour only (do not copy): ${examples.map(e => JSON.stringify(e)).join(', ')}.`,
     'Return only a JSON array of strings.'
   ].join(' ')
-  const body = JSON.stringify({
+  const text = await geminiText({
     contents: [{ parts: [{ text: prompt }] }],
     systemInstruction: { parts: [{ text: VOICE }] },
     generationConfig: { responseMimeType: 'application/json', temperature: 1.1, maxOutputTokens: 4096 }
-  })
-  let response: Response | undefined
-  for (const model of aiModels()) {
-    if (!spendCall()) {
-      if (!response) throw new Error('daily gemini budget used up')
-      break
-    }
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-    try {
-      response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(AI_TIMEOUT_MS) })
-    } catch (error) {
-      linesRobot?.logger.warn(`lines: gemini model ${model} failed: ${error instanceof Error ? error.name : String(error)}`)
-      response = new Response(null, { status: 503 })
-      continue
-    }
-    if (!SKIPPABLE.has(response.status)) break
-    if (response.status === 404) linesRobot?.logger.warn(`lines: gemini model ${model} not found, skipping`)
-  }
-  if (!response?.ok) throw new GeminiError(response?.status ?? 0)
-  const data: GeminiResponse = await response.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]'
+  }, { beforeCall: spendCall, warn: m => linesRobot?.logger.warn(`lines: ${m}`) }) ?? '[]'
   const parsed: unknown = JSON.parse(text)
   if (!Array.isArray(parsed)) throw new Error(`gemini returned ${typeof parsed} for ${kind}`)
   return parsed.filter((l): l is string => validAiLine(l, slots)).map(l => l.trim())
@@ -341,7 +298,7 @@ export const refillAi = async (kind: string, { force = false } = {}): Promise<nu
     return added.length
   } catch (error) {
     linesRobot?.logger.warn(`lines: ai refill for ${kind} failed: ${String(error)}`)
-    const retryMs = error instanceof GeminiError ? error.retryMs : AI_RETRY_MS
+    const retryMs = retryAfter(error)
     save(poolKey(kind), { ...poolFor(kind), nextAt: Date.now() + retryMs })
     return 0
   } finally {

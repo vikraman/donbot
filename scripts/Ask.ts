@@ -10,10 +10,12 @@
 //
 // Configuration:
 //   GEMINI_API_KEY - API key for Gemini (https://aistudio.google.com/apikey). Optional; Gemini is skipped without it.
+//   GEMINI_MODELS - Comma-separated models to try in turn when one is busy. Defaults to gemini-flash-latest, gemini-flash-lite-latest, gemini-2.5-flash-lite.
 //
 
 import type { Robot } from 'hubot'
 
+import { geminiText } from './lib/gemini.ts'
 import { required } from './lib/match.ts'
 
 type Source = 'gg' | 'ddg' | 'wiki'
@@ -21,14 +23,6 @@ type Source = 'gg' | 'ddg' | 'wiki'
 interface AskResult {
   source: Source
   text: string
-}
-
-interface GeminiResponse {
-  candidates?: {
-    content?: {
-      parts?: { text?: string }[]
-    }
-  }[]
 }
 
 interface DuckDuckGoResponse {
@@ -64,25 +58,18 @@ const withSource = (source: Source, text?: string): AskResult | null =>
   text ? { source, text } : null
 
 const askGemini = async (question: string): Promise<AskResult | null> => {
-  const apiKey = process.env.GEMINI_API_KEY
-  if (!apiKey) return null
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  if (!process.env.GEMINI_API_KEY) return null
+  try {
+    const text = await geminiText({
       contents: [{ parts: [{ text: question }] }],
       systemInstruction: { parts: [{ text: 'Answer in 1-3 short sentences. No markdown formatting, headers, or bullet points.' }] },
       generationConfig: { maxOutputTokens: 1024 }
     })
-  })
-  if (!response.ok) return null
-  const data: GeminiResponse = await response.json()
-  const text = data.candidates && data.candidates[0] && data.candidates[0].content &&
-    data.candidates[0].content.parts && data.candidates[0].content.parts[0] &&
-    data.candidates[0].content.parts[0].text
-  return withSource('gg', text ? text.trim() : undefined)
+    return withSource('gg', text ? text.trim() : undefined)
+  } catch {
+    // every model busy or failing; the next source takes over
+    return null
+  }
 }
 
 const askDuckDuckGo = async (question: string): Promise<AskResult | null> => {
