@@ -232,6 +232,22 @@ describe('Standup', () => {
     assert.match(sent[2]!, /is back on\.$/)
     assert.equal(robot.brain.get<{ data: { skip?: boolean } }[]>('schedule:standup')![0]!.data.skip, false)
   })
+  it('counts streaks by round, so a round spanning two weeks keeps them', async () => {
+    const { robot } = state
+    setRandomSource(() => 0)
+    const alice = brainUser(robot, 'u1', 'alice')
+    // friday 6 nov and friday 13 nov 2026, noon utc
+    const fri1 = Date.UTC(2026, 10, 6, 12)
+    const fri2 = Date.UTC(2026, 10, 13, 12)
+    const now = mock.method(Date, 'now', () => fri1)
+    robot.brain.set('standup:round:room', { startedAt: fri1, checkIns: [], prompted: true })
+    await robot.adapter.say(alice, 'standup: DONE: a NEXT: b', 'room')
+    robot.brain.set('standup:round:room', { startedAt: fri2, checkIns: [], prompted: true })
+    // monday 23 nov, still the round that started on the 13th
+    now.mock.mockImplementation(() => Date.UTC(2026, 10, 23, 9))
+    await robot.adapter.say(alice, 'standup: DONE: c NEXT: d', 'room')
+    assert.equal(robot.brain.get<{ current: number }>('streak:standup:u1')!.current, 2)
+  })
   it('uses up a skip that passed while the bot was down', async () => {
     const { robot } = state
     const alice = brainUser(robot, 'u1', 'alice')

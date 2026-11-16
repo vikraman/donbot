@@ -333,7 +333,8 @@ export default async (robot: Robot) => {
       return
     }
     logEvent(robot, 'standup', { room, userId })
-    const streak = recordStreak(robot, 'standup', userId)
+    // by the round's week, so a round that spans two calendar weeks doesn't break streaks
+    const streak = recordStreak(robot, 'standup', userId, round.startedAt)
     const missing = (['done', 'next'] as const).filter(s => !report[s]).map(s => s.toUpperCase())
     const notes = [
       report.blockers && 'Sorry about the blocker, it\'ll be in the summary.',

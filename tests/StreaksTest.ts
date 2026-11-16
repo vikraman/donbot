@@ -57,4 +57,21 @@ describe('Streaks', () => {
     assert.equal(robot.brain.get<{ current: number }>('streak:standup:u1')!.current, 2)
     mock.reset()
   })
+  it('keeps daily streaks going across the spring clock change', () => {
+    const { robot } = state
+    robot.brain.set('tz:user:u1', 'Europe/London')
+    // london clocks go forward on 29 march 2026
+    recordStreak(robot, 'win', 'u1', Date.UTC(2026, 2, 28, 12))
+    recordStreak(robot, 'win', 'u1', Date.UTC(2026, 2, 29, 12))
+    // 00:30 bst on the 30th
+    recordStreak(robot, 'win', 'u1', Date.UTC(2026, 2, 29, 23, 30))
+    assert.equal(robot.brain.get<{ current: number }>('streak:win:u1')!.current, 3)
+  })
+  it('ignores activity that arrives late for an earlier day', () => {
+    const { robot } = state
+    for (const day of [14, 15]) recordStreak(robot, 'commit', 'u1', Date.UTC(2026, 10, day, 12))
+    recordStreak(robot, 'commit', 'u1', Date.UTC(2026, 10, 16, 0, 5))
+    recordStreak(robot, 'commit', 'u1', Date.UTC(2026, 10, 15, 23, 55))
+    assert.deepEqual(robot.brain.get('streak:commit:u1'), { current: 3, best: 3, lastDay: '2026-11-16' })
+  })
 })

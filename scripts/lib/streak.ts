@@ -1,7 +1,7 @@
 import type { Robot } from 'hubot'
 
 import { mentionFor } from './mention.ts'
-import { DAY_MS, dayKey, weekKey } from './time.ts'
+import { dayKey, fromZoned, weekKey, zonedParts } from './time.ts'
 import { userTz } from './timezone.ts'
 
 // what a streak counts
@@ -25,7 +25,12 @@ const PERIOD: Record<StreakKind, 'day' | 'week'> = { standup: 'week', focus: 'da
 
 const periodKey = (kind: StreakKind, ms: number, tz: string): string => PERIOD[kind] === 'week' ? weekKey(ms, tz) : dayKey(ms, tz)
 
-const periodMs = (kind: StreakKind): number => PERIOD[kind] === 'week' ? 7 * DAY_MS : DAY_MS
+// by calendar, not by subtracting 24h, which misses a day across dst
+const previousPeriodKey = (kind: StreakKind, ms: number, tz: string): string => {
+  const p = zonedParts(ms, tz)
+  const back = PERIOD[kind] === 'week' ? 7 : 1
+  return periodKey(kind, fromZoned(p.year, p.month, p.day - back, 12, 0, tz), tz)
+}
 
 const streakKey = (kind: StreakKind, userId: string): string => `streak:${kind}:${userId}`
 
@@ -37,7 +42,7 @@ export const getStreak = (robot: Robot, kind: StreakKind, userId: string, now = 
   if (!isStreak(stored)) return undefined
   const tz = userTz(robot, userId)
   // broken once a full period passes without activity
-  const alive = stored.lastDay === periodKey(kind, now, tz) || stored.lastDay === periodKey(kind, now - periodMs(kind), tz)
+  const alive = stored.lastDay === periodKey(kind, now, tz) || stored.lastDay === previousPeriodKey(kind, now, tz)
   return alive ? stored : { ...stored, current: 0 }
 }
 
@@ -45,8 +50,10 @@ export const getStreak = (robot: Robot, kind: StreakKind, userId: string, now = 
 export const recordStreak = (robot: Robot, kind: StreakKind, userId: string, now = Date.now()): string | undefined => {
   const tz = userTz(robot, userId)
   const current = periodKey(kind, now, tz)
+  const stored = robot.brain.get(streakKey(kind, userId))
+  // late-arriving activity for an earlier period can't rewind the streak
+  if (isStreak(stored) && current <= stored.lastDay) return undefined
   const prev = getStreak(robot, kind, userId, now)
-  if (prev && prev.lastDay === current) return undefined
   const count = prev && prev.current > 0 ? prev.current + 1 : 1
   const next: Streak = { current: count, best: Math.max(count, prev?.best ?? 0), lastDay: current }
   robot.brain.set(streakKey(kind, userId), next)
