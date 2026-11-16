@@ -31,16 +31,16 @@ export default async (robot: Robot) => {
   const { isDisabled } = roomToggle(robot, { command: 'ai lines', brainKey: 'lines:ai-off', label: 'AI-written lines' })
   configureLines({ aiAllowed: room => !room || !isDisabled(room) })
 
-  // user:message, so each person counts once per message
-  const counted = new Set<string>()
+  // user:message -> their scoring emoji; each person is one vote per message, whatever they react with
+  const reacted = new Map<string, Set<string>>()
+  const voteOf = (emojis: Set<string> | undefined): number => Math.sign([...emojis ?? []].reduce((n, e) => n + valenceOf(e), 0))
 
   const client = robot.adapter && robot.adapter.client
   if (client && typeof client.on === 'function') {
     const onReaction = (sign: 1 | -1) => async (reaction: DiscordReaction, user: DiscordUser) => {
       if (user.bot) return
       const emoji = reaction.emoji.name
-      const delta = valenceOf(emoji)
-      if (!delta) return
+      if (!valenceOf(emoji)) return
       try {
         if (reaction.partial) await reaction.fetch()
       } catch {
@@ -49,12 +49,17 @@ export default async (robot: Robot) => {
       const message = reaction.message
       const botId = client.user?.id
       if (!message.author || message.author.id !== botId || !message.content) return
-      const key = `${user.id}:${message.id}:${emoji}`
-      if (sign > 0 ? counted.has(key) : !counted.has(key)) return
-      if (sign > 0) counted.add(key)
-      else counted.delete(key)
-      if (counted.size > 5000) counted.clear()
-      for (const ref of linesIn(message.content)) scoreLine(ref, sign * delta)
+      const key = `${user.id}:${message.id}`
+      const emojis = reacted.get(key) ?? new Set<string>()
+      if (sign > 0 ? emojis.has(emoji) : !emojis.has(emoji)) return
+      const before = voteOf(emojis)
+      if (sign > 0) emojis.add(emoji)
+      else emojis.delete(emoji)
+      if (emojis.size) reacted.set(key, emojis)
+      else reacted.delete(key)
+      if (reacted.size > 5000) reacted.clear()
+      const change = voteOf(emojis) - before
+      if (change) for (const ref of linesIn(message.content)) scoreLine(ref, change)
     }
     client.on('messageReactionAdd', onReaction(1))
     client.on('messageReactionRemove', onReaction(-1))
