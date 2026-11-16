@@ -87,6 +87,16 @@ describe('Focus', () => {
     await robot.adapter.say(bob, '@Dumbotheelephant who is focusing?', 'room')
     assert.equal(sent[3], '🤫 Focusing now:\n<@u1> on tests, 25m left\n<@u2>, 50m left')
   })
+  it("keeps tasks out of other channels' who's focusing", async () => {
+    const { robot } = state
+    const alice = brainUser(robot, 'u1', 'alice')
+    const sent = collect(robot)
+    await robot.adapter.say(alice, '@Dumbotheelephant focus 25m on the surprise party', 'dm-alice')
+    await robot.adapter.say(alice, "@Dumbotheelephant who's focusing", 'room')
+    assert.equal(sent[1], '🤫 Focusing now:\n<@u1>, 25m left')
+    await robot.adapter.say(alice, "@Dumbotheelephant who's focusing", 'dm-alice')
+    assert.equal(sent[2], '🤫 Focusing now:\n<@u1> on the surprise party, 25m left')
+  })
   it('shows weekly stats', async () => {
     const { robot } = state
     const user = brainUser(robot, 'u1', 'alice')

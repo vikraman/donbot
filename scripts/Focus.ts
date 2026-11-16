@@ -10,7 +10,7 @@
 //   hubot tocks - Shows your tocks today and this week; a partial tock counts as a fraction.
 //   hubot skip break - Ends your break and starts the next round now.
 //   hubot focus stop - Ends your session or pomodoros; a work stretch of 5+ minutes still counts.
-//   hubot who's focusing - Lists people focusing or on a break, so you know when to interrupt.
+//   hubot who's focusing - Lists people focusing or on a break, so you know when to interrupt. Tasks show only in the channel they were set in.
 //   hubot focus stats - Shows your focus time this week and your streak.
 //
 
@@ -442,7 +442,9 @@ export default async (robot: Robot) => {
       const who = mentionFor({ id: j.data.userId })
       if (j.data.phase === 'break') return `${who} on a break, ${left} left ☕`
       const round = j.data.cycle ? ` (${unitName(j.data.cycle)} ${roundLabel(j.data.cycle)})` : ''
-      return `${who}${taskSuffix(j.data.task)}${round}, ${left} left`
+      // tasks stay in the channel or dm they were set in
+      const task = j.data.room === res.message.room ? taskSuffix(j.data.task) : ''
+      return `${who}${task}${round}, ${left} left`
     })
     await res.send(`🤫 Focusing now:\n${lines.join('\n')}`)
   })
