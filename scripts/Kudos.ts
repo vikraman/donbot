@@ -15,7 +15,8 @@
 //   hubot leaderboard week - Shows who gained the most points in the last 7 days.
 //
 // Each user can change a score once every 5 minutes, and at most 5 scores a minute;
-// votes past either limit are ignored.
+// votes past either limit are ignored. Things are 1-3 words with ++/-- attached ("c++" isn't
+// a vote for c); a thing back at 0 with no reasons is forgotten, and at most 500 are tracked.
 //
 
 import type { Robot, Response } from 'hubot'
@@ -43,6 +44,11 @@ export const MAX_VOTES_PER_WINDOW = 5
 export const VOTE_WINDOW_MS = 60 * 1000
 
 const MAX_REASONS = 20
+const MAX_REASON_LENGTH = 200
+// keeps the brain from filling with one-off things
+export const MAX_THINGS = 500
+const MAX_THING_LENGTH = 40
+const MAX_THING_WORDS = 3
 const SHOWN_REASONS = 5
 const TOP_N = 10
 const COMMENT_CHANCE = 0.5
@@ -230,6 +236,15 @@ const formatLeaderboard = (rows: { who: string, score: number }[], room?: string
 }
 
 const TARGET = String.raw`(<@!?\d+>|@?[\w .-]+?)`
+// people may have a space before ++; things need it attached, so "ok --" isn't a vote
+const VOTE = new RegExp(String.raw`^\s*(?:(<@!?\d+>|@[\w .-]+?)\s*|([\w.-](?:[\w .-]*[\w.-])?))(\+\+|--)(?:\s+for\s+(.+?))?\s*$`)
+
+// "c++", "i--" and "I love c++" aren't votes for c
+const plausibleThing = (thing: string): boolean => {
+  const words = thing.split(/\s+/)
+  const last = words[words.length - 1]!
+  return thing.length <= MAX_THING_LENGTH && words.length <= MAX_THING_WORDS && last.length >= 2 && !/^\d+$/.test(last)
+}
 
 export default async (robot: Robot) => {
   const voteCooldown = cooldown(VOTE_COOLDOWN_MS)
@@ -242,25 +257,29 @@ export default async (robot: Robot) => {
       await res.send(selfKudos({}, { room: res.message.room, tz: userTz(robot, voter) }))
       return 'self'
     }
+    const isNewThing = !target.userId && robot.brain.get(PREFIX + target.key) === null
+    if (isNewThing && entriesWithPrefix(robot, PREFIX, isScore).filter(([key]) => !key.startsWith(USER_PREFIX)).length >= MAX_THINGS) return 'limited'
     const voteKey = `${voter}:${target.key}`
     if (!voteCooldown.ready(voteKey) || !voteBurst.take(voter)) return 'limited'
     voteCooldown.mark(voteKey)
 
     const score = scoreAt(robot, PREFIX + target.key) + delta
-    robot.brain.set(PREFIX + target.key, score)
     if (reason) {
-      const reasons = [...readReasons(robot, target.key), { reason, by: voter, ts: Date.now(), delta }]
+      const reasons = [...readReasons(robot, target.key), { reason: reason.slice(0, MAX_REASON_LENGTH), by: voter, ts: Date.now(), delta }]
       robot.brain.set(REASONS_PREFIX + target.key, reasons.slice(-MAX_REASONS))
     }
+    // a thing back at zero with nothing to say for it is forgotten
+    if (score === 0 && !target.userId && readReasons(robot, target.key).length === 0) robot.brain.remove(PREFIX + target.key)
+    else robot.brain.set(PREFIX + target.key, score)
     logEvent(robot, 'kudos', { room: res.message.room, userId: voter, target: target.display, targetId: target.userId, reason, delta })
     return score
   }
 
-  robot.hear(new RegExp(String.raw`^\s*${TARGET}\s*(\+\+|--)(?:\s+for\s+(.+?))?\s*$`), async res => {
-    const target = resolveTarget(robot, required(res.match, 1))
-    if (!target) return
-    const delta = required(res.match, 2) === '++' ? 1 : -1
-    const reason = res.match[3]?.trim()
+  robot.hear(VOTE, async res => {
+    const target = resolveTarget(robot, res.match[1] ?? required(res.match, 2))
+    if (!target || (!target.userId && !plausibleThing(target.display))) return
+    const delta = required(res.match, 3) === '++' ? 1 : -1
+    const reason = res.match[4]?.trim()
     const score = await vote(res, target, delta, reason)
     if (typeof score !== 'number') return
     await res.send(`${target.display}: ${score}${reason ? ` (for ${reason})` : ''}`)

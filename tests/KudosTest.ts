@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
-import { VOTE_COOLDOWN_MS, MAX_VOTES_PER_WINDOW, VOTE_WINDOW_MS } from '../scripts/Kudos.ts'
+import { VOTE_COOLDOWN_MS, MAX_THINGS, MAX_VOTES_PER_WINDOW, VOTE_WINDOW_MS } from '../scripts/Kudos.ts'
 import { eventsSince } from '../scripts/lib/eventLog.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
 
@@ -20,6 +20,49 @@ describe('Kudos testing Hubot scripts', () => {
       const sent = collect(robot)
       await robot.adapter.say(user, 'donbot++', 'test-room')
       assert.strictEqual(sent[0], 'donbot: 1')
+    })
+    it('ignores code and sentences that only look like votes', async () => {
+      const { robot } = state
+      const user = brainUser(robot, 'test-user', 'test user')
+      const sent = collect(robot)
+      for (const text of ['c++', 'g++ for linking', 'i--', 'I love c++', 'ok --', 'that was 2--', 'this whole week was a disaster--', `${'x'.repeat(41)}++`]) {
+        await robot.adapter.say(user, text, 'test-room')
+      }
+      assert.deepStrictEqual(sent, [])
+      await robot.adapter.say(user, 'release train++', 'test-room')
+      assert.strictEqual(sent[0], 'release train: 1')
+    })
+    it('still takes a space before ++ for people', async () => {
+      const { robot } = state
+      const user = brainUser(robot, 'test-user', 'test user')
+      brainUser(robot, '123', 'alice')
+      const sent = collect(robot)
+      await robot.adapter.say(user, '<@123> ++', 'test-room')
+      await robot.adapter.say(user, '@alice ++ for reviewing', 'test-room')
+      assert.strictEqual(sent[0], '<@123>: 1')
+      assert.strictEqual(robot.brain.get('plusplus:user:123'), 1)
+    })
+    it('forgets a thing back at zero unless it has reasons', async () => {
+      const { robot } = state
+      const alice = brainUser(robot, 'alice-id', 'alice')
+      const bob = brainUser(robot, 'bob-id', 'bob')
+      await robot.adapter.say(alice, 'pizza++', 'test-room')
+      await robot.adapter.say(bob, 'pizza--', 'test-room')
+      assert.strictEqual(robot.brain.get('plusplus:pizza'), null)
+      await robot.adapter.say(alice, 'tea++ for warmth', 'test-room')
+      await robot.adapter.say(bob, 'tea--', 'test-room')
+      assert.strictEqual(robot.brain.get('plusplus:tea'), 0)
+    })
+    it('stops tracking new things past the cap', async () => {
+      const { robot } = state
+      const user = brainUser(robot, 'test-user', 'test user')
+      for (let i = 0; i < MAX_THINGS; i++) robot.brain.set(`plusplus:thing${i}`, 1)
+      robot.brain.set('plusplus:user:9', 1)
+      const sent = collect(robot)
+      await robot.adapter.say(user, 'newthing++', 'test-room')
+      await robot.adapter.say(user, 'thing3++', 'test-room')
+      assert.deepStrictEqual(sent, ['thing3: 2'])
+      assert.strictEqual(robot.brain.get('plusplus:newthing'), null)
     })
     it('should decrement a score on --', async () => {
       const { robot } = state
