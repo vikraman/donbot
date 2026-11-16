@@ -300,6 +300,29 @@ describe('agda index', () => {
       assert.deepStrictEqual(names(searchType('p = p -1 -1')), ['Cubical.Foundations.GroupoidLaws.symInvo'])
     })
 
+    it('reads ⟨ ⟩, ∣, ⟦ ⟧, ⟶, ⇔ and ⊓ in ascii', () => {
+      const typed = (name: string, type: string) => ({ ...entry(name, 'M'), type })
+      setIndex([file('x', [
+        typed('[_]/I', '{R : Ring ℓ} {I₁ : IdealsIn R} → ⟨ R ⟩ → ⟨ R / I₁ ⟩'),
+        typed('poly', '{R : Ring ℓ} → Iso ⟨ R [ ⊤ ] ⟩ ⟨ Poly R ⟩'),
+        typed('∣-antisym', '{m n : Nat} → m ∣ n → n ∣ m → m ≡ n'),
+        typed('⟦_⟧-id', '(C : Category ℓ ℓ\') → ⟦ C ⟧ ≡ C'),
+        typed('⟶×⟵⇒⇔', '{A B : Set} → A ⟶ B → B ⟶ A → A ⇔ B'),
+        typed('≤→⊓', '{p q : ℚ} → p ≤ q → (p ⊓ q) ≡ p'),
+        typed('≈-sym', '{x y : A} → x ≈ y → y ≈ x'),
+      ])])
+      assert.deepStrictEqual(names(searchType('<| R |> -> <| R / J |>')), ['M.[_]/I'])
+      assert.deepStrictEqual(names(searchType('Iso <| _ |> <| _ |>')), ['M.poly'])
+      assert.deepStrictEqual(names(searchType('m | n -> n | m -> m = n')), ['M.∣-antisym'])
+      assert.deepStrictEqual(names(searchType('[[ C ]] = C')), ['M.⟦_⟧-id'])
+      assert.deepStrictEqual(names(searchType('A --> B -> B --> A -> A <=> B')), ['M.⟶×⟵⇒⇔'])
+      assert.deepStrictEqual(names(searchType('p <= q -> p /\\ q = p')), ['M.≤→⊓'])
+      const commuted = searchType('p <= q -> q /\\ p = p')
+      assert.deepStrictEqual([names(commuted), commuted[0]!.via], [['M.≤→⊓'], 'commutativity'])
+      const flipped = searchType('y ~~ x -> x ~~ y')
+      assert.deepStrictEqual(names(flipped), ['M.≈-sym'])
+    })
+
     it('keeps one copy of agda builtins', () => {
       setIndex([file('x', [entry('fst', 'Agda.Builtin.Sigma.Σ')]), file('y', [entry('fst', 'Agda.Builtin.Sigma.Σ'), entry('fst', 'M')])])
       assert.deepStrictEqual(libraries().map(l => [l.name, l.count]), [['x', 1], ['y', 1]])

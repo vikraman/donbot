@@ -26,7 +26,7 @@ const MAX_TYPE = 300
 const MAX_MESSAGE = 1900
 
 // type-like query, on folded ascii
-const TYPE_LIKE = /->|[=<>]|\|\||\*|\s:\s|\bforall\b|\bSigma\b/
+const TYPE_LIKE = /->|[=<>|]|\*|\s:\s|\bforall\b|\bSigma\b/
 
 interface Page {
   label: string

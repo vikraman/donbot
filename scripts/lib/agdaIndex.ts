@@ -65,12 +65,13 @@ const push = <K>(map: Map<K, number[]>, key: K, id: number) => {
 // ascii folding
 
 const SYMBOLS: Record<string, string> = {
-  '→': '->', '←': '<-', '↔': '<->', '⇒': '=>', '↦': '|->',
+  '→': '->', '←': '<-', '↔': '<->', '⇒': '=>', '↦': '|->', '⇔': '<=>', '⟶': '-->', '⟵': '<--',
   '≡': '=', '≢': '/=', '≃': '~=', '≅': '=~', '≈': '~~', '∼': '~', '≟': '=?',
   '×': '*', '⊎': '|+|', 'Σ': 'Sigma', 'Π': 'Pi', '∥': '||', '∙': '.', '∘': '.', '⊔': '\\/',
   '≤': '<=', '≥': '>=', '¬': '~', '∀': 'forall', '∃': 'exists', 'λ': '\\',
-  '⊤': 'Top', '⊥': 'Bot', '∈': '<-', '∉': '/<-', '∷': '::', '⟨': '<', '⟩': '>', '∞': 'inf',
-  '∧': '/\\', '∨': '\\/', '⊆': '<:=', '⊂': '<:', '∪': '\\/', '∩': '/\\', '⋆': '*', '·': '*',
+  '⊤': 'Top', '⊥': 'Bot', '∈': '<-', '∉': '/<-', '∷': '::', '⟨': '<|', '⟩': '|>', '∞': 'inf',
+  '∧': '/\\', '∨': '\\/', '⊆': '<:=', '⊂': '<:', '∪': '\\/', '∩': '/\\', '⊓': '/\\', '⋆': '*', '·': '*',
+  '∣': '|', '⟦': '[[', '⟧': ']]',
   '⁻': '-', '−': '-', '′': "'", '″': "''"
 }
 
@@ -209,7 +210,8 @@ const POSTFIX = /^-\d+$/
 
 const operand = (t: string | undefined): boolean => t === undefined || SYMBOLIC.test(t)
 
-const RELATIONS = new Set(['->', '=', '/=', '~=', '=~', '~~', '<->', '=>', '<=', '>=', '<', '>', ':'])
+const RELATIONS = new Set(['->', '-->', '=', '/=', '~=', '=~', '~~', '<->', '<=>', '=>', '<=', '>=', '<', '>', ':', '<-', '/<-', '<:=', '<:',
+  '≲', '≺', '≼', '≻', '≽', '⊑', '⊏', '≗', '≋', '≉', '↭', '⊢', '↪', '≐'])
 
 // relations at bracket depth 0
 const topLevel = (toks: string[], keep: (t: string) => boolean): number[] => {
@@ -313,7 +315,7 @@ const parseSig = (toks: string[], query = false): Sig => {
 const sigOf = (type: string): Sig => parseSig(tokenize(ascii(type)).map(canon))
 
 // longest first, _≡_ kept whole
-const OPERATORS = /<->|\|->|->|<-|=>|\/<-|\/=|~=|=~|~~|<:=|<:|<=|>=|=\?|==?|\|\+\||\*/g
+const OPERATORS = /<->|<=>|<--|-->|\|->|->|<-|<\||\|>|=>|\/<-|\/=|~=|=~|~~|<:=|<:|<=|>=|=\?|==?|\|\+\||\*|\[\[|\]\]/g
 
 const spaceOperators = (s: string): string =>
   s.replace(OPERATORS, (op: string, at: number) => (s[at - 1] === '_' || s[at + op.length] === '_' ? op : ` ${op === '==' ? '=' : op} `))
@@ -355,10 +357,14 @@ const isQueryVar = (t: string): boolean =>
 const startsWith = (xs: string[], prefix: string[]): boolean => prefix.every((p, i) => xs[i] === p)
 
 // length of the leading name or group, 0 for an operator
+// ∥ A ∥₁, ∣ x ∣₁, ⟨ G ⟩, ⟦ e ⟧
+const MIXFIX: Record<string, RegExp> = { '||': /^\|\|\d*$/, '|': /^\|\d*$/, '<|': /^\|>$/, '[[': /^\]\]$/ }
+
 const atom = (xs: string[]): number => {
   const t = xs[0]!
   if (OPEN[t]) return group(xs, 0) + 1
-  if (t === '||') return xs.findIndex((x, k) => k > 0 && /^\|\|\d*$/.test(x)) + 1
+  const close = MIXFIX[t]
+  if (close) return xs.findIndex((x, k) => k > 0 && close.test(x)) + 1
   return CLOSE[t] || SYMBOLIC.test(t) ? 0 : 1
 }
 
@@ -373,7 +379,9 @@ const matchSeq = (q: string[], c: string[], qv: (t: string) => boolean, cv: Set<
     const key = `q:${qh}`
     const bound = qh === '_' ? undefined : s.get(key)
     if (bound) return startsWith(c, bound) ? matchSeq(q.slice(1), c.slice(bound.length), qv, cv, s, budget) : null
-    const n = whole && q.length === 1 ? c.length : atom(c)
+    // alone before a closing bracket, as in ⟨ _ ⟩, it takes everything up to it
+    const closer = q[1] !== undefined && (CLOSE[q[1]] || Object.values(MIXFIX).some(r => r.test(q[1]!))) ? topLevel(c, t => t === q[1])[0] ?? 0 : 0
+    const n = whole && q.length === 1 ? c.length : closer > 0 ? closer : atom(c)
     if (n === 0 || n > c.length - (q.length - 1)) return null
     return matchSeq(q.slice(1), c.slice(n), qv, cv, qh === '_' ? s : new Map(s).set(key, c.slice(0, n)), budget)
   }
@@ -530,8 +538,8 @@ const SEARCH_MS = 300
 const MAX_ARGS = 8
 export const MAX_QUERY = 300
 
-const SYMMETRIC = new Set(['=', '~=', '=~', '<->'])
-const COMMUTATIVE = new Set(['*', '|+|'])
+const SYMMETRIC = new Set(['=', '/=', '~=', '=~', '~~', '<->', '<=>', '≗', '≋', '↭'])
+const COMMUTATIVE = new Set(['*', '|+|', '/\\', '\\/'])
 
 interface Variant {
   sig: Sig
@@ -567,9 +575,17 @@ const variants = (q: Sig): Variant[] => {
     const iso = twoAtoms(toks, 'Iso')
     const sym = swapOp(toks, SYMMETRIC) ?? (iso && ['Iso', ...iso[1], ...iso[0]])
     if (sym) out.push({ sig: at(i, sym), via: 'symmetry' })
-    // A × B as B × A
+    // A × B as B × A, also on either side of a relation, q ⊓ p ≡ p as p ⊓ q ≡ p
     const comm = swapOp(toks, COMMUTATIVE)
     if (comm) out.push({ sig: at(i, comm), via: 'commutativity' })
+    const rel = topLevel(toks, t => RELATIONS.has(t))
+    if (rel.length === 1) {
+      const r = rel[0]!
+      const left = swapOp(toks.slice(0, r), COMMUTATIVE)
+      const right = swapOp(toks.slice(r + 1), COMMUTATIVE)
+      if (left) out.push({ sig: at(i, [...left, ...toks.slice(r)]), via: 'commutativity' })
+      if (right) out.push({ sig: at(i, [...toks.slice(0, r + 1), ...right]), via: 'commutativity' })
+    }
   }
   // Σ A B → C as (a : A) → B a → C, A × B → C as A → B → C
   q.args.forEach((a, i) => {
