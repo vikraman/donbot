@@ -137,4 +137,29 @@ describe('Presence testing Hubot scripts', () => {
     }
     assert.ok(statuses.some(s => /\p{Emoji}/u.test(s) && s.length <= 3))
   })
+
+  it('should report who is focusing, leaving out breaks', async () => {
+    const { robot } = state
+    const setActivity = mock.fn()
+    robot.adapter.client = { isReady: () => true, user: { setActivity } } as unknown as DiscordClient
+    await state.loadScript()
+    const sample = () => {
+      const statuses = new Set<string>()
+      for (let i = 0; i < 300; i++) {
+        robot.brain.emit('connected')
+        statuses.add(setActivity.mock.calls.at(-1)!.arguments[0])
+      }
+      return [...statuses]
+    }
+    robot.brain.set('schedule:focus', [
+      { id: 'a', data: { phase: 'work' } },
+      { id: 'b', data: { phase: 'work', cycle: { tock: true } } },
+      { id: 'c', data: { phase: 'break' } }
+    ])
+    assert.ok(sample().includes('2 people focusing 🤫'))
+    robot.brain.set('schedule:focus', [{ id: 'b', data: { phase: 'work', cycle: { tock: true } } }])
+    assert.ok(sample().includes('1 person on a tock 🕰️'))
+    robot.brain.set('schedule:focus', [{ id: 'c', data: { phase: 'break' } }])
+    assert.ok(!sample().some(s => /focusing|tock/.test(s)))
+  })
 })

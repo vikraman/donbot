@@ -10,6 +10,7 @@ import { shuffle } from './lib/random.ts'
 
 const ROTATE_MS = 15 * 60 * 1000
 const REMINDERS_KEY = 'schedule:remind'
+const FOCUS_KEY = 'schedule:focus'
 const LAST_MESSAGE_KEY = 'seen:last'
 
 
@@ -41,6 +42,15 @@ const buildStatuses = (robot: Robot): (() => string | null)[] => [
   () => {
     const reminders = robot.brain.get<unknown[]>(REMINDERS_KEY) || []
     return reminders.length === 1 ? '1 reminder pending' : `${reminders.length} reminders pending`
+  },
+  () => {
+    // focus sessions, pomodoros and tocks, minus anyone on a break
+    const jobs = robot.brain.get<{ data?: { phase?: string, cycle?: { tock?: boolean } } }[]>(FOCUS_KEY) || []
+    const working = jobs.filter(j => j.data?.phase !== 'break')
+    if (working.length === 0) return null
+    const tocks = working.filter(j => j.data?.cycle?.tock).length
+    if (tocks === working.length) return tocks === 1 ? '1 person on a tock 🕰️' : `${tocks} people on tocks 🕰️`
+    return working.length === 1 ? '1 person focusing 🤫' : `${working.length} people focusing 🤫`
   },
   () => {
     const users = Object.values(robot.brain.data.users || {})
