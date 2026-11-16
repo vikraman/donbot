@@ -7,19 +7,34 @@
 //   hubot github unsubscribe <owner/repo> [categories] - Stops some or all of a repo's activity here.
 //   hubot github subscriptions - Lists the repos this channel follows, with polling stats.
 //   hubot github poll [owner/repo] - Checks this channel's repos for news right now.
+//   hubot github digest [week|month] - Sums up this channel's GitHub activity. Defaults to the past week.
+//   hubot github nudge - Lists PRs here that have been waiting for a review.
+//   hubot github nudges [on|off] - Turns the weekday 10am review nudge on or off here. On by default.
+//
+// Also celebrates first merged PRs, merge milestones, releases and CI recoveries.
 //
 // Configuration:
 //   GITHUB_TOKEN - Token with no scopes; without it GitHub allows only 60 requests an hour.
 //   GITHUB_POLL_SECONDS - Default poll interval, 60 to 3600. Defaults to 60.
 //   GITHUB_POLL_MAX_SECONDS - Longest interval a quiet repo backs off to. Defaults to 3600.
+//   GITHUB_NUDGE_DAYS - How many days an unreviewed PR waits before a nudge. Defaults to 2.
+//   DEFAULT_TIMEZONE - Timezone for the nudge schedule. Defaults to Europe/London.
 //
 
 import type { Robot } from 'hubot'
 
 import { formatDuration, formatAgo } from './lib/duration.ts'
+import { eventsSince, logEvent } from './lib/eventLog.ts'
+import type { LogEntry } from './lib/eventLog.ts'
 import { githubClient, parseRepo, shortSha, branchOf } from './lib/github.ts'
 import type { GithubResponse } from './lib/github.ts'
 import { required } from './lib/match.ts'
+import { pick } from './lib/random.ts'
+import { roomToggle } from './lib/roomToggle.ts'
+import { scheduler } from './lib/schedule.ts'
+import { DAY_MS, nextOccurrence } from './lib/time.ts'
+import type { Repeat } from './lib/time.ts'
+import { defaultTz } from './lib/timezone.ts'
 
 export const CATEGORIES = ['issues', 'prs', 'pushes', 'ci', 'releases', 'comments'] as const
 export type Category = typeof CATEGORIES[number]
@@ -52,6 +67,21 @@ const ZWSP = '​'
 const ZERO_SHA = /^0+$/
 // branch_deletion is skipped
 const ACTIVITY_TYPES = ['push', 'force_push', 'branch_creation', 'pr_merge']
+const MERGED_PREFIX = 'github:merged:'
+const MERGE_MILESTONES = [10, 25, 50, 100, 250, 500]
+const NUDGE_REPEAT: Repeat = { kind: 'weekly', days: [1, 2, 3, 4, 5], hour: 10, minute: 0 }
+// older prs are usually abandoned, not waiting
+const NUDGE_MAX_AGE_MS = 30 * DAY_MS
+const NUDGE_PER_REPO = 3
+const NUDGE_CHECKS_PER_REPO = 6
+
+const FIRST_PR_CHEERS = [
+  '🎉 First merged PR from {who} here. Welcome aboard!',
+  '🎉 {who} just landed their first PR here. Nice one!',
+  "🎉 That's {who}'s first merged PR here. Welcome!"
+] as const
+const RELEASE_CHEERS = ['🚀 {tag} is out!', '🚀 {tag} has shipped. Congrats!', '🚀 Ship it! {tag} is live.'] as const
+const CI_CHEERS = ['Nice save!', 'Back in the green. 🎉', 'Crisis averted.', 'Green again, well done.'] as const
 
 interface RoomSub {
   events: Category[]
@@ -119,12 +149,51 @@ export interface Run {
   workflow_id: number
   head_branch: string
   head_sha: string
+  actor?: { login: string } | null
   conclusion: string | null
   html_url: string
   updated_at: string
 }
 
-interface Pull { title: string, html_url: string, merged?: boolean }
+interface Pull {
+  number?: number
+  title: string
+  html_url: string
+  merged?: boolean
+  merged_at?: string | null
+  draft?: boolean
+  created_at?: string
+  user?: { login: string } | null
+  requested_reviewers?: { login: string }[]
+  requested_teams?: { slug: string }[]
+}
+
+export type GithubKind = 'merged' | 'opened' | 'closed' | 'release' | 'ci-fixed'
+
+// read by the recap; item tells prs from issues
+export interface GithubLog extends LogEntry {
+  room: string
+  repo: string
+  kind: GithubKind
+  actor: string
+  item?: 'pr' | 'issue'
+  number?: number
+  title?: string
+  url?: string
+}
+
+type LogFields = Omit<GithubLog, 'ts' | 'room' | 'repo'>
+
+interface Described {
+  text: string
+  log?: LogFields
+}
+
+interface MergedState {
+  logins: string[]
+  // unknown when the history was too long to count from one page
+  count?: number
+}
 
 interface Compare {
   status: string
@@ -307,6 +376,50 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 
 const errorText = (err: unknown): string => err instanceof Error ? err.message : String(err)
 
+const isBot = (login: string): boolean => /\[bot\]$/i.test(login)
+
+const fill = (template: string, values: Record<string, string>): string =>
+  template.replace(/\{(\w+)\}/g, (all, k: string) => values[k] ?? all)
+
+export const isMergeMilestone = (n: number): boolean => MERGE_MILESTONES.includes(n) || (n >= 1000 && n % 1000 === 0)
+
+const DIGEST_SPANS: Record<string, number> = { week: 7 * DAY_MS, month: 30 * DAY_MS }
+
+const count = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`
+
+export const formatDigest = (entries: GithubLog[], period: string): string => {
+  if (entries.length === 0) return `No GitHub activity here this ${period}.`
+  const of = (kind: GithubKind, item?: 'pr' | 'issue') => entries.filter(e => e.kind === kind && (!item || e.item === item))
+  const merged = of('merged')
+  const releases = of('release')
+  const totals = [
+    merged.length && `${count(merged.length, 'PR')} merged`,
+    of('opened', 'pr').length && `${count(of('opened', 'pr').length, 'PR')} opened`,
+    of('opened', 'issue').length && `${count(of('opened', 'issue').length, 'issue')} opened`,
+    of('closed', 'issue').length && `${count(of('closed', 'issue').length, 'issue')} closed`,
+    releases.length && count(releases.length, 'release'),
+    of('ci-fixed').length && count(of('ci-fixed').length, 'CI fix', 'CI fixes')
+  ].filter(Boolean)
+  const lines = [`📦 GitHub this ${period}: ${totals.join(', ') || 'nothing notable'}`]
+  const item = (e: GithubLog) => {
+    const label = `${e.repo}${e.number ? ` #${e.number}` : ''}${e.title ? ` ${truncate(e.title, 80)}` : ''}`
+    return e.url ? link(label, e.url) : esc(label)
+  }
+  if (merged.length) {
+    const recent = merged.slice(-3).reverse().map(item)
+    lines.push(`Merged: ${recent.join(', ')}${merged.length > 3 ? `, and ${merged.length - 3} more` : ''}`)
+  }
+  if (releases.length) lines.push(`Released: ${releases.slice(-3).reverse().map(item).join(', ')}`)
+  const tally = new Map<string, number>()
+  for (const e of entries) {
+    if (e.kind === 'closed' || !e.actor || isBot(e.actor)) continue
+    tally.set(e.actor, (tally.get(e.actor) ?? 0) + 1)
+  }
+  const top = [...tally].sort((a, b) => b[1] - a[1]).slice(0, 3)
+  if (top.length) lines.push(`Top contributors: ${top.map(([who, n]) => `${esc(who)} (${n})`).join(', ')}`)
+  return lines.join('\n')
+}
+
 export default async (robot: Robot) => {
   let rateBlockedUntil = 0
   let rate: ApiStats['rate']
@@ -386,44 +499,91 @@ export default async (robot: Robot) => {
     return res.body ?? { title: '', html_url: `${GH}/${name}/pull/${n}` }
   }
 
-  const describe = async (name: string, e: GhEvent): Promise<string | undefined> => {
+  const getMerged = (key: string): MergedState | undefined => {
+    const stored = robot.brain.get(MERGED_PREFIX + key)
+    return isObject(stored) && Array.isArray(stored.logins) ? stored as unknown as MergedState : undefined
+  }
+
+  // seeded lazily from one page of closed prs merged before this one; later ones in the batch still count as new
+  const seedMerged = async (name: string, pr: Pull & { number: number }): Promise<MergedState | undefined> => {
+    const res = await call<Pull[]>(`/repos/${name}/pulls?state=closed&per_page=100`)
+    if (res.status !== 200 || !Array.isArray(res.body)) return undefined
+    const cutoff = pr.merged_at ? Date.parse(pr.merged_at) : Infinity
+    const merged = res.body.filter(p => p.merged_at && p.number !== pr.number && Date.parse(p.merged_at) < cutoff)
+    const logins = [...new Set(merged.flatMap(p => p.user ? [p.user.login.toLowerCase()] : []))]
+    return { logins, ...(res.body.length < 100 ? { count: merged.length } : {}) }
+  }
+
+  const celebrateMerge = async (name: string, pr: Pull & { number: number }, author: string): Promise<string[]> => {
+    const key = name.toLowerCase()
+    const state = getMerged(key) ?? await seedMerged(name, pr)
+    if (!state) return []
+    const lines: string[] = []
+    const login = author.toLowerCase()
+    if (!isBot(author) && !state.logins.includes(login)) {
+      state.logins.push(login)
+      lines.push(fill(pick(FIRST_PR_CHEERS), { who: userLink({ login: author }) }))
+    }
+    if (state.count !== undefined) {
+      state.count++
+      if (isMergeMilestone(state.count)) lines.push(`🏆 That makes ${state.count} merged PRs in ${repoLink(name)}!`)
+    }
+    robot.brain.set(MERGED_PREFIX + key, state)
+    return lines
+  }
+
+  const describe = async (name: string, e: GhEvent): Promise<Described | undefined> => {
     const p = e.payload
     const who = `${repoLink(name)} ${userLink(e.actor)}`
     switch (e.type) {
-      case 'IssuesEvent':
+      case 'IssuesEvent': {
         if (!p.issue) return undefined
-        return `${who} ${p.action} issue ${ticket(p.issue.number, p.issue.title, p.issue.html_url)}`
+        const text = `${who} ${p.action} issue ${ticket(p.issue.number, p.issue.title, p.issue.html_url)}`
+        if (p.action !== 'opened' && p.action !== 'closed') return { text }
+        return { text, log: { kind: p.action, actor: e.actor.login, item: 'issue', number: p.issue.number, title: p.issue.title, url: p.issue.html_url } }
+      }
       case 'PullRequestEvent': {
         const n = p.number ?? p.pull_request?.number
         if (n === undefined) return undefined
         const pr = await pull(name, n)
         const verb = p.action === 'closed' ? (pr.merged ? 'merged' : 'closed') : p.action
-        return `${who} ${verb} PR ${ticket(n, pr.title, pr.html_url)}`
+        const text = `${who} ${verb} PR ${ticket(n, pr.title, pr.html_url)}`
+        if (verb !== 'merged' && verb !== 'closed' && verb !== 'opened') return { text }
+        // credit the author, not whoever pressed merge
+        const actor = verb === 'merged' ? pr.user?.login ?? e.actor.login : e.actor.login
+        const cheers = verb === 'merged' ? await celebrateMerge(name, { ...pr, number: n }, actor).catch(err => {
+          if (err instanceof RateLimited) throw err
+          return [] as string[]
+        }) : []
+        return { text: [text, ...cheers].join('\n'), log: { kind: verb, actor, item: 'pr', number: n, title: pr.title, url: pr.html_url } }
       }
       case 'PullRequestReviewEvent': {
         const n = p.pull_request?.number
         if (n === undefined || !p.review) return undefined
         const pr = await pull(name, n)
         const state = (p.review.state || '').toLowerCase()
-        if (state === 'approved') return `${who} approved PR ${ticket(n, pr.title, p.review.html_url)}`
-        if (state === 'changes_requested') return `${who} requested changes on PR ${ticket(n, pr.title, p.review.html_url)}`
-        return `${who} reviewed PR ${ticket(n, pr.title, p.review.html_url)}: ${esc(truncate(p.review.body || '', 140))}`
+        if (state === 'approved') return { text: `${who} approved PR ${ticket(n, pr.title, p.review.html_url)}` }
+        if (state === 'changes_requested') return { text: `${who} requested changes on PR ${ticket(n, pr.title, p.review.html_url)}` }
+        return { text: `${who} reviewed PR ${ticket(n, pr.title, p.review.html_url)}: ${esc(truncate(p.review.body || '', 140))}` }
       }
       case 'ReleaseEvent': {
         const r = p.release
         if (!r) return undefined
-        return `${who} published release ${link(r.name || r.tag_name, r.html_url || `${GH}/${name}/releases/tag/${encodeURIComponent(r.tag_name)}`)}`
+        const url = r.html_url || `${GH}/${name}/releases/tag/${encodeURIComponent(r.tag_name)}`
+        const title = r.name || r.tag_name
+        const cheer = fill(pick(RELEASE_CHEERS), { tag: esc(r.tag_name) })
+        return { text: `${who} published release ${link(title, url)}\n${cheer}`, log: { kind: 'release', actor: e.actor.login, title, url } }
       }
       case 'IssueCommentEvent': {
         if (!p.issue || !p.comment) return undefined
         const kind = p.issue.pull_request ? 'PR' : 'issue'
-        return `${who} commented on ${kind} ${ticket(p.issue.number, p.issue.title, p.comment.html_url)}: ${esc(truncate(p.comment.body || '', 140))}`
+        return { text: `${who} commented on ${kind} ${ticket(p.issue.number, p.issue.title, p.comment.html_url)}: ${esc(truncate(p.comment.body || '', 140))}` }
       }
       case 'PullRequestReviewCommentEvent': {
         const n = p.pull_request?.number
         if (n === undefined || !p.comment) return undefined
         const pr = await pull(name, n)
-        return `${who} commented on PR ${ticket(n, pr.title, p.comment.html_url)}: ${esc(truncate(p.comment.body || '', 140))}`
+        return { text: `${who} commented on PR ${ticket(n, pr.title, p.comment.html_url)}: ${esc(truncate(p.comment.body || '', 140))}` }
       }
       default:
         return undefined
@@ -456,15 +616,18 @@ export default async (robot: Robot) => {
       const cat = categoryOf(e)
       const targets = cat ? roomsFor(rooms, cat) : []
       if (targets.length === 0) continue
-      let text: string | undefined
+      let described: Described | undefined
       try {
-        text = await describe(cursor.name, e)
+        described = await describe(cursor.name, e)
       } catch (err) {
         if (err instanceof RateLimited) throw err
         robot.logger.warn(`github: ${cursor.name}: couldn't describe ${e.type} ${e.id}: ${errorText(err)}`)
       }
-      if (!text) continue
-      for (const room of targets) await deliver(room, text)
+      if (!described) continue
+      for (const room of targets) {
+        await deliver(room, described.text)
+        if (described.log) logEvent(robot, 'github', { room, repo: cursor.name, ...described.log })
+      }
       sent++
     }
     return sent
@@ -533,10 +696,14 @@ export default async (robot: Robot) => {
       delete cursor.ciState[k]
       cursor.ciState[k] = outcome
       if (seeding) continue
+      const fixed = outcome === 'success' && prev === 'failure'
       const text = outcome === 'failure' ? formatRunFailed(cursor.name, run)
-        : prev === 'failure' ? formatRunFixed(cursor.name, run) : undefined
+        : fixed ? `${formatRunFixed(cursor.name, run)} ${pick(CI_CHEERS)}` : undefined
       if (!text) continue
-      for (const room of roomsFor(rooms, 'ci')) await deliver(room, text)
+      for (const room of roomsFor(rooms, 'ci')) {
+        await deliver(room, text)
+        if (fixed) logEvent(robot, 'github', { room, repo: cursor.name, kind: 'ci-fixed', actor: run.actor?.login ?? '', title: run.name, url: run.html_url })
+      }
       sent++
     }
     const keys = Object.keys(cursor.ciState)
@@ -630,12 +797,112 @@ export default async (robot: Robot) => {
 
   const rateLimitedReply = (until: number): string => `GitHub's rate limit is used up; try again after ${clockUtc(until)}.`
 
+  const nudgeDays = (): number => Math.max(1, Number(process.env.GITHUB_NUDGE_DAYS) || 2)
+
+  const nudgeToggle = roomToggle(robot, { command: 'github nudges', brainKey: 'github:nudges-off', label: 'Review nudges' })
+
+  // open, non-draft, old enough, no reviews yet; oldest first
+  const waitingPulls = async (name: string): Promise<Pull[]> => {
+    const res = await call<Pull[]>(`/repos/${name}/pulls?state=open&sort=created&direction=desc&per_page=30`)
+    if (res.status !== 200 || !Array.isArray(res.body)) throw new Error(`pulls: GitHub said ${res.status}`)
+    const now = Date.now()
+    const candidates = res.body
+      .filter(p => {
+        const age = now - Date.parse(p.created_at || '')
+        return !p.draft && age >= nudgeDays() * DAY_MS && age <= NUDGE_MAX_AGE_MS
+      })
+      .reverse()
+      .slice(0, NUDGE_CHECKS_PER_REPO)
+    const waiting: Pull[] = []
+    for (const p of candidates) {
+      if (waiting.length >= NUDGE_PER_REPO) break
+      const reviews = await call<unknown[]>(`/repos/${name}/pulls/${p.number}/reviews?per_page=1`)
+      if (reviews.status === 200 && Array.isArray(reviews.body) && reviews.body.length === 0) waiting.push(p)
+    }
+    return waiting
+  }
+
+  const formatWaiting = (name: string, p: Pull, now: number): string => {
+    const asked = [...(p.requested_reviewers || []).map(r => r.login), ...(p.requested_teams || []).map(t => t.slug)]
+    const by = p.user ? ` by ${userLink(p.user)}` : ''
+    const age = formatDuration(now - Date.parse(p.created_at || ''), { units: 1 })
+    return `${repoLink(name)} ${ticket(p.number ?? 0, p.title, p.html_url)}${by}, open ${age}${asked.length ? ` (asked: ${esc(asked.join(', '))})` : ''}`
+  }
+
+  // room -> message; room limits to one channel and ignores its toggle
+  const collectNudges = async (onlyRoom?: string): Promise<Map<string, string>> => {
+    const subs = getSubs()
+    const cache = new Map<string, Promise<Pull[]>>()
+    const lines = new Map<string, string[]>()
+    const now = Date.now()
+    for (const key of Object.keys(subs).sort()) {
+      const rooms = roomsFor(subs[key] || {}, 'prs').filter(r => onlyRoom ? r === onlyRoom : !nudgeToggle.isDisabled(r))
+      if (rooms.length === 0 || now < rateBlockedUntil) continue
+      const name = getCursor(key)?.name || key
+      if (!cache.has(key)) cache.set(key, waitingPulls(name))
+      let pulls: Pull[]
+      try {
+        pulls = await cache.get(key)!
+      } catch (err) {
+        if (err instanceof RateLimited) break
+        robot.logger.warn(`github: ${name}: couldn't check reviews: ${errorText(err)}`)
+        continue
+      }
+      for (const room of rooms) {
+        const list = lines.get(room) ?? []
+        list.push(...pulls.map(p => formatWaiting(name, p, now)))
+        lines.set(room, list)
+      }
+    }
+    const out = new Map<string, string>()
+    for (const [room, list] of lines) {
+      if (list.length) out.set(room, ['👀 These PRs are waiting for a review:', ...list].join('\n'))
+    }
+    return out
+  }
+
+  const nudgeJobs = scheduler<null>(robot, 'github-nudge', async () => {
+    for (const [room, text] of await collectNudges()) await deliver(room, text)
+  })
+
+  // after the scheduler re-arms, so a stored job isn't replaced
+  robot.brain.on('connected', () => {
+    const tz = defaultTz()
+    if (nudgeJobs.get('daily')?.tz === tz) return
+    nudgeJobs.add({ id: 'daily', at: nextOccurrence(NUDGE_REPEAT, tz, Date.now()), tz, repeat: NUDGE_REPEAT, data: null })
+  })
+
+  robot.respond(/github nudge$/i, async res => {
+    const room = res.message.room
+    const subs = getSubs()
+    if (!Object.values(subs).some(rooms => rooms[room]?.events.includes('prs'))) {
+      await res.send(`This channel doesn't follow any repo's PRs. Try \`${robot.name} github subscribe owner/repo prs\`.`)
+      return
+    }
+    if (Date.now() < rateBlockedUntil) {
+      await res.send(rateLimitedReply(rateBlockedUntil))
+      return
+    }
+    const text = (await collectNudges(room)).get(room)
+    if (text) await deliver(room, text)
+    else await res.send(`No PRs here have been waiting more than ${count(nudgeDays(), 'day')} for a review. 🎉`)
+  })
+
+  robot.respond(/github digest(?: (week|month))?$/i, async res => {
+    const period = (res.match[1] || 'week').toLowerCase()
+    const entries = eventsSince<GithubLog>(robot, 'github', Date.now() - (DIGEST_SPANS[period] ?? 7 * DAY_MS), res.message.room)
+    await deliver(res.message.room, formatDigest(entries, period))
+  })
+
   robot.respond(/github$/i, async res => {
     await res.send([
       `\`${robot.name} github subscribe owner/repo [${CATEGORIES.join('|')}|all] [every 5m]\``,
       `\`${robot.name} github unsubscribe owner/repo [categories]\``,
       `\`${robot.name} github subscriptions\``,
-      `\`${robot.name} github poll [owner/repo]\``
+      `\`${robot.name} github poll [owner/repo]\``,
+      `\`${robot.name} github digest [week|month]\``,
+      `\`${robot.name} github nudge\``,
+      `\`${robot.name} github nudges [on|off]\``
     ].join('\n'))
   })
 

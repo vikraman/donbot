@@ -7,6 +7,7 @@ import type { DiscordClient, Envelope } from 'hubot'
 import * as Github from '../scripts/Github.ts'
 import type { Activity, GhEvent, Run } from '../scripts/Github.ts'
 import { parseRepo } from '../scripts/lib/github.ts'
+import type { GithubLog } from '../scripts/Github.ts'
 import { setupRobot, brainUser } from './helpers/setup.ts'
 import type { TestRobot } from './helpers/setup.ts'
 
@@ -26,7 +27,10 @@ interface RepoState {
   events: GhEvent[]
   activity: Activity[]
   runs: Run[]
-  pulls: Record<number, { title: string, html_url: string, merged?: boolean }>
+  pulls: Record<number, { title: string, html_url: string, merged?: boolean, merged_at?: string, user?: { login: string } }>
+  // listed by /pulls?state=...
+  prList: Record<string, unknown>[]
+  reviews: Record<number, unknown[]>
   compares: Record<string, unknown>
   status?: number
 }
@@ -36,7 +40,7 @@ const fakeGithub = () => {
   const repos: Record<string, RepoState> = {}
   const calls: Call[] = []
   const add = (name: string, extra: Partial<RepoState['meta']> = {}): RepoState => {
-    const repo: RepoState = { meta: { full_name: name, private: false, archived: false, ...extra }, events: [], activity: [], runs: [], pulls: {}, compares: {} }
+    const repo: RepoState = { meta: { full_name: name, private: false, archived: false, ...extra }, events: [], activity: [], runs: [], pulls: {}, prList: [], reviews: {}, compares: {} }
     repos[name.toLowerCase()] = repo
     return repo
   }
@@ -61,6 +65,12 @@ const fakeGithub = () => {
     if (rest === '/events') return reply([...repo.events].reverse(), etag, { 'x-poll-interval': '60' })
     if (rest === '/activity') return reply([...repo.activity].reverse(), etag)
     if (rest === '/actions/runs') return reply({ total_count: repo.runs.length, workflow_runs: [...repo.runs].reverse() }, etag)
+    if (rest === '/pulls') {
+      const want = u.searchParams.get('state') || 'open'
+      return reply(repo.prList.filter(p => (p.state || 'open') === want))
+    }
+    const rv = rest.match(/^\/pulls\/(\d+)\/reviews$/)
+    if (rv) return reply(repo.reviews[Number(rv[1])] ?? [])
     const pr = rest.match(/^\/pulls\/(\d+)$/)
     if (pr && repo.pulls[Number(pr[1])]) return reply(repo.pulls[Number(pr[1])])
     const cmp = rest.match(/^\/compare\/(.+)$/)
@@ -137,6 +147,28 @@ describe('Github helpers', () => {
     assert.strictEqual(Github.formatApiStatus({ authed: true, rate, pausedUntil: rate.reset }, START), 'GitHub API: token, 2/5000 requests left, resets 13:00 UTC, paused until 13:00 UTC')
   })
 
+
+  it('formats the digest', () => {
+    const base = { ts: START, room: 'r', repo: 'Octo/Demo' }
+    const entries: GithubLog[] = [
+      { ...base, kind: 'merged', actor: 'alice', item: 'pr', number: 1, title: 'One', url: 'https://github.com/Octo/Demo/pull/1' },
+      { ...base, kind: 'merged', actor: 'alice', item: 'pr', number: 2, title: 'Two', url: 'https://github.com/Octo/Demo/pull/2' },
+      { ...base, kind: 'merged', actor: 'dependabot[bot]', item: 'pr', number: 3, title: 'Bump', url: 'https://github.com/Octo/Demo/pull/3' },
+      { ...base, kind: 'merged', actor: 'bob', item: 'pr', number: 4, title: 'Four', url: 'https://github.com/Octo/Demo/pull/4' },
+      { ...base, kind: 'opened', actor: 'carol', item: 'issue', number: 5, title: 'Bug' },
+      { ...base, kind: 'closed', actor: 'alice', item: 'issue', number: 5, title: 'Bug' },
+      { ...base, kind: 'release', actor: 'bob', title: 'v1.2', url: 'https://github.com/Octo/Demo/releases/tag/v1.2' },
+      { ...base, kind: 'ci-fixed', actor: '', title: 'build' }
+    ]
+    const text = Github.formatDigest(entries, 'week')
+    assert.strictEqual(text.split('\n')[0], '📦 GitHub this week: 4 PRs merged, 1 issue opened, 1 issue closed, 1 release, 1 CI fix')
+    assert.match(text, /\nMerged: \[Octo\/Demo #4 Four\]\(<.+\/pull\/4>\), \[Octo\/Demo #3 Bump\].*, \[Octo\/Demo #2 Two\].*, and 1 more\n/)
+    assert.match(text, /\nReleased: \[Octo\/Demo v1\.2\]/)
+    assert.match(text, /\nTop contributors: alice \(2\), bob \(2\), carol \(1\)$/)
+    assertNoBareUrls(text)
+    assert.strictEqual(Github.formatDigest([], 'month'), 'No GitHub activity here this month.')
+    assert.ok(Github.isMergeMilestone(10) && Github.isMergeMilestone(3000) && !Github.isMergeMilestone(11))
+  })
 
   it('maps events to categories', () => {
     assert.strictEqual(Github.categoryOf(issue(1, 't')), 'issues')
@@ -291,7 +323,10 @@ describe('Github testing Hubot scripts', () => {
     const out = take()
     assert.deepStrictEqual(out.map(s => s.room), ['room-a', 'room-b'])
     assert.strictEqual(out[0]?.text, '**[Octo/Demo](<https://github.com/Octo/Demo>)** [alice](<https://github.com/alice>) opened issue [#7 Login \\[broken\\]](<https://github.com/Octo/Demo/issues/7>)')
-    assert.strictEqual(out[1]?.text, '**[Octo/Demo](<https://github.com/Octo/Demo>)** [bob](<https://github.com/bob>) merged PR [#9 Add thing](<https://github.com/Octo/Demo/pull/9>)')
+    // no earlier merges, so bob's is a first
+    const [mergedLine, cheer] = (out[1]?.text || '').split('\n')
+    assert.strictEqual(mergedLine, '**[Octo/Demo](<https://github.com/Octo/Demo>)** [bob](<https://github.com/bob>) merged PR [#9 Add thing](<https://github.com/Octo/Demo/pull/9>)')
+    assert.match(cheer || '', /^🎉 /)
     out.forEach(s => assertNoBareUrls(s.text))
   })
 
@@ -539,5 +574,160 @@ describe('Github testing Hubot scripts', () => {
     assert.deepStrictEqual(payload.allowedMentions, { parse: [] })
     assert.match(payload.content, /@​everyone look/)
     assertNoBareUrls(payload.content)
+  })
+  const merge = (n: number, author: string, at = '2026-11-15T12:00:35Z') => {
+    const repo = gh.repos['octo/demo']!
+    repo.pulls[n] = { title: `PR ${n}`, html_url: `https://github.com/Octo/Demo/pull/${n}`, merged: true, merged_at: at, user: { login: author } }
+    repo.prList.push({ number: n, state: 'closed', merged_at: at, user: { login: author } })
+    repo.events.push(ev('PullRequestEvent', { action: 'closed', number: n, pull_request: { number: n } }, at, 'maintainer'))
+  }
+  const logged = (): GithubLog[] => (state.robot.brain.get('log:github') as GithubLog[] | undefined) ?? []
+
+  it('cheers first merged prs, credits authors and skips old contributors and bots', async () => {
+    const repo = gh.add('Octo/Demo')
+    repo.prList.push({ number: 1, state: 'closed', merged_at: '2026-11-01T00:00:00Z', user: { login: 'Bob' } })
+    repo.prList.push({ number: 2, state: 'closed', merged_at: null, user: { login: 'carol' } })
+    await say(state.robot, 'github subscribe octo/demo prs')
+    take()
+    merge(10, 'bob')
+    merge(11, 'carol', '2026-11-15T12:00:36Z')
+    merge(12, 'renovate[bot]', '2026-11-15T12:00:37Z')
+    await advance(60_000)
+    const out = texts()
+    assert.strictEqual(out.length, 3)
+    assert.doesNotMatch(out[0] || '', /🎉/)
+    assert.match(out[1] || '', /merged PR \[#11 PR 11\].*\n🎉 .*\[carol\]\(<https:\/\/github\.com\/carol>\)/)
+    assert.doesNotMatch(out[2] || '', /🎉/)
+    // 1 seeded + 3 new, no milestone
+    assert.doesNotMatch(out.join('\n'), /🏆/)
+    merge(13, 'carol', '2026-11-15T12:01:30Z')
+    await advance(60_000)
+    assert.doesNotMatch(texts()[0] || '', /🎉/)
+    const log = logged()
+    assert.deepStrictEqual(log.map(e => [e.kind, e.actor, e.item, e.number]), [['merged', 'bob', 'pr', 10], ['merged', 'carol', 'pr', 11], ['merged', 'renovate[bot]', 'pr', 12], ['merged', 'carol', 'pr', 13]])
+    assert.deepStrictEqual({ room: log[0]?.room, repo: log[0]?.repo, url: log[0]?.url, title: log[0]?.title }, { room: 'room-a', repo: 'Octo/Demo', url: 'https://github.com/Octo/Demo/pull/10', title: 'PR 10' })
+  })
+
+  it('announces merge milestones only when the count is known', async () => {
+    const repo = gh.add('Octo/Demo')
+    for (let n = 1; n <= 9; n++) repo.prList.push({ number: n, state: 'closed', merged_at: '2026-11-01T00:00:00Z', user: { login: 'bob' } })
+    await say(state.robot, 'github subscribe octo/demo prs')
+    take()
+    merge(20, 'bob')
+    await advance(60_000)
+    assert.match(texts()[0] || '', /\n🏆 That makes 10 merged PRs in \*\*\[Octo\/Demo\]/)
+    state.robot.brain.set('github:merged:octo/demo', { logins: ['bob'] })
+    merge(21, 'bob', '2026-11-15T12:01:30Z')
+    await advance(60_000)
+    assert.doesNotMatch(texts()[0] || '', /🏆/)
+  })
+
+  it('still posts merges when seeding fails', async () => {
+    const repo = gh.add('Octo/Demo')
+    await say(state.robot, 'github subscribe octo/demo prs')
+    take()
+    merge(5, 'dave')
+    mock.method(global, 'fetch', async (url: string) => {
+      if (new URL(url).pathname.endsWith('/pulls')) return new Response('{}', { status: 500 })
+      if (new URL(url).pathname.endsWith('/events')) return new Response(JSON.stringify([...repo.events].reverse()), { status: 200 })
+      return new Response(JSON.stringify(repo.pulls[5]), { status: 200 })
+    })
+    await advance(60_000)
+    const out = texts()
+    assert.strictEqual(out.length, 1)
+    assert.match(out[0] || '', /merged PR \[#5 PR 5\]/)
+    assert.doesNotMatch(out[0] || '', /🎉/)
+    assert.strictEqual(state.robot.brain.get('github:merged:octo/demo') ?? undefined, undefined)
+  })
+
+  it('cheers releases and logs issues, releases and ci fixes', async () => {
+    const repo = gh.add('Octo/Demo')
+    repo.runs.push(run('failure', 'build', 'main', '2026-11-15T11:00:00Z'))
+    await say(state.robot, 'github subscribe octo/demo issues releases ci')
+    take()
+    repo.events.push(issue(1, 'Bug'))
+    repo.events.push(ev('IssuesEvent', { action: 'closed', issue: { number: 1, title: 'Bug', html_url: 'https://github.com/Octo/Demo/issues/1' } }, '2026-11-15T12:00:31Z', 'bob'))
+    repo.events.push(ev('IssuesEvent', { action: 'reopened', issue: { number: 1, title: 'Bug', html_url: 'https://github.com/Octo/Demo/issues/1' } }, '2026-11-15T12:00:32Z'))
+    repo.events.push(ev('ReleaseEvent', { action: 'published', release: { tag_name: 'v1.2', name: 'Big one', html_url: 'https://github.com/Octo/Demo/releases/tag/v1.2' } }, '2026-11-15T12:00:33Z', 'bob'))
+    repo.runs.push({ ...run('success'), actor: { login: 'carol' } })
+    await advance(60_000)
+    const out = texts()
+    assert.match(out.find(t => t.includes('published release')) || '', /published release \[Big one\]\(<.+>\)\n🚀 .*v1\.2/)
+    assert.match(out.find(t => t.includes('passing again')) || '', /passing again on \[main\].*\) (Nice save!|Back in the green\. 🎉|Crisis averted\.|Green again, well done\.)$/)
+    assert.deepStrictEqual(logged().map(e => [e.kind, e.actor, e.item ?? null]), [
+      ['opened', 'alice', 'issue'], ['closed', 'bob', 'issue'], ['release', 'bob', null], ['ci-fixed', 'carol', null]
+    ])
+  })
+
+  it('sums up the channel in a digest', async () => {
+    const repo = gh.add('Octo/Demo')
+    await say(state.robot, 'github subscribe octo/demo issues', 'room-a')
+    await say(state.robot, 'github subscribe octo/demo prs', 'room-b')
+    await say(state.robot, 'github digest', 'room-a')
+    assert.deepStrictEqual(texts('room-a').slice(-1), ['No GitHub activity here this week.'])
+    repo.events.push(issue(1, 'Bug'))
+    merge(2, 'bob', '2026-11-15T12:00:31Z')
+    await advance(60_000)
+    take()
+    await say(state.robot, 'github digest', 'room-a')
+    await say(state.robot, 'github digest month', 'room-b')
+    const [a, b] = texts()
+    assert.match(a || '', /^📦 GitHub this week: 1 issue opened\nTop contributors: alice \(1\)$/)
+    assert.match(b || '', /^📦 GitHub this month: 1 PR merged\nMerged: \[Octo\/Demo #2 PR 2\]/)
+    now += 8 * 24 * 3_600_000
+    await say(state.robot, 'github digest', 'room-a')
+    assert.deepStrictEqual(texts(), ['No GitHub activity here this week.'])
+  })
+
+  const openPr = (n: number, daysOld: number, extra: Record<string, unknown> = {}) => ({
+    number: n, state: 'open', draft: false, title: `PR ${n}`, html_url: `https://github.com/Octo/Demo/pull/${n}`,
+    created_at: new Date(START - daysOld * 24 * 3_600_000).toISOString(), user: { login: 'bob' }, requested_reviewers: [], requested_teams: [], ...extra
+  })
+
+  it('nudges about prs waiting for review', async () => {
+    const repo = gh.add('Octo/Demo')
+    await say(state.robot, 'github nudge')
+    assert.match(texts()[0] || '', /doesn't follow any repo's PRs/)
+    await say(state.robot, 'github subscribe octo/demo prs')
+    take()
+    await say(state.robot, 'github nudge')
+    assert.deepStrictEqual(texts(), ['No PRs here have been waiting more than 2 days for a review. 🎉'])
+    repo.prList.push(openPr(1, 1), openPr(2, 3, { requested_reviewers: [{ login: 'carol' }], requested_teams: [{ slug: 'core' }] }),
+      openPr(3, 5, { draft: true }), openPr(4, 6), openPr(5, 60), openPr(6, 4))
+    repo.reviews[4] = [{ state: 'COMMENTED' }]
+    await say(state.robot, 'github nudge')
+    assert.deepStrictEqual(texts(), [[
+      '👀 These PRs are waiting for a review:',
+      '**[Octo/Demo](<https://github.com/Octo/Demo>)** [#6 PR 6](<https://github.com/Octo/Demo/pull/6>) by [bob](<https://github.com/bob>), open 4d',
+      '**[Octo/Demo](<https://github.com/Octo/Demo>)** [#2 PR 2](<https://github.com/Octo/Demo/pull/2>) by [bob](<https://github.com/bob>), open 3d (asked: carol, core)'
+    ].join('\n')])
+    assert.ok(gh.calls.some(c => c.path === '/repos/Octo/Demo/pulls?state=open&sort=created&direction=desc&per_page=30'))
+  })
+
+  it('schedules weekday nudges that respect the channel toggle', async () => {
+    const repo = gh.add('Octo/Demo')
+    const job = (state.robot.brain.get('schedule:github-nudge') as { id: string, at: number, tz: string }[])[0]
+    // start is a sunday
+    assert.deepStrictEqual([job?.id, job?.at, job?.tz], ['daily', Date.parse('2026-11-16T10:00:00Z'), 'Europe/London'])
+    await say(state.robot, 'github subscribe octo/demo prs', 'room-a')
+    await say(state.robot, 'github subscribe octo/demo prs', 'room-b')
+    await say(state.robot, 'github nudges off', 'room-b')
+    assert.match(texts('room-b').at(-1) || '', /Review nudges off in this channel/)
+    repo.prList.push(openPr(7, 3))
+    const fire = async () => {
+      state.robot.brain.set('schedule:github-nudge', [{ ...job, at: now - 1000 }])
+      state.robot.brain.emit('connected')
+      await new Promise(resolve => setTimeout(resolve, 5))
+      await flush()
+    }
+    await fire()
+    const out = take()
+    assert.deepStrictEqual(out.map(s => s.room), ['room-a'])
+    assert.match(out[0]?.text || '', /#7 PR 7/)
+    const next = (state.robot.brain.get('schedule:github-nudge') as { at: number }[])[0]
+    assert.ok((next?.at ?? 0) > now)
+    // manual nudge ignores the toggle
+    await say(state.robot, 'github nudge', 'room-b')
+    assert.match(texts('room-b')[0] || '', /#7 PR 7/)
   })
 })

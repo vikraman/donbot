@@ -125,7 +125,7 @@ declare module 'hubot' {
     isReady?(): boolean
     user?: { id?: string; tag?: string; username?: string; setActivity?(text: string, opts: { type: number }): void }
     guilds?: { cache?: { size: number } }
-    channels?: { cache?: Map<string, Partial<DiscordChannel>> & { size?: number } }
+    channels?: { cache?: Map<string, Partial<DiscordChannel>> & { size?: number }; fetch?(id: string): Promise<DiscordChannel | null> }
     users?: { cache?: { size: number } }
     ws?: { ping: number; status: number }
     uptime?: number

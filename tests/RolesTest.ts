@@ -51,4 +51,14 @@ describe('Roles testing Hubot scripts', () => {
     await robot.adapter.say(author, '@Dumbotheelephant who is holman', 'test-room')
     assert.strictEqual(sent[0], 'holman is nothing to me.')
   })
+  it('should leave phrases owned by other scripts alone', async () => {
+    const { robot } = state
+    const author = brainUser(robot, 'author-id', 'author')
+    const sent = collect(robot)
+    await robot.adapter.say(author, '@Dumbotheelephant who is focusing?', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant who is your owner', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant my timezone is Europe/London', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant what time is it for holman', 'test-room')
+    assert.deepEqual(sent, [])
+  })
 })

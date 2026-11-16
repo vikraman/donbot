@@ -1,44 +1,39 @@
 // Description:
-//   Set a reminder for yourself or someone else. Persists in the brain, survives restarts.
+//   Set one-off or recurring reminders for yourself or someone else. Times use your timezone
+//   (see `hubot my timezone is`). Persists in the brain, survives restarts.
 //
 // Commands:
-//   hubot remind me in <N> <unit> to <message> - Reminds you in N minutes/hours to do something.
-//   hubot remind <user> in <N> <unit> to <message> - Reminds <user> in N minutes/hours to do something.
-//   hubot remind me to <message> in <N> <unit> - Same as above, time clause last.
-//   hubot remind <user> to <message> in <N> <unit> - Same as above, time clause last.
-//   hubot set a reminder for <N> <unit> to <message> - Same as "remind me in".
-//   hubot list reminders - Shows pending reminders in the current room.
-//   hubot my reminders - Shows your pending reminders in the current room.
+//   hubot remind me <when> to <message> - Reminds you, e.g. in 10 minutes, at 3pm, tomorrow at 9, on friday at 10:30.
+//   hubot remind me to <message> <when> - Same, time last.
+//   hubot remind <user> <when> to <message> - Reminds <user> instead.
+//   hubot remind me every <weekday|day|monday,...> at <time> to <message> - Recurring reminder, e.g. every weekday at 9am.
+//   hubot remind me every <N> hours to <message> - Recurring reminder on an interval.
+//   hubot list reminders - Shows pending reminders in this room, numbered.
+//   hubot my reminders - Shows your pending reminders in this room.
+//   hubot cancel reminder <n> - Cancels reminder <n> from the list.
 //
 
 import type { Robot, Response } from 'hubot'
 
-import { formatDuration } from './lib/duration.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
-import { randomId } from './lib/random.ts'
+import { scheduler } from './lib/schedule.ts'
+import type { Job } from './lib/schedule.ts'
+import { describeRepeat, formatWhen, parseWhen } from './lib/time.ts'
+import type { When } from './lib/time.ts'
+import { tzNote, userTz } from './lib/timezone.ts'
 
-const UNIT_MS: Record<string, number> = {
-  s: 1000,
-  sec: 1000,
-  secs: 1000,
-  second: 1000,
-  seconds: 1000,
-  m: 60 * 1000,
-  min: 60 * 1000,
-  mins: 60 * 1000,
-  minute: 60 * 1000,
-  minutes: 60 * 1000,
-  h: 60 * 60 * 1000,
-  hr: 60 * 60 * 1000,
-  hrs: 60 * 60 * 1000,
-  hour: 60 * 60 * 1000,
-  hours: 60 * 60 * 1000
-}
-
-const REMINDERS_KEY = 'reminders'
+const LEGACY_KEY = 'reminders'
 
 interface Reminder {
+  targetId?: string
+  targetName: string
+  room: string
+  message: string
+  byId?: string
+}
+
+interface LegacyReminder {
   id: string
   targetId?: string
   targetName: string
@@ -47,18 +42,9 @@ interface Reminder {
   dueAt: number
 }
 
-const mentionForReminder = (reminder: Reminder): string =>
-  mentionFor({ id: reminder.targetId, name: reminder.targetName })
+const EXAMPLES = 'Try `in 10 minutes`, `at 3pm`, `tomorrow at 9am`, `on friday at 10:30`, `every weekday at 9am` or `every 2 hours`.'
 
-const scheduleReminder = (robot: Robot, reminder: Reminder) => {
-  const delay = reminder.dueAt - Date.now()
-  const timer = setTimeout(async () => {
-    await robot.messageRoom(reminder.room, `${mentionForReminder(reminder)} reminder: ${reminder.message}`)
-    const reminders = robot.brain.get<Reminder[]>(REMINDERS_KEY) || []
-    robot.brain.set(REMINDERS_KEY, reminders.filter(r => r.id !== reminder.id))
-  }, Math.max(delay, 0))
-  timer.unref()
-}
+const mentionOf = (r: Reminder): string => mentionFor({ id: r.targetId, name: r.targetName })
 
 interface Target {
   id?: string
@@ -85,90 +71,114 @@ const resolveTarget = (robot: Robot, res: Response, who: string): Target => {
   return sole ? { id: sole.id, name: sole.name } : { name }
 }
 
-
-const handleList = async (robot: Robot, res: Response, { mineOnly }: { mineOnly: boolean }) => {
-  const reminders = robot.brain.get<Reminder[]>(REMINDERS_KEY) || []
-  const room = res.message.room
-  const requester = res.message.user.id
-
-  const pending = reminders
-    .filter(r => r.room === room)
-    .filter(r => !mineOnly || r.targetId === requester)
-    .sort((a, b) => a.dueAt - b.dueAt)
-
-  if (pending.length === 0) {
-    await res.send(mineOnly ? "You don't have any pending reminders." : 'No pending reminders in this room.')
-    return
-  }
-
-  const lines = pending.map(r => `in ${formatDuration(r.dueAt - Date.now(), { round: Math.ceil })} for ${mentionForReminder(r)}: ${r.message}`)
-  await res.send(lines.join('\n'))
-}
-
-interface RemindArgs {
-  who: string
-  amount: string
-  unit: string
+interface Parsed {
+  when: When
+  whenText: string
   message: string
 }
 
-const handleRemind = async (robot: Robot, res: Response, { who, amount, unit, message }: RemindArgs) => {
-  const unitMs = UNIT_MS[unit.toLowerCase()]
-
-  if (!unitMs) {
-    await res.send(`I don't understand the unit "${unit}". Try seconds, minutes, or hours.`)
-    return
+// "to <msg> <when>" or "<when> to <msg>"; first split parseWhen accepts wins
+export const parseRequest = (body: string, tz: string, now = Date.now()): Parsed | undefined => {
+  const text = body.trim()
+  const toFirst = text.match(/^to (.+)$/i)
+  if (toFirst) {
+    const rest = required(toFirst, 1)
+    const words = rest.split(' ')
+    for (let i = 1; i < words.length; i++) {
+      const whenText = words.slice(i).join(' ')
+      const when = parseWhen(whenText, tz, now)
+      if (when) return { when, whenText, message: words.slice(0, i).join(' ') }
+    }
   }
-
-  const target = resolveTarget(robot, res, who)
-  const reminder = {
-    id: randomId(),
-    targetId: target.id,
-    targetName: target.name,
-    room: res.message.room,
-    message: message.trim(),
-    dueAt: Date.now() + parseInt(amount, 10) * unitMs
+  const re = / to /gi
+  for (let m = re.exec(text); m; m = re.exec(text)) {
+    const whenText = text.slice(0, m.index)
+    const when = parseWhen(whenText, tz, now)
+    const message = text.slice(m.index + m[0].length).trim()
+    if (when && message) return { when, whenText, message }
   }
+  return undefined
+}
 
-  const reminders = robot.brain.get<Reminder[]>(REMINDERS_KEY) || []
-  reminders.push(reminder)
-  robot.brain.set(REMINDERS_KEY, reminders)
-  scheduleReminder(robot, reminder)
+const describeWhen = (when: When, whenText: string, tz: string): string => {
+  if (when.repeat?.kind === 'interval') return describeRepeat(when.repeat)
+  if (when.repeat) return `${describeRepeat(when.repeat)}${tzNote(tz)}`
+  if (/^\s*in /i.test(whenText)) return whenText.trim().toLowerCase()
+  return `${formatWhen(when.at, tz)}${tzNote(tz)}`
+}
 
-  const whom = target.id === res.message.user.id ? 'you' : mentionForReminder(reminder)
-  await res.send(`Ok, I'll remind ${whom} in ${amount} ${unit}.`)
+const roomJobs = (jobs: Job<Reminder>[], room: string): Job<Reminder>[] =>
+  jobs.filter(j => j.data.room === room).sort((a, b) => a.at - b.at)
+
+const listLine = (job: Job<Reminder>, n: number): string => {
+  const due = formatWhen(job.at, job.tz)
+  const repeat = job.repeat ? `, ${describeRepeat(job.repeat)}` : ''
+  return `${n}. ${due}${repeat} for ${mentionOf(job.data)}: ${job.data.message}`
 }
 
 export default async (robot: Robot) => {
+  const reminders = scheduler<Reminder>(robot, 'remind', async job => {
+    await robot.messageRoom(job.data.room, `${mentionOf(job.data)} reminder: ${job.data.message}`)
+  })
+
+  // pre-scheduler reminders
   robot.brain.on('connected', () => {
-    const reminders = robot.brain.get<Reminder[]>(REMINDERS_KEY) || []
-    for (const reminder of reminders) {
-      scheduleReminder(robot, reminder)
+    const legacy = robot.brain.get<LegacyReminder[]>(LEGACY_KEY)
+    if (!Array.isArray(legacy)) return
+    for (const r of legacy) {
+      if (typeof r?.dueAt !== 'number') continue
+      reminders.add({ id: r.id, at: r.dueAt, tz: userTz(robot, r.targetId), data: { targetId: r.targetId, targetName: r.targetName, room: r.room, message: r.message } })
     }
+    robot.brain.remove(LEGACY_KEY)
   })
 
-  // list reminders / remind list
-  robot.respond(/(?:list reminders|remind(?:ers)? list)$/i, async res => {
-    await handleList(robot, res, { mineOnly: false })
+  const handleList = async (res: Response, mineOnly: boolean) => {
+    const requester = res.message.user.id
+    const lines = roomJobs(reminders.list(), res.message.room)
+      .map((job, i) => ({ job, n: i + 1 }))
+      .filter(({ job }) => !mineOnly || job.data.targetId === requester)
+      .map(({ job, n }) => listLine(job, n))
+    if (lines.length === 0) {
+      await res.send(mineOnly ? "You don't have any pending reminders." : 'No pending reminders in this room.')
+      return
+    }
+    await res.send(lines.join('\n'))
+  }
+
+  robot.respond(/(?:list reminders|reminders)$/i, async res => { await handleList(res, false) })
+
+  robot.respond(/my reminders$/i, async res => { await handleList(res, true) })
+
+  robot.respond(/(?:cancel|forget|delete|remove) reminder #?(\d+)$/i, async res => {
+    const n = Number(required(res.match, 1))
+    const job = roomJobs(reminders.list(), res.message.room)[n - 1]
+    if (!job) {
+      await res.send(`There's no reminder ${n} here. \`${robot.name} list reminders\` shows the numbers.`)
+      return
+    }
+    const userId = res.message.user.id
+    const allowed = [job.data.byId, job.data.targetId, process.env.OWNER_USER_ID].includes(userId)
+    if (!allowed) {
+      await res.send('Only the person who set that reminder, or the person it is for, can cancel it.')
+      return
+    }
+    reminders.remove(job.id)
+    await res.send(`Cancelled reminder for ${mentionOf(job.data)}: ${job.data.message}`)
   })
 
-  // my reminders
-  robot.respond(/my reminders$/i, async res => {
-    await handleList(robot, res, { mineOnly: true })
-  })
+  robot.respond(/remind (\S+) (.+)$/i, async res => {
+    const tz = userTz(robot, res.message.user.id)
+    const parsed = parseRequest(required(res.match, 2), tz)
+    if (!parsed) {
+      await res.send(`I couldn't tell when to remind you. Say \`remind me <when> to <message>\`. ${EXAMPLES}`)
+      return
+    }
 
-  // remind <who> in <N> <unit> to <message>
-  robot.respond(/remind (\S+) in (\d+)\s*([a-z]+)\s+to (.+)$/i, async res => {
-    await handleRemind(robot, res, { who: required(res.match, 1), amount: required(res.match, 2), unit: required(res.match, 3), message: required(res.match, 4) })
-  })
+    const target = resolveTarget(robot, res, required(res.match, 1))
+    const data: Reminder = { targetId: target.id, targetName: target.name, room: res.message.room, message: parsed.message.trim(), byId: res.message.user.id }
+    reminders.add({ at: parsed.when.at, tz, repeat: parsed.when.repeat, data })
 
-  // remind <who> to <message> in <N> <unit>
-  robot.respond(/remind (\S+) to (.+?) in (\d+)\s*([a-z]+)$/i, async res => {
-    await handleRemind(robot, res, { who: required(res.match, 1), amount: required(res.match, 3), unit: required(res.match, 4), message: required(res.match, 2) })
-  })
-
-  // set a reminder for <N> <unit> to <message>
-  robot.respond(/(?:set (?:a )?)?reminder (?:for|in) (\d+)\s*([a-z]+)(?: to| for)? (.+)$/i, async res => {
-    await handleRemind(robot, res, { who: 'me', amount: required(res.match, 1), unit: required(res.match, 2), message: required(res.match, 3) })
+    const whom = target.id === res.message.user.id ? 'you' : mentionOf(data)
+    await res.send(`Ok, I'll remind ${whom} ${describeWhen(parsed.when, parsed.whenText, tz)}.`)
   })
 }

@@ -19,6 +19,8 @@ const getAmbiguousUserText = (users: User[]): string =>
   `Be more specific, I know ${users.length} people named like that: ${users.map(u => u.name).join(', ')}`
 
 const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
+// owned by other scripts
+const RESERVED = /^(?:focusing|your owner|my (?:timezone|time zone|tz)|what time|what's my (?:timezone|time zone|tz))$/i
 
 const NOTHING_TO_ME = [
   '{name} is nothing to me.',
@@ -47,6 +49,7 @@ export default async (robot: Robot) => {
   robot.respond(/who is @?([\w .-]+)\?*$/i, async res => {
     const joiner = ', '
     const name = required(res.match, 1).trim()
+    if (RESERVED.test(name)) return
 
     if (name === 'you') {
       await res.send("Who ain't I?")
@@ -75,7 +78,7 @@ export default async (robot: Robot) => {
     const name = required(res.match, 1).trim()
     const newRole = required(res.match, 2).trim()
 
-    if (skipNames.includes(name.toLowerCase()) || newRole.match(/^not\s+/i)) {
+    if (skipNames.includes(name.toLowerCase()) || RESERVED.test(name) || newRole.match(/^not\s+/i)) {
       return
     }
 

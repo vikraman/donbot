@@ -8,7 +8,7 @@ import { formatDuration } from './lib/duration.ts'
 import { pick, shuffle } from './lib/random.ts'
 
 const ROTATE_MS = 15 * 60 * 1000
-const REMINDERS_KEY = 'reminders'
+const REMINDERS_KEY = 'schedule:remind'
 const LAST_MESSAGE_KEY = 'seen:last'
 
 
