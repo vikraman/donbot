@@ -360,6 +360,21 @@ describe('Github testing Hubot scripts', () => {
     ].join('\n'))
   })
 
+  it('counts pushes from linked accounts toward commit streaks', async () => {
+    const repo = gh.add('Octo/Demo')
+    await say(state.robot, 'github subscribe octo/demo pushes')
+    take()
+    state.robot.brain.set('github:login:u1', 'Alice')
+    state.robot.brain.set('streak:commit:u1', { current: 2, best: 2, lastDay: '2026-11-14' })
+    repo.activity.push(act('push', 'a'.repeat(40), 'b'.repeat(40)))
+    repo.activity.push(act('push', 'b'.repeat(40), 'c'.repeat(40), 'refs/heads/main', '2026-11-15T12:00:31Z', 'stranger'))
+    await advance(60_000)
+    const [mine, theirs] = texts()
+    assert.match(mine!, /\n🔥 <@u1> is on a 3-day commit streak!$/)
+    assert.doesNotMatch(theirs!, /streak/)
+    assert.deepStrictEqual(state.robot.brain.get('streak:commit:u1'), { current: 3, best: 3, lastDay: '2026-11-15' })
+  })
+
   it('posts force pushes, new branches and merges, but not deletions, tags or push events', async () => {
     const repo = gh.add('Octo/Demo')
     repo.activity.push(act('push', 'c'.repeat(40), 'd'.repeat(40), 'refs/heads/main', '2026-11-15T11:59:00Z'))

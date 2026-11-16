@@ -28,10 +28,12 @@ import { eventsSince, logEvent } from './lib/eventLog.ts'
 import type { LogEntry } from './lib/eventLog.ts'
 import { githubClient, parseRepo, shortSha, branchOf } from './lib/github.ts'
 import type { GithubResponse } from './lib/github.ts'
+import { userForGithubLogin } from './lib/githubUsers.ts'
 import { required } from './lib/match.ts'
 import { defineLines } from './lib/lines.ts'
 import { roomToggle } from './lib/roomToggle.ts'
 import { scheduler } from './lib/schedule.ts'
+import { recordStreak } from './lib/streak.ts'
 import { DAY_MS, nextOccurrence } from './lib/time.ts'
 import type { Repeat } from './lib/time.ts'
 import { defaultTz } from './lib/timezone.ts'
@@ -766,6 +768,10 @@ export default async (robot: Robot) => {
         robot.logger.warn(`github: ${cursor.name}: couldn't describe ${a.activity_type} ${a.id}: ${errorText(err)}`)
       }
       if (!text) continue
+      // linked accounts, see GithubLink.ts
+      const pusher = a.actor ? userForGithubLogin(robot, a.actor.login) : undefined
+      const milestone = pusher ? recordStreak(robot, 'commit', pusher, Date.parse(a.timestamp) || Date.now()) : undefined
+      if (milestone) text = `${text}\n${milestone}`
       for (const room of roomsFor(rooms, 'pushes')) await deliver(room, text)
       sent++
     }

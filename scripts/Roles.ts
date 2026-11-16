@@ -21,7 +21,7 @@ const getAmbiguousUserText = (users: User[]): string =>
 
 const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
 // owned by other scripts
-const RESERVED = /^(?:focusing|your owner|my (?:timezone|time zone|tz)|what time|what's my (?:timezone|time zone|tz))$/i
+const RESERVED = /^(?:focusing|your owner|my (?:timezone|time zone|tz|github)|what time|what's my (?:timezone|time zone|tz|github))$/i
 
 const nothingToMe = defineLines('roles.nothing', {
   fallback: [

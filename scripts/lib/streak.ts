@@ -5,7 +5,9 @@ import { DAY_MS, dayKey, weekKey } from './time.ts'
 import { userTz } from './timezone.ts'
 
 // what a streak counts
-export type StreakKind = 'standup' | 'focus' | 'win'
+export type StreakKind = 'standup' | 'focus' | 'win' | 'commit'
+
+export const STREAK_KINDS: readonly StreakKind[] = ['standup', 'focus', 'win', 'commit']
 
 export interface Streak {
   current: number
@@ -16,10 +18,10 @@ export interface Streak {
 
 export const MILESTONES = [3, 7, 14, 30, 50, 100, 200, 365] as const
 
-const LABELS: Record<StreakKind, string> = { standup: 'standup', focus: 'focus', win: 'wins' }
+const LABELS: Record<StreakKind, string> = { standup: 'standup', focus: 'focus', win: 'wins', commit: 'commit' }
 
 // standups are weekly check-ins
-const PERIOD: Record<StreakKind, 'day' | 'week'> = { standup: 'week', focus: 'day', win: 'day' }
+const PERIOD: Record<StreakKind, 'day' | 'week'> = { standup: 'week', focus: 'day', win: 'day', commit: 'day' }
 
 const periodKey = (kind: StreakKind, ms: number, tz: string): string => PERIOD[kind] === 'week' ? weekKey(ms, tz) : dayKey(ms, tz)
 
@@ -53,3 +55,14 @@ export const recordStreak = (robot: Robot, kind: StreakKind, userId: string, now
 }
 
 export const streakLabel = (kind: StreakKind): string => LABELS[kind]
+
+export const streakPeriod = (kind: StreakKind): 'day' | 'week' => PERIOD[kind]
+
+// carries a live streak over a skipped period without counting it
+export const freezeStreak = (robot: Robot, kind: StreakKind, userId: string, now = Date.now()): boolean => {
+  const streak = getStreak(robot, kind, userId, now)
+  const current = periodKey(kind, now, userTz(robot, userId))
+  if (!streak || streak.current === 0 || streak.lastDay === current) return false
+  robot.brain.set(streakKey(kind, userId), { ...streak, lastDay: current })
+  return true
+}

@@ -59,6 +59,7 @@ describe('Roles testing Hubot scripts', () => {
     await robot.adapter.say(author, '@Dumbotheelephant who is your owner', 'test-room')
     await robot.adapter.say(author, '@Dumbotheelephant my timezone is Europe/London', 'test-room')
     await robot.adapter.say(author, '@Dumbotheelephant what time is it for holman', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant my github is holman', 'test-room')
     assert.deepEqual(sent, [])
   })
   it('should not repeat an unknown-user reply back to back', async () => {
