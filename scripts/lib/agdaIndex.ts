@@ -317,7 +317,7 @@ const sigmaSyntax = (toks: string[]): string[] => {
   const i = toks.findIndex(t => t === 'Sigma[' || t === 'exists[')
   const close = toks.indexOf(']', i)
   const bind = toks.slice(i + 1, close)
-  const sep = bind.findIndex(t => t === '<-' || t === ':')
+  const sep = bind.findIndex(t => t === '<-' || t === ':' || t === 'in')
   if (i < 0 || close < 0 || sep < 1) return toks
   let j = close + 1
   for (let depth = 0; j < toks.length; j++) {

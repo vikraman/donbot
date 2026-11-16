@@ -207,7 +207,7 @@ describe('agda index', () => {
     })
 
     it('reads Σ[ x ∈ A ] B and agda\'s Σ-syntax', () => {
-      for (const q of ['Iso (S¹ -> A) (Σ[ x ∈ A ] x ≡ x)', 'Iso (S1 -> A) (Sigma A (\\ x -> x = x))']) {
+      for (const q of ['Iso (S¹ -> A) (Σ[ x ∈ A ] x ≡ x)', 'Iso (S1 -> A) (Sigma[ x in A ] x = x)', 'Iso (S1 -> A) (Sigma A (\\ x -> x = x))']) {
         assert.deepStrictEqual(names(searchType(q)), ['Cubical.HITs.S1.Properties.IsoFunSpaceS¹'], q)
       }
     })
