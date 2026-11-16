@@ -16,6 +16,7 @@ import type { LogEntry } from './lib/eventLog.ts'
 import { defineLines } from './lib/lines.ts'
 import { userForGithubLogin } from './lib/githubUsers.ts'
 import { mentionFor } from './lib/mention.ts'
+import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { getStreak, STREAK_KINDS, streakLabel, streakPeriod } from './lib/streak.ts'
 import { DAY_MS, describeRepeat, formatWhen, MINUTE_MS, parseWhen } from './lib/time.ts'
@@ -203,7 +204,7 @@ interface RecapJob { room: string }
 
 export default async (robot: Robot) => {
   const recaps = scheduler<RecapJob>(robot, 'recap', async job => {
-    await robot.messageRoom(job.data.room, buildRecap(robot, job.data.room, Date.now(), job.tz))
+    await postToRoom(robot, job.data.room, buildRecap(robot, job.data.room, Date.now(), job.tz))
   })
 
   const jobId = (room: string): string => `recap:${room}`

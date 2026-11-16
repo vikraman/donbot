@@ -22,6 +22,7 @@ import type { LogEntry } from './lib/eventLog.ts'
 import { mentionFor } from './lib/mention.ts'
 import { defineLines } from './lib/lines.ts'
 import type { LineOptions } from './lib/lines.ts'
+import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import type { Job } from './lib/schedule.ts'
 import { getStreak, recordStreak } from './lib/streak.ts'
@@ -244,7 +245,7 @@ export default async (robot: Robot) => {
   }
 
   const say = async (room: string, ...lines: (string | undefined)[]) => {
-    await robot.messageRoom(room, lines.filter(Boolean).join('\n'))
+    await postToRoom(robot, room, lines.filter(Boolean).join('\n'))
   }
 
   const sessions = scheduler<Session>(robot, 'focus', async (job: Job<Session>) => { await advance(job.data) })

@@ -17,6 +17,7 @@ import type { Robot, Response } from 'hubot'
 
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
+import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import type { Job } from './lib/schedule.ts'
 import { describeRepeat, formatWhen, parseWhen } from './lib/time.ts'
@@ -118,7 +119,7 @@ const listLine = (job: Job<Reminder>, n: number): string => {
 
 export default async (robot: Robot) => {
   const reminders = scheduler<Reminder>(robot, 'remind', async job => {
-    await robot.messageRoom(job.data.room, `${mentionOf(job.data)} reminder: ${job.data.message}`)
+    await postToRoom(robot, job.data.room, `${mentionOf(job.data)} reminder: ${job.data.message}`)
   })
 
   // pre-scheduler reminders

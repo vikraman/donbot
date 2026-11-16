@@ -23,6 +23,7 @@ import { logEvent } from './lib/eventLog.ts'
 import { defineLines } from './lib/lines.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
+import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { freezeStreak, recordStreak } from './lib/streak.ts'
 import { DAY_MS, describeRepeat, formatWhen, HOUR_MS, MINUTE_MS, parseWhen, unitMs } from './lib/time.ts'
@@ -193,7 +194,7 @@ export default async (robot: Robot) => {
     const round = readRound(room)
     if (!round || round.summarized) return
     robot.brain.set(roundKey(room), { ...round, summarized: true })
-    await robot.messageRoom(room, summaryText(round, room))
+    await postToRoom(robot, room, summaryText(round, room))
   }
 
   const summaries = scheduler<StandupJob>(robot, 'standup-summary', async job => { await summarize(job.data.room) })
@@ -208,7 +209,7 @@ export default async (robot: Robot) => {
     const summary = summaries.get(`summary:${room}`)
     const when = summary ? ` in ${formatDuration(summary.at - Date.now(), { round: Math.ceil })}` : ' soon'
     const nag = reminder({ when, missing: missing.map(id => mentionFor({ id })).join(', ') }, { room, tz: job.tz })
-    await robot.messageRoom(room, `${nag}: \`standup: DONE: … NEXT: …\``)
+    await postToRoom(robot, room, `${nag}: \`standup: DONE: … NEXT: …\``)
   })
 
   const prompts = scheduler<StandupJob>(robot, 'standup', async job => {
@@ -222,7 +223,7 @@ export default async (robot: Robot) => {
       if (next) prompts.add({ ...next, data: { ...next.data, skip: false } })
       const people = previous ? [...new Set(previous.checkIns.map(c => c.userId))] : []
       for (const userId of people) freezeStreak(robot, 'standup', userId)
-      await robot.messageRoom(room, '🏖️ No standup this week. Streaks are paused, not broken.')
+      await postToRoom(robot, room, '🏖️ No standup this week. Streaks are paused, not broken.')
       return
     }
     const expected = previous ? [...new Set(previous.checkIns.map(c => c.userId))] : []
@@ -232,7 +233,7 @@ export default async (robot: Robot) => {
     if (expected.length) {
       reminders.add({ id: `reminder:${room}`, at: Date.now() + delay - Math.min(REMINDER_LEAD_MS, delay / 2), tz: job.tz, data: { room } })
     }
-    await robot.messageRoom(room, `${prompt({}, { room, tz: job.tz })} Check in any time, summary ${formatWhen(Date.now() + delay, job.tz)}. Reply with:\n${TEMPLATE}`)
+    await postToRoom(robot, room, `${prompt({}, { room, tz: job.tz })} Check in any time, summary ${formatWhen(Date.now() + delay, job.tz)}. Reply with:\n${TEMPLATE}`)
   })
 
   const promptId = (room: string): string => `standup:${room}`

@@ -32,6 +32,7 @@ import { userForGithubLogin } from './lib/githubUsers.ts'
 import { required } from './lib/match.ts'
 import { defineLines } from './lib/lines.ts'
 import { roomToggle } from './lib/roomToggle.ts'
+import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { recordStreak } from './lib/streak.ts'
 import { DAY_MS, nextOccurrence } from './lib/time.ts'
@@ -579,7 +580,7 @@ export default async (robot: Robot) => {
     const channel = robot.adapter.client?.channels?.cache?.get(room)
     try {
       if (channel?.send) await channel.send({ content, flags: SUPPRESS_EMBEDS, allowedMentions: { parse: [] } })
-      else await robot.messageRoom(room, content)
+      else await postToRoom(robot, room, content)
     } catch (err) {
       robot.logger.warn(`github: couldn't post to ${room}: ${errorText(err)}`)
     }
