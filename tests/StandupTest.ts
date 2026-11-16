@@ -192,4 +192,44 @@ describe('Standup', () => {
     const thanks = sent.map(t => t.split('\n')[0]!.replace(/<@p\d+>/, '@x'))
     thanks.forEach((t, i) => { if (i) assert.notEqual(t, thanks[i - 1]) })
   })
+  it('skips a week without breaking streaks, once', async () => {
+    const { robot } = state
+    setRandomSource(() => 0)
+    const alice = brainUser(robot, 'u1', 'alice')
+    const sent = collect(robot)
+    await robot.adapter.say(alice, '@Dumbotheelephant standup skip', 'room')
+    assert.equal(sent[0], 'This channel has no standup scheduled.')
+    await robot.adapter.say(alice, '@Dumbotheelephant standup every monday at 10am', 'room')
+    await fireNow(robot, 'standup')
+    await robot.adapter.say(alice, 'standup: DONE: a NEXT: b', 'room')
+    const start = Date.now()
+    await robot.adapter.say(alice, '@Dumbotheelephant standup skip', 'room')
+    assert.match(sent.at(-1)!, /^Skipping the standup on .+ Streaks will be paused, not broken\./)
+    await robot.adapter.say(alice, '@Dumbotheelephant standup', 'room')
+    assert.match(sent.at(-1)!, /\(skipped\)\./)
+
+    mock.method(Date, 'now', () => start + 7 * 86_400_000)
+    const before = sent.length
+    await fireNow(robot, 'standup')
+    // the pending summary goes out, then the skip notice instead of a prompt
+    assert.match(sent[before]!, /^📋 Standup summary/)
+    assert.equal(sent[before + 1], '🏖️ No standup this week. Streaks are paused, not broken.')
+    assert.equal(robot.brain.get<{ data: { skip?: boolean } }[]>('schedule:standup')![0]!.data.skip, false)
+
+    mock.method(Date, 'now', () => start + 14 * 86_400_000)
+    await fireNow(robot, 'standup')
+    assert.match(sent.at(-1)!, /Check in any time/)
+    await robot.adapter.say(alice, 'standup: DONE: c NEXT: d', 'room')
+    assert.equal(robot.brain.get<{ current: number }>('streak:standup:u1')!.current, 2)
+  })
+  it('undoes a skip', async () => {
+    const { robot } = state
+    const alice = brainUser(robot, 'u1', 'alice')
+    const sent = collect(robot)
+    await robot.adapter.say(alice, '@Dumbotheelephant standup every monday at 10am', 'room')
+    await robot.adapter.say(alice, '@Dumbotheelephant standup skip next week', 'room')
+    await robot.adapter.say(alice, '@Dumbotheelephant standup unskip', 'room')
+    assert.match(sent[2]!, /is back on\.$/)
+    assert.equal(robot.brain.get<{ data: { skip?: boolean } }[]>('schedule:standup')![0]!.data.skip, false)
+  })
 })

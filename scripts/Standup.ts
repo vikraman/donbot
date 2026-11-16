@@ -6,6 +6,8 @@
 //
 // Commands:
 //   hubot standup every <days> at <time> [, summary after <N> <unit>] - Schedules this channel's standup, e.g. "every monday at 10am" or "every friday at 2pm, summary after 3 hours".
+//   hubot standup skip - Skips the next standup (holidays, offsites); streaks are paused, not broken.
+//   hubot standup unskip - Undoes a skip.
 //   hubot standup off - Stops this channel's standup.
 //   hubot standup - Shows the schedule and who has checked in this round.
 //   hubot standup summary - Shows this round's summary now.
@@ -22,7 +24,7 @@ import { defineLines } from './lib/lines.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
 import { scheduler } from './lib/schedule.ts'
-import { recordStreak } from './lib/streak.ts'
+import { freezeStreak, recordStreak } from './lib/streak.ts'
 import { DAY_MS, describeRepeat, formatWhen, HOUR_MS, MINUTE_MS, parseWhen, unitMs } from './lib/time.ts'
 import { tzNote, userTz } from './lib/timezone.ts'
 
@@ -55,6 +57,8 @@ interface Round {
 interface StandupJob {
   room: string
   summaryMs?: number
+  // the next prompt is skipped, once
+  skip?: boolean
 }
 
 const roundKey = (room: string): string => `standup:round:${room}`
@@ -212,6 +216,15 @@ export default async (robot: Robot) => {
     // a summary that never went out (bot down, or ad-hoc round) goes first
     const previous = readRound(room)
     if (previous && !previous.summarized && previous.checkIns.length > 0) await summarize(room)
+    if (job.data.skip) {
+      // the scheduler already moved the job on; clear the flag on the next one
+      const next = prompts.get(job.id)
+      if (next) prompts.add({ ...next, data: { ...next.data, skip: false } })
+      const people = previous ? [...new Set(previous.checkIns.map(c => c.userId))] : []
+      for (const userId of people) freezeStreak(robot, 'standup', userId)
+      await robot.messageRoom(room, '🏖️ No standup this week. Streaks are paused, not broken.')
+      return
+    }
     const expected = previous ? [...new Set(previous.checkIns.map(c => c.userId))] : []
     robot.brain.set(roundKey(room), { startedAt: Date.now(), checkIns: [], prompted: true, expected } satisfies Round)
     const delay = job.data.summaryMs ?? SUMMARY_DELAY_MS
@@ -244,6 +257,20 @@ export default async (robot: Robot) => {
     await res.send(`Standup set for ${describeRepeat(when.repeat)}${tzNote(tz)}, summary ${formatDuration(summaryMs)} later. First one is ${formatWhen(when.at, tz)}.`)
   })
 
+  robot.respond(/standup (skip|unskip)(?: (?:next|this week|next week))?$/i, async res => {
+    const room = res.message.room
+    const job = prompts.get(promptId(room))
+    if (!job) {
+      await res.send('This channel has no standup scheduled.')
+      return
+    }
+    const skip = required(res.match, 1).toLowerCase() === 'skip'
+    prompts.add({ ...job, data: { ...job.data, skip } })
+    await res.send(skip
+      ? `Skipping the standup on ${formatWhen(job.at, job.tz)}. Streaks will be paused, not broken. \`${robot.name} standup unskip\` undoes it.`
+      : `The standup on ${formatWhen(job.at, job.tz)} is back on.`)
+  })
+
   robot.respond(/standup off$/i, async res => {
     const room = res.message.room
     const removed = prompts.remove(promptId(room))
@@ -257,7 +284,7 @@ export default async (robot: Robot) => {
     const job = prompts.get(promptId(room))
     const round = readRound(room)
     const schedule = job?.repeat
-      ? `Standup runs ${describeRepeat(job.repeat)}${tzNote(job.tz)}, next ${formatWhen(job.at, job.tz)}.`
+      ? `Standup runs ${describeRepeat(job.repeat)}${tzNote(job.tz)}, next ${formatWhen(job.at, job.tz)}${job.data.skip ? ' (skipped)' : ''}.`
       : `No standup scheduled here. \`${robot.name} standup every monday at 10am\` sets one up.`
     const pending = summaries.get(`summary:${room}`)
     const due = pending && !round?.summarized ? ` Summary ${formatWhen(pending.at, pending.tz)}.` : ''
