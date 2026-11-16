@@ -231,13 +231,14 @@ export default async (robot: Robot) => {
       return
     }
     const expected = previous ? [...new Set(previous.checkIns.map(c => c.userId))] : []
-    robot.brain.set(roundKey(room), { startedAt: Date.now(), checkIns: [], prompted: true, expected } satisfies Round)
+    const now = Date.now()
+    robot.brain.set(roundKey(room), { startedAt: now, checkIns: [], prompted: true, expected } satisfies Round)
     const delay = job.data.summaryMs ?? SUMMARY_DELAY_MS
-    summaries.add({ id: `summary:${room}`, at: Date.now() + delay, tz: job.tz, data: { room } })
+    summaries.add({ id: `summary:${room}`, at: now + delay, tz: job.tz, data: { room } })
     if (expected.length) {
-      reminders.add({ id: `reminder:${room}`, at: Date.now() + delay - Math.min(REMINDER_LEAD_MS, delay / 2), tz: job.tz, data: { room } })
+      reminders.add({ id: `reminder:${room}`, at: now + delay - Math.min(REMINDER_LEAD_MS, delay / 2), tz: job.tz, data: { room } })
     }
-    await postToRoom(robot, room, `${prompt({}, { room, tz: job.tz })} Check in any time, summary ${formatWhen(Date.now() + delay, job.tz)}. Reply with:\n${TEMPLATE}`)
+    await postToRoom(robot, room, `${prompt({}, { room, tz: job.tz })} Check in any time, summary ${formatWhen(now + delay, job.tz)}. Reply with:\n${TEMPLATE}`)
   }, {
     // a prompt missed during downtime still goes out, late, within a day
     missedGraceMs: DAY_MS,
