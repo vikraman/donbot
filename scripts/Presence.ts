@@ -110,9 +110,12 @@ const updatePresence = (robot: Robot) => {
 }
 
 export default async (robot: Robot) => {
+  // connected fires again on every redis reconnect
+  let timer: NodeJS.Timeout | undefined
   robot.brain.on('connected', () => {
     updatePresence(robot)
-    const timer = setInterval(() => updatePresence(robot), ROTATE_MS)
+    clearInterval(timer)
+    timer = setInterval(() => updatePresence(robot), ROTATE_MS)
     timer.unref()
   })
 }

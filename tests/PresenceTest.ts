@@ -30,6 +30,28 @@ describe('Presence testing Hubot scripts', () => {
     assert.strictEqual(options.type, 4)
   })
 
+  it('keeps one rotation timer across brain reconnects', async () => {
+    const { robot } = state
+    // real intervals keep the brain saving, so only track presence's
+    const live = new Set<object>()
+    const realSet = global.setInterval
+    const realClear = global.clearInterval
+    mock.method(global, 'setInterval', (fn: () => void, ms: number) => {
+      if (ms !== 15 * 60 * 1000) return realSet(fn, ms)
+      const handle = { unref: () => handle }
+      live.add(handle)
+      return handle
+    })
+    mock.method(global, 'clearInterval', (handle: unknown) => {
+      if (live.delete(handle as object)) return
+      realClear(handle as NodeJS.Timeout)
+    })
+    robot.adapter.client = { isReady: () => true, user: { setActivity: mock.fn() } } as unknown as DiscordClient
+    await state.loadScript()
+    for (let i = 0; i < 3; i++) robot.brain.emit('connected')
+    assert.strictEqual(live.size, 1)
+  })
+
   it('should not error when the client is present but not ready', async () => {
     const { robot } = state
     const setActivity = mock.fn()
