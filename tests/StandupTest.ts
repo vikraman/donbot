@@ -1,4 +1,4 @@
-import { describe, it, mock } from 'node:test'
+import { beforeEach, describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { parseReport } from '../scripts/Standup.ts'
@@ -16,7 +16,9 @@ const fireNow = async (robot: Parameters<typeof collect>[0], name: string) => {
 }
 
 describe('Standup', () => {
-  const state = setupRobot('Standup.ts')
+  const state = setupRobot('Standup.ts', { envVars: ['OWNER_USER_ID'] })
+  // alice (u1) owns the bot
+  beforeEach(() => { process.env.OWNER_USER_ID = 'u1' })
 
   it('parses the four sections, in any layout', () => {
     assert.deepEqual(parseReport('DONE: fixed ci\nNEXT: docs\nBLOCKERS: none\nDISCUSS: release date'), { done: 'fixed ci', next: 'docs', discuss: 'release date' })
@@ -124,6 +126,21 @@ describe('Standup', () => {
     assert.match(sent[0]!, /^Use the four sections/)
     await robot.adapter.say(user, 'standup: next: planning', 'room')
     assert.equal(sent[1], '✅ Thanks <@u1>! No DONE? Re-post to add it.')
+  })
+  it('lets only the owner change the schedule', async () => {
+    const { robot } = state
+    const alice = brainUser(robot, 'u1', 'alice')
+    const bob = brainUser(robot, 'u2', 'bob')
+    const sent = collect(robot)
+    await robot.adapter.say(bob, '@Dumbotheelephant standup every monday at 10am', 'room')
+    assert.equal(sent[0], 'Only my owner can do that.')
+    assert.equal(robot.brain.get('schedule:standup'), null)
+    await robot.adapter.say(alice, '@Dumbotheelephant standup every monday at 10am', 'room')
+    for (const cmd of ['standup skip', 'standup unskip', 'standup off']) await robot.adapter.say(bob, `@Dumbotheelephant ${cmd}`, 'room')
+    assert.deepEqual(sent.slice(2), Array(3).fill('Only my owner can do that.'))
+    assert.equal(robot.brain.get<unknown[]>('schedule:standup')!.length, 1)
+    await robot.adapter.say(bob, '@Dumbotheelephant standup', 'room')
+    assert.match(sent[5]!, /^Standup runs every Monday/)
   })
   it('stops the standup', async () => {
     const { robot } = state

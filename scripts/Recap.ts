@@ -3,9 +3,12 @@
 //
 // Commands:
 //   hubot recap - Posts the last 7 days' recap now.
-//   hubot recap on [every <day> at <time>] - Posts it automatically, Fridays at 4pm by default.
-//   hubot recap off - Stops the automatic recap.
+//   hubot recap on [every <day> at <time>] - (Owner only) Posts it automatically, Fridays at 4pm by default.
+//   hubot recap off - (Owner only) Stops the automatic recap.
 //   hubot recap status - Shows when the next recap is due.
+//
+// Configuration:
+//   OWNER_USER_ID - Discord user ID allowed to turn the recap on or off.
 //
 
 import type { Robot } from 'hubot'
@@ -16,6 +19,7 @@ import type { LogEntry } from './lib/eventLog.ts'
 import { defineLines } from './lib/lines.ts'
 import { userForGithubLogin } from './lib/githubUsers.ts'
 import { mentionFor } from './lib/mention.ts'
+import { isOwner, OWNER_ONLY } from './lib/owner.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { getStreak, STREAK_KINDS, streakLabel, streakPeriod } from './lib/streak.ts'
@@ -210,6 +214,10 @@ export default async (robot: Robot) => {
   const jobId = (room: string): string => `recap:${room}`
 
   robot.respond(/recap on(?: (every .+))?$/i, async res => {
+    if (!isOwner(res)) {
+      await res.send(OWNER_ONLY)
+      return
+    }
     const room = res.message.room
     const tz = userTz(robot, res.message.user.id)
     const when = parseWhen(res.match[1] || DEFAULT_SCHEDULE, tz)
@@ -222,6 +230,10 @@ export default async (robot: Robot) => {
   })
 
   robot.respond(/recap off$/i, async res => {
+    if (!isOwner(res)) {
+      await res.send(OWNER_ONLY)
+      return
+    }
     const removed = recaps.remove(jobId(res.message.room))
     await res.send(removed ? 'Weekly recap off for this channel.' : 'This channel has no recap scheduled.')
   })

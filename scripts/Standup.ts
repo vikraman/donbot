@@ -5,15 +5,18 @@
 //   Shortly before the summary, it pings last round's people who haven't checked in yet.
 //
 // Commands:
-//   hubot standup every <days> at <time> [, summary after <N> <unit>] - Schedules this channel's standup, e.g. "every monday at 10am" or "every friday at 2pm, summary after 3 hours".
-//   hubot standup skip - Skips the next standup (holidays, offsites); streaks are paused, not broken.
-//   hubot standup unskip - Undoes a skip.
-//   hubot standup off - Stops this channel's standup.
+//   hubot standup every <days> at <time> [, summary after <N> <unit>] - (Owner only) Schedules this channel's standup, e.g. "every monday at 10am" or "every friday at 2pm, summary after 3 hours".
+//   hubot standup skip - (Owner only) Skips the next standup (holidays, offsites); streaks are paused, not broken.
+//   hubot standup unskip - (Owner only) Undoes a skip.
+//   hubot standup off - (Owner only) Stops this channel's standup.
 //   hubot standup - Shows the schedule and who has checked in this round.
 //   hubot standup summary - Shows this round's summary now.
 //   standup: DONE: <..> NEXT: <..> BLOCKERS: <..> DISCUSS: <..> - Checks in, one section per line or inline. Re-posting replaces your check-in.
 //
 // The schedule uses the timezone of whoever set it (see `my timezone is`). Streaks count weeks.
+//
+// Configuration:
+//   OWNER_USER_ID - Discord user ID allowed to change the schedule.
 //
 
 import type { Robot, Response } from 'hubot'
@@ -23,6 +26,7 @@ import { logEvent } from './lib/eventLog.ts'
 import { defineLines } from './lib/lines.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
+import { isOwner, OWNER_ONLY } from './lib/owner.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { freezeStreak, recordStreak } from './lib/streak.ts'
@@ -249,6 +253,10 @@ export default async (robot: Robot) => {
   const promptId = (room: string): string => `standup:${room}`
 
   robot.respond(/standup (every .+?)(?:,? (?:and )?summary (?:after|in) (\d+) ?([a-z]+))?$/i, async res => {
+    if (!isOwner(res)) {
+      await res.send(OWNER_ONLY)
+      return
+    }
     const room = res.message.room
     const tz = userTz(robot, res.message.user.id)
     const when = parseWhen(required(res.match, 1), tz)
@@ -269,6 +277,10 @@ export default async (robot: Robot) => {
   })
 
   robot.respond(/standup (skip|unskip)(?: (?:next|this week|next week))?$/i, async res => {
+    if (!isOwner(res)) {
+      await res.send(OWNER_ONLY)
+      return
+    }
     const room = res.message.room
     const job = prompts.get(promptId(room))
     if (!job) {
@@ -283,6 +295,10 @@ export default async (robot: Robot) => {
   })
 
   robot.respond(/standup off$/i, async res => {
+    if (!isOwner(res)) {
+      await res.send(OWNER_ONLY)
+      return
+    }
     const room = res.message.room
     const removed = prompts.remove(promptId(room))
     summaries.remove(`summary:${room}`)

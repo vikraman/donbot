@@ -19,8 +19,7 @@ import type { Robot, Response } from 'hubot'
 import { GITHUB_LOGIN, githubLoginOf, setGithubLogin, userForGithubLogin } from './lib/githubUsers.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
-
-const isOwner = (res: Response): boolean => Boolean(process.env.OWNER_USER_ID) && res.message.user.id === process.env.OWNER_USER_ID
+import { isOwner } from './lib/owner.ts'
 
 // <@id>, or a name the brain knows
 const resolveUser = (robot: Robot, who: string): string | undefined => {

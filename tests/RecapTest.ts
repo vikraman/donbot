@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { beforeEach, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
@@ -9,7 +9,9 @@ import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 const DAY = 86_400_000
 
 describe('Recap', () => {
-  const state = setupRobot('Recap.ts')
+  const state = setupRobot('Recap.ts', { envVars: ['OWNER_USER_ID'] })
+  // alice (u1) owns the bot
+  beforeEach(() => { process.env.OWNER_USER_ID = 'u1' })
 
   it('says it was a quiet week with nothing logged', async () => {
     const { robot } = state
@@ -81,6 +83,18 @@ describe('Recap', () => {
     assert.equal(robot.brain.get<unknown[]>('schedule:recap')!.length, 1)
     await robot.adapter.say(user, '@Dumbotheelephant recap off', 'room')
     assert.equal(sent[3], 'Weekly recap off for this channel.')
+  })
+  it('lets only the owner turn the recap on or off', async () => {
+    const { robot } = state
+    const alice = brainUser(robot, 'u1', 'alice')
+    const bob = brainUser(robot, 'u2', 'bob')
+    const sent = collect(robot)
+    await robot.adapter.say(bob, '@Dumbotheelephant recap on', 'room')
+    await robot.adapter.say(alice, '@Dumbotheelephant recap on', 'room')
+    await robot.adapter.say(bob, '@Dumbotheelephant recap off', 'room')
+    assert.equal(sent[0], 'Only my owner can do that.')
+    assert.equal(sent[2], 'Only my owner can do that.')
+    assert.equal(robot.brain.get<unknown[]>('schedule:recap')!.length, 1)
   })
   it('posts on schedule', async () => {
     const { robot } = state
