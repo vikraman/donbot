@@ -2,6 +2,7 @@
 //   Guards every message in and out. Discord re-sends a message when it's edited or a link preview
 //   loads; repeats are dropped, except an edit to a message no command picked up (a fixed typo).
 //   Outgoing messages may only ping users, never @everyone, @here or roles. Discord only.
+//   Also logs unhandled promise rejections instead of letting them crash the bot.
 //
 
 import type { Robot } from 'hubot'
@@ -18,7 +19,18 @@ interface Seen {
 // listeners that hear every message don't count as handling it
 const isCatchAll = (regex: unknown): boolean => regex instanceof RegExp && regex.test('')
 
+// once per process, however many robots load this
+let rejectionLogger = false
+
 export default async (robot: Robot) => {
+  // node exits on an unhandled rejection; log it instead
+  if (!rejectionLogger) {
+    rejectionLogger = true
+    process.on('unhandledRejection', reason => {
+      robot.logger.error(`unhandled rejection: ${reason instanceof Error ? reason.stack ?? reason.message : String(reason)}`)
+    })
+  }
+
   const client = robot.adapter && robot.adapter.client
   if (client && typeof client === 'object') {
     // discord.js uses this when a send doesn't say otherwise

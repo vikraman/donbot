@@ -31,6 +31,10 @@ export default async (robot: Robot) => {
     const message = reaction.message
     if (!guard.first(message.id, user.id)) return
     if (!guard.mayReply(message.id, message.channelId)) return
-    guard.remember(await robot.messageRoom(message.channelId, `⭐ ${user.username} starred a message from ${message.author?.username || 'someone'}`))
+    try {
+      guard.remember(await robot.messageRoom(message.channelId, `⭐ ${user.username} starred a message from ${message.author?.username || 'someone'}`))
+    } catch (error) {
+      robot.logger.warn(`starreact: couldn't reply in ${message.channelId}: ${String(error)}`)
+    }
   })
 }

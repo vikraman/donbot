@@ -287,4 +287,17 @@ describe('Praise reaction spam', () => {
     for (let i = 0; i < 30; i++) await robot.adapter.say(user, '@Dumbotheelephant cookie', 'test-room')
     sent.forEach((line, i) => { if (i) assert.notStrictEqual(line, sent[i - 1]) })
   })
+
+  it('logs instead of crashing when it cannot reply to a reaction', async () => {
+    const { robot } = state
+    const client = Object.assign(new EventEmitter(), { user: { id: 'bot-id' } })
+    robot.adapter.client = client as unknown as DiscordClient
+    await state.loadScript()
+    mock.method(robot, 'messageRoom', async () => { throw new Error('Missing Access') })
+    const warn = mock.method(robot.logger, 'warn', () => {})
+    const reaction = { partial: false, emoji: { name: '👍' }, message: { id: 'm-locked', channelId: 'room-locked', author: { id: 'bot-id' } } }
+    client.emit('messageReactionAdd', reaction, { id: 'fan', bot: false, username: 'bob' })
+    await new Promise(resolve => setImmediate(resolve))
+    assert.ok(warn.mock.calls.some(c => /couldn't reply in room-locked/.test(String(c.arguments[0]))))
+  })
 })

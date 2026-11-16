@@ -143,6 +143,11 @@ export default async (robot: Robot) => {
 
     recordPraise(robot, user.id)
     if (!guard.mayReply(message.id, message.channelId)) return
-    guard.remember(await robot.messageRoom(message.channelId, reply({}, { room: message.channelId, tz: defaultTz() })))
+    try {
+      guard.remember(await robot.messageRoom(message.channelId, reply({}, { room: message.channelId, tz: defaultTz() })))
+    } catch (error) {
+      // e.g. a locked thread; an unhandled rejection here would take the bot down
+      robot.logger.warn(`praise: couldn't reply in ${message.channelId}: ${String(error)}`)
+    }
   })
 }
