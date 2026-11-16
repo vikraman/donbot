@@ -22,6 +22,15 @@ const getAmbiguousUserText = (users: User[]): string =>
 const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
 // owned by other scripts
 const RESERVED = /^(?:focusing|your owner|my (?:timezone|time zone|tz|github)|what time|what's my (?:timezone|time zone|tz|github))$/i
+// other scripts' commands, so "win the deploy is done" isn't read as a role
+const COMMAND_WORDS = new Set(['remind', 'win', 'wins', 'focus', 'tock', 'pomodoro', 'distraction', 'kudos', 'pep', 'standup', 'recap', 'poll', 'ask', 'tell', 'streaks', 'github', 'my', 'skip', 'cancel', 'forget', 'define', 'choose', 'weather', 'quote', 'joke', 'score', 'reasons', 'top', 'last', 'most', 'least', 'whimsy', 'ai'])
+// people's names are short; anything longer is a sentence
+const MAX_NAME_WORDS = 3
+
+const notAName = (name: string): boolean => {
+  const words = name.trim().split(/\s+/)
+  return words.length > MAX_NAME_WORDS || COMMAND_WORDS.has(words[0]!.toLowerCase()) || RESERVED.test(name)
+}
 
 const nothingToMe = defineLines('roles.nothing', {
   fallback: [
@@ -121,7 +130,7 @@ export default async (robot: Robot) => {
     const name = required(res.match, 1).trim()
     const newRole = required(res.match, 2).trim()
 
-    if (skipNames.includes(name.toLowerCase()) || RESERVED.test(name) || newRole.match(/^not\s+/i)) {
+    if (skipNames.includes(name.toLowerCase()) || notAName(name) || newRole.match(/^not\s+/i)) {
       return
     }
 
@@ -151,7 +160,7 @@ export default async (robot: Robot) => {
     const name = required(res.match, 1).trim()
     const newRole = required(res.match, 2).trim()
 
-    if (skipNames.includes(name.toLowerCase())) {
+    if (skipNames.includes(name.toLowerCase()) || notAName(name)) {
       return
     }
 

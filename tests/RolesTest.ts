@@ -60,6 +60,11 @@ describe('Roles testing Hubot scripts', () => {
     await robot.adapter.say(author, '@Dumbotheelephant my timezone is Europe/London', 'test-room')
     await robot.adapter.say(author, '@Dumbotheelephant what time is it for holman', 'test-room')
     await robot.adapter.say(author, '@Dumbotheelephant my github is holman', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant remind me tomorrow at 9am to check the build is green', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant win the deploy is done', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant focus on why the build is red', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant kudos bob for the fix that is great', 'test-room')
+    await robot.adapter.say(author, '@Dumbotheelephant pep talk bob is sad', 'test-room')
     assert.deepEqual(sent, [])
   })
   it('should not repeat an unknown-user reply back to back', async () => {
