@@ -54,7 +54,14 @@ describe('time helpers', () => {
     assert.equal(parseWhen('tomorrow', 'UTC', NOW)!.at, Date.UTC(2026, 10, 17, 9, 0))
     assert.equal(parseWhen('on friday at 10:30', 'UTC', NOW)!.at, Date.UTC(2026, 10, 20, 10, 30))
     assert.equal(parseWhen('friday at 5pm', 'UTC', NOW)!.at, Date.UTC(2026, 10, 20, 17, 0))
-    assert.equal(parseWhen('at 3', 'UTC', NOW)!.at, Date.UTC(2026, 10, 16, 15, 0) - 12 * 3_600_000 + 86_400_000)
+    // bare 1-7 means pm
+    assert.equal(parseWhen('at 3', 'UTC', NOW)!.at, Date.UTC(2026, 10, 16, 15, 0))
+    assert.equal(parseWhen('friday at 3', 'UTC', NOW)!.at, Date.UTC(2026, 10, 20, 15, 0))
+    assert.equal(parseWhen('at 3am', 'UTC', NOW)!.at, Date.UTC(2026, 10, 17, 3, 0))
+    assert.equal(parseWhen('at 9', 'UTC', NOW)!.at, Date.UTC(2026, 10, 17, 9, 0))
+    assert.equal(parseWhen('tonight at 8', 'UTC', NOW)!.at, Date.UTC(2026, 10, 16, 20, 0))
+    assert.equal(parseWhen('at 11 tonight', 'UTC', NOW)!.at, Date.UTC(2026, 10, 16, 23, 0))
+    assert.deepEqual(parseWhen('every weekday at 4', 'UTC', NOW)!.repeat, { kind: 'weekly', days: [1, 2, 3, 4, 5], hour: 16, minute: 0 })
     assert.equal(parseWhen('3', 'UTC', NOW), undefined)
   })
   it('parses recurring schedules', () => {
@@ -91,5 +98,11 @@ describe('time helpers', () => {
     assert.equal(weekKey(Date.UTC(2026, 10, 23, 0, 30), 'UTC'), '2026-11-23')
     // still sunday in la
     assert.equal(weekKey(Date.UTC(2026, 10, 23, 3, 0), 'America/Los_Angeles'), '2026-11-16')
+  })
+  it('rejects times absurdly far ahead', () => {
+    assert.equal(parseWhen('in 99999999999 weeks', 'UTC', NOW), undefined)
+    assert.equal(parseWhen('in 3 years', 'UTC', NOW), undefined)
+    assert.equal(parseWhen('every 900 days', 'UTC', NOW), undefined)
+    assert.ok(parseWhen('in 52 weeks', 'UTC', NOW))
   })
 })

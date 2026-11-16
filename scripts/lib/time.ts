@@ -191,6 +191,15 @@ export interface When {
 
 // MIN_INTERVAL guards against "every 1 second" spam
 export const MIN_INTERVAL_MS = 5 * MINUTE_MS
+// further out than this is a typo, and breaks date formatting past year 275760
+export const MAX_AHEAD_MS = 2 * 365 * DAY_MS
+
+// "at 3" means 3pm; nobody books a 3am meeting by accident
+const likelyClock = (text: string): { hour: number, minute: number } | undefined => {
+  const clock = parseClock(text)
+  if (!clock || /am|pm/i.test(text) || clock.hour < 1 || clock.hour > 7) return clock
+  return { ...clock, hour: clock.hour + 12 }
+}
 
 // "in 5 minutes", "at 3pm", "tomorrow at 9", "on friday at 10:30", "every weekday at 9am", "every 2 hours"
 export const parseWhen = (text: string, tz: string, now = Date.now()): When | undefined => {
@@ -200,21 +209,21 @@ export const parseWhen = (text: string, tz: string, now = Date.now()): When | un
   if (m) {
     const n = /^\d+$/.test(m[1]!) ? Number(m[1]) : 1
     const size = unitMs(m[2]!)
-    if (!size || n < 1) return undefined
+    if (!size || n < 1 || n * size > MAX_AHEAD_MS) return undefined
     return { at: now + n * size }
   }
 
   m = t.match(/^every (\d+ )?([a-z]+)$/)
   if (m && unitMs(m[2]!) && m[2] !== 'day' && m[2] !== 'week') {
     const everyMs = (m[1] ? Number(m[1]) : 1) * unitMs(m[2]!)!
-    if (everyMs < MIN_INTERVAL_MS) return undefined
+    if (everyMs < MIN_INTERVAL_MS || everyMs > MAX_AHEAD_MS) return undefined
     return { at: now + everyMs, repeat: { kind: 'interval', everyMs } }
   }
 
   m = t.match(/^every (.+?)(?: at (.+))?$/)
   if (m) {
     const days = parseDays(m[1]!)
-    const clock = m[2] ? parseClock(m[2]) : { hour: 9, minute: 0 }
+    const clock = m[2] ? likelyClock(m[2]) : { hour: 9, minute: 0 }
     if (!days || !clock) return undefined
     const repeat: Repeat = { kind: 'weekly', days, ...clock }
     return { at: nextOccurrence(repeat, tz, now), repeat }
@@ -228,8 +237,9 @@ export const parseWhen = (text: string, tz: string, now = Date.now()): When | un
     const dayWord = (m[1] || m[3] || '').replace(/^on /, '')
     // a bare "3" is too likely to be part of the message
     if (/^\d+$/.test(m[2]!) && !/(?:^| )at \d+$/.test(t) && !dayWord) return undefined
-    const clock = m[2] === 'tomorrow' ? { hour: 9, minute: 0 } : parseClock(m[2]!)
+    let clock = m[2] === 'tomorrow' ? { hour: 9, minute: 0 } : likelyClock(m[2]!)
     if (!clock) return undefined
+    if (dayWord === 'tonight' && clock.hour < 12 && !/am|pm/.test(m[2]!)) clock = { ...clock, hour: clock.hour + 12 }
     const p = zonedParts(now, tz)
     if (m[2] === 'tomorrow' || dayWord === 'tomorrow') {
       return { at: fromZoned(p.year, p.month, p.day + 1, clock.hour, clock.minute, tz) }
