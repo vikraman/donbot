@@ -1,7 +1,7 @@
 import type { Robot } from 'hubot'
 
 import { randomId } from './random.ts'
-import { HOUR_MS, nextOccurrence } from './time.ts'
+import { HOUR_MS, MINUTE_MS, nextOccurrence } from './time.ts'
 import type { Repeat } from './time.ts'
 
 export interface Job<T> {
@@ -10,6 +10,15 @@ export interface Job<T> {
   tz: string
   repeat?: Repeat
   data: T
+  // failed deliveries so far, for one-off jobs
+  attempts?: number
+}
+
+export interface SchedulerOptions<T> {
+  // repeats missed by up to this long still fire once on startup; later ones skip ahead
+  missedGraceMs?: number
+  // adjusts a repeat that skipped ahead over missed occurrences
+  onMissed?: (job: Job<T>) => Job<T>
 }
 
 export interface Scheduler<T> {
@@ -23,6 +32,9 @@ export interface Scheduler<T> {
 const MAX_DELAY_MS = 2 ** 31 - 1
 // recurring jobs missed by more than this skip ahead instead of firing late
 export const MISSED_GRACE_MS = HOUR_MS
+// one-off jobs whose handler throws (say, discord is down) are retried this often
+export const RETRY_MS = MINUTE_MS
+export const MAX_ATTEMPTS = 3
 
 const isJob = (value: unknown): value is Job<unknown> =>
   typeof value === 'object' && value !== null &&
@@ -46,7 +58,7 @@ const onBrain = (robot: Robot, event: 'connected' | 'close', hook: () => void) =
 }
 
 // brain-backed jobs under `schedule:<name>`; fire runs once per occurrence, repeats re-arm
-export const scheduler = <T>(robot: Robot, name: string, fire: (job: Job<T>) => unknown): Scheduler<T> => {
+export const scheduler = <T>(robot: Robot, name: string, fire: (job: Job<T>) => unknown, { missedGraceMs = MISSED_GRACE_MS, onMissed }: SchedulerOptions<T> = {}): Scheduler<T> => {
   const key = `schedule:${name}`
   const timers = new Map<string, NodeJS.Timeout>()
 
@@ -85,6 +97,13 @@ export const scheduler = <T>(robot: Robot, name: string, fire: (job: Job<T>) => 
       await fire(job)
     } catch (error) {
       robot.logger.error(`schedule ${name} job ${id} failed: ${String(error)}`)
+      // retry unless the handler already scheduled a follow-up under this id
+      const attempts = (job.attempts ?? 0) + 1
+      if (!job.repeat && attempts < MAX_ATTEMPTS && !read().some(j => j.id === id)) {
+        const retry = { ...job, at: Date.now() + RETRY_MS, attempts }
+        write([...read(), retry])
+        arm(retry)
+      }
     }
   }
 
@@ -99,10 +118,11 @@ export const scheduler = <T>(robot: Robot, name: string, fire: (job: Job<T>) => 
   const armAll = () => {
     const now = Date.now()
     const jobs = read().map(job => {
-      if (!job.repeat || now - job.at <= MISSED_GRACE_MS) return job
+      if (!job.repeat || now - job.at <= missedGraceMs) return job
       let at = job.at
       while (at <= now) at = nextOccurrence(job.repeat, job.tz, at)
-      return { ...job, at }
+      const moved = { ...job, at }
+      return onMissed ? onMissed(moved) : moved
     })
     write(jobs)
     for (const job of jobs) arm(job)

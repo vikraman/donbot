@@ -205,7 +205,7 @@ interface RecapJob { room: string }
 export default async (robot: Robot) => {
   const recaps = scheduler<RecapJob>(robot, 'recap', async job => {
     await postToRoom(robot, job.data.room, buildRecap(robot, job.data.room, Date.now(), job.tz))
-  })
+  }, { missedGraceMs: DAY_MS })
 
   const jobId = (room: string): string => `recap:${room}`
 

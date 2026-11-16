@@ -232,4 +232,17 @@ describe('Standup', () => {
     assert.match(sent[2]!, /is back on\.$/)
     assert.equal(robot.brain.get<{ data: { skip?: boolean } }[]>('schedule:standup')![0]!.data.skip, false)
   })
+  it('uses up a skip that passed while the bot was down', async () => {
+    const { robot } = state
+    const alice = brainUser(robot, 'u1', 'alice')
+    await robot.adapter.say(alice, '@Dumbotheelephant standup every monday at 10am', 'room')
+    await robot.adapter.say(alice, '@Dumbotheelephant standup skip', 'room')
+    const [job] = robot.brain.get<{ at: number, data: { skip: boolean } }[]>('schedule:standup')!
+    // pretend the skipped prompt was three days ago
+    robot.brain.set('schedule:standup', [{ ...job, at: Date.now() - 3 * 86_400_000 }])
+    robot.brain.emit('connected')
+    const [after] = robot.brain.get<{ at: number, data: { skip: boolean } }[]>('schedule:standup')!
+    assert.equal(after!.data.skip, false)
+    assert.ok(after!.at > Date.now())
+  })
 })

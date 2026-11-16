@@ -234,6 +234,16 @@ export default async (robot: Robot) => {
       reminders.add({ id: `reminder:${room}`, at: Date.now() + delay - Math.min(REMINDER_LEAD_MS, delay / 2), tz: job.tz, data: { room } })
     }
     await postToRoom(robot, room, `${prompt({}, { room, tz: job.tz })} Check in any time, summary ${formatWhen(Date.now() + delay, job.tz)}. Reply with:\n${TEMPLATE}`)
+  }, {
+    // a prompt missed during downtime still goes out, late, within a day
+    missedGraceMs: DAY_MS,
+    // a skip that passed while the bot was down is used up, not carried into next week
+    onMissed: job => {
+      if (!job.data.skip) return job
+      const previous = readRound(job.data.room)
+      for (const userId of new Set(previous?.checkIns.map(c => c.userId))) freezeStreak(robot, 'standup', userId)
+      return { ...job, data: { ...job.data, skip: false } }
+    }
   })
 
   const promptId = (room: string): string => `standup:${room}`
