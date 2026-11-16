@@ -39,13 +39,14 @@ data Opts = Opts
   , optLib :: String
   , optCommit :: String
   , optUrl :: String
+  , optSource :: String
   }
 
 instance NFData Opts where
-  rnf (Opts a b c d e) = rnf a `seq` rnf b `seq` rnf c `seq` rnf d `seq` rnf e
+  rnf (Opts a b c d e f) = rnf a `seq` rnf b `seq` rnf c `seq` rnf d `seq` rnf e `seq` rnf f
 
 defaultOpts :: Opts
-defaultOpts = Opts False "index.json" "" "" ""
+defaultOpts = Opts False "index.json" "" "" "" ""
 
 flags :: [OptDescr (Flag Opts)]
 flags =
@@ -54,6 +55,7 @@ flags =
   , Option [] ["index-lib"] (ReqArg (\s o -> pure o {optLib = s}) "NAME") "library name"
   , Option [] ["index-commit"] (ReqArg (\s o -> pure o {optCommit = s}) "SHA") "library commit"
   , Option [] ["index-url"] (ReqArg (\s o -> pure o {optUrl = s}) "URL") "base url of the html listings"
+  , Option [] ["index-source"] (ReqArg (\s o -> pure o {optSource = s}) "URL") "base url of the sources at the indexed commit"
   ]
 
 data Entry = Entry
@@ -61,6 +63,7 @@ data Entry = Entry
   , eType :: T.Text
   , eNf :: Maybe T.Text
   , eLine, ePos :: Word
+  , eCopy :: Bool
   }
 
 -- entries plus every module name seen, for unqualifying
@@ -108,34 +111,42 @@ modules = do
 
 entry :: Set.Set QName -> Definition -> TCM (Maybe Entry)
 entry pub def
-  | not (Set.member q pub) || defCopy def || hidden = pure Nothing
+  | not (Set.member q pub) || hidden = pure Nothing
   | otherwise = case kind (theDef def) of
       Nothing -> pure Nothing
       Just "con" | prettyShow (qnameName q) == "constructor" -> pure Nothing
       Just k -> do
-        ty <- pp (defType def)
-        -- full normalisation is too slow
-        TelV tel b <- telView (defType def)
-        nf <- pp (telePi tel b)
         top <- curMName
-        let pos = rStart' (nameBindingSite (qnameName q))
-        pure . Just $
-          Entry
-            { eName = text (qnameName q)
-            , eModule = text (qnameModule q)
-            , eFile = text top
-            , eKind = k
-            , eType = ty
-            , eNf = if nf == ty || T.length nf > 400 then Nothing else Just nf
-            , eLine = maybe 0 (fromIntegral . posLine) pos
-            , ePos = maybe 0 (fromIntegral . posPos) pos
-            }
+        -- file-level copies only, bundles re-export thousands
+        if defCopy def && stripAnon (text (qnameModule q)) /= text top
+          then pure Nothing
+          else Just <$> make k top
   where
     q = defName def
     hidden = isExtendedLambdaName q || isAbsurdLambdaName q || "-generalized" `isSuffixOf` prettyShow q
     pp t = T.pack . unwords . words . render <$> prettyTCM t
     text :: Pretty a => a -> T.Text
     text = T.pack . prettyShow
+    stripAnon m = maybe m stripAnon (T.stripSuffix "._" m)
+    make k top = do
+      ty <- pp (defType def)
+      -- full normalisation is too slow
+      TelV tel b <- telView (defType def)
+      nf <- pp (telePi tel b)
+      let pos = rStart' (nameBindingSite (qnameName q))
+      pure
+        Entry
+          { eName = text (qnameName q)
+          , eModule = text (qnameModule q)
+          , eFile = text top
+          , eKind = k
+          , eType = ty
+          , eNf = if nf == ty || T.length nf > 400 then Nothing else Just nf
+          , eLine = maybe 0 (fromIntegral . posLine) pos
+          , ePos = maybe 0 (fromIntegral . posPos) pos
+          , -- from a module application, with the instantiated type
+            eCopy = defCopy def
+          }
 
 -- interfaces drop private imports, so names print fully qualified
 unqualify :: Set.Set T.Text -> T.Text -> T.Text
@@ -175,11 +186,12 @@ writeIndex o _ mods = liftIO $ do
           [ "library" .= optLib o
           , "commit" .= optCommit o
           , "url" .= optUrl o
+          , "source" .= optSource o
           , "agda" .= ("2.9.0" :: T.Text)
           , "count" .= length es
           ]
       json e =
-        J.object
+        J.object $
           [ "name" .= eName e
           , "module" .= eModule e
           , "file" .= eFile e
@@ -189,6 +201,7 @@ writeIndex o _ mods = liftIO $ do
           , "line" .= eLine e
           , "pos" .= ePos e
           ]
+            <> ["copy" .= True | eCopy e]
   BL.writeFile (optOut o) . J.encode $ J.object ["meta" .= meta, "entries" .= map json es]
   putStrLn $ "indexed " ++ show (length es) ++ " definitions to " ++ optOut o
 
