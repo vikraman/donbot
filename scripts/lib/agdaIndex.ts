@@ -109,6 +109,9 @@ export const setIndex = (files: IndexFile[]) => {
   const next = { docs: [] as Doc[], libs: [] as Library[], byName: new Map<string, number[]>(), byToken: new Map<string, number[]>(), byNfToken: new Map<string, number[]>(), concrete: new Set<string>(['I']) }
   // builtins ship with both libraries
   const builtins = new Set<string>()
+  // one copy of each module, file and kind string
+  const strings = new Map<string, string>()
+  const intern = (t: string): string => strings.get(t) ?? (strings.set(t, t), t)
   for (const file of files) {
     if (!file || typeof file !== 'object' || !file.meta || typeof file.meta.library !== 'string' || !Array.isArray(file.entries)) {
       throw new Error(`malformed index file${typeof file?.meta?.library === 'string' ? ` for ${file.meta.library}` : ''}`)
@@ -123,6 +126,9 @@ export const setIndex = (files: IndexFile[]) => {
         if (builtins.has(key)) continue
         builtins.add(key)
       }
+      entry.module = intern(entry.module)
+      entry.file = intern(entry.file)
+      entry.kind = intern(entry.kind)
       const id = next.docs.length
       const name = ascii(entry.name)
       next.docs.push({ entry, lib, key: name.toLowerCase() })
