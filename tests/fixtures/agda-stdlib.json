@@ -1,0 +1,111 @@
+{
+"entries": [
+{
+"file": "Relation.Binary.PropositionalEquality.Core",
+"kind": "fun",
+"line": 79,
+"module": "Relation.Binary.PropositionalEquality.Core",
+"name": "sym",
+"nf": "{A.a : Level} {A : Set A.a} {x y : A} → x ≡ y → y ≡ x",
+"pos": 2090,
+"type": "{A.a : Level} {A : Set A.a} → Symmetric _≡_"
+},
+{
+"file": "Data.Nat.Properties",
+"kind": "fun",
+"line": 200,
+"module": "Data.Nat.Properties",
+"name": "≤-trans",
+"nf": "{x y z : Nat} → x ≤ y → y ≤ z → x ≤ z",
+"pos": 6515,
+"type": "Transitive _≤_"
+},
+{
+"file": "Data.Nat.Properties",
+"kind": "fun",
+"line": 569,
+"module": "Data.Nat.Properties",
+"name": "+-comm",
+"nf": "(x y : Nat) → (x + y) ≡ (y + x)",
+"pos": 16081,
+"type": "Commutative _≡_ _+_"
+},
+{
+"file": "Data.List.Base",
+"kind": "fun",
+"line": 48,
+"module": "Data.List.Base",
+"name": "map",
+"nf": null,
+"pos": 1603,
+"type": "{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} → (A → B) → List A → List B"
+},
+{
+"file": "Data.List.Base",
+"kind": "fun",
+"line": 54,
+"module": "Data.List.Base",
+"name": "_++_",
+"nf": null,
+"pos": 1703,
+"type": "{A.a : Level} {A : Set A.a} → List A → List A → List A"
+},
+{
+"file": "Data.List.Base",
+"kind": "fun",
+"line": 126,
+"module": "Data.List.Base",
+"name": "foldr",
+"nf": null,
+"pos": 4117,
+"type": "{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} → (A → B → B) → B → List A → B"
+},
+{
+"file": "Data.List.Base",
+"kind": "fun",
+"line": 234,
+"module": "Data.List.Base",
+"name": "reverseAcc",
+"nf": null,
+"pos": 6849,
+"type": "{A.a : Level} {A : Set A.a} → List A → List A → List A"
+},
+{
+"file": "Function.Base",
+"kind": "fun",
+"line": 29,
+"module": "Function.Base",
+"name": "id",
+"nf": null,
+"pos": 695,
+"type": "{A.a : Level} {A : Set A.a} → A → A"
+},
+{
+"file": "Data.Sum.Properties",
+"kind": "fun",
+"line": 49,
+"module": "Data.Sum.Properties",
+"name": "swap-↔",
+"nf": "{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} → Inverse (setoid (A ⊎ B)) (setoid (B ⊎ A))",
+"pos": 1474,
+"type": "{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} → (A ⊎ B) ↔ (B ⊎ A)"
+},
+{
+"file": "Data.Fin.Base",
+"kind": "fun",
+"line": 52,
+"module": "Data.Fin.Base",
+"name": "cast",
+"nf": null,
+"pos": 1505,
+"type": "{m n : Nat} → .(m ≡ n) → Fin m → Fin n"
+}
+],
+"meta": {
+"agda": "2.9.0",
+"commit": "1b7f26af",
+"count": 10,
+"library": "stdlib",
+"url": "https://agda.github.io/agda-stdlib/master/"
+}
+}

@@ -1,11 +1,4 @@
 {
-"meta": {
-"agda": "2.9.0",
-"commit": "c37782bb",
-"count": 31,
-"library": "cubical",
-"url": "https://agda.github.io/cubical/"
-},
 "entries": [
 {
 "file": "Cubical.Foundations.Structure",
@@ -316,6 +309,33 @@
 "nf": null,
 "pos": 4072,
 "type": "{ℓ : Level} {A B : Set ℓ} → A ≡ B → Iso A B"
+},
+{
+"file": "Cubical.HITs.S1.Properties",
+"kind": "fun",
+"line": 36,
+"module": "Cubical.HITs.S1.Properties",
+"name": "IsoFunSpaceS¹",
+"nf": null,
+"pos": 1092,
+"type": "{ℓ : Level} {A : Set ℓ} → Iso (S¹ → A) (Σ-syntax A (λ x → x ≡ x))"
+},
+{
+"file": "Cubical.HITs.S1.Base",
+"kind": "data",
+"line": 22,
+"module": "Cubical.HITs.S1.Base",
+"name": "S¹",
+"nf": null,
+"pos": 594,
+"type": "Set"
 }
-]
+],
+"meta": {
+"agda": "2.9.0",
+"commit": "c37782bb",
+"count": 33,
+"library": "cubical",
+"url": "https://agda.github.io/cubical/"
+}
 }
