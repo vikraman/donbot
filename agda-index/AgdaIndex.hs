@@ -3,7 +3,7 @@ build-depends: base, Agda ==2.9.0, aeson, bytestring, containers, deepseq, text,
 default-language: GHC2021
 ghc-options: -O1 -rtsopts "-with-rtsopts=-A64m"
 -}
-{-# LANGUAGE OverloadedStrings, TupleSections #-}
+{-# LANGUAGE LambdaCase, OverloadedStrings #-}
 
 -- agda index backend that dumps definitions and their types in json
 
@@ -26,7 +26,7 @@ import Agda.Compiler.Common (curIF, curMName)
 import Agda.Main (runAgda)
 import Agda.Syntax.Common.Pretty (Pretty, prettyShow, render)
 import Agda.Syntax.Position (posLine, posPos, rStart')
-import Agda.Syntax.Abstract.Name (AbstractName (..))
+import Agda.Syntax.Abstract.Name (AbstractName (..), WhyInScope (..))
 import Agda.Syntax.Scope.Base (NameSpace (..), NameSpaceId (..), Scope (..), scopeNameSpaces)
 import Agda.TypeChecking.Pretty (prettyTCM)
 import Agda.TypeChecking.Substitute (TelV (..), telePi)
@@ -64,6 +64,8 @@ data Entry = Entry
   , eNf :: Maybe T.Text
   , eLine, ePos :: Word
   , eCopy :: Bool
+  , eAlias :: Maybe T.Text
+  , eDepth :: Int
   }
 
 -- entries plus every module name seen, for unqualifying
@@ -80,7 +82,7 @@ backend =
     , preCompile = pure
     , postCompile = writeIndex
     , preModule = \_ _ _ _ -> Recompile <$> exported
-    , postModule = \_ _ _ _ defs -> (catMaybes defs,) <$> modules
+    , postModule = \_ _ _ _ defs -> (\as ms -> (catMaybes defs ++ as, ms)) <$> aliases <*> modules
     , compileDef = \_ pub _ def -> entry pub def
     , scopeCheckingSuffices = False
     , mayEraseType = \_ -> pure True
@@ -109,6 +111,9 @@ modules = do
   pure . Set.fromList . map (T.pack . prettyShow) $
     iModuleName i : Map.keys (iScope i) ++ map qnameModule defs
 
+text :: Pretty a => a -> T.Text
+text = T.pack . prettyShow
+
 entry :: Set.Set QName -> Definition -> TCM (Maybe Entry)
 entry pub def
   | not (Set.member q pub) || hidden = pure Nothing
@@ -120,33 +125,66 @@ entry pub def
         -- file-level copies only, bundles re-export thousands
         if defCopy def && stripAnon (text (qnameModule q)) /= text top
           then pure Nothing
-          else Just <$> make k top
+          else Just <$> make k def
   where
     q = defName def
     hidden = isExtendedLambdaName q || isAbsurdLambdaName q || "-generalized" `isSuffixOf` prettyShow q
-    pp t = T.pack . unwords . words . render <$> prettyTCM t
-    text :: Pretty a => a -> T.Text
-    text = T.pack . prettyShow
     stripAnon m = maybe m stripAnon (T.stripSuffix "._" m)
-    make k top = do
-      ty <- pp (defType def)
-      -- full normalisation is too slow
-      TelV tel b <- telView (defType def)
-      nf <- pp (telePi tel b)
-      let pos = rStart' (nameBindingSite (qnameName q))
-      pure
-        Entry
-          { eName = text (qnameName q)
-          , eModule = text (qnameModule q)
-          , eFile = text top
-          , eKind = k
-          , eType = ty
-          , eNf = if nf == ty || T.length nf > 400 then Nothing else Just nf
-          , eLine = maybe 0 (fromIntegral . posLine) pos
-          , ePos = maybe 0 (fromIntegral . posPos) pos
-          , -- from a module application, with the instantiated type
-            eCopy = defCopy def
-          }
+
+make :: T.Text -> Definition -> TCM Entry
+make k def = do
+  top <- curMName
+  ty <- pp (defType def)
+  -- full normalisation is too slow
+  TelV tel b <- telView (defType def)
+  nf <- pp (telePi tel b)
+  let pos = rStart' (nameBindingSite (qnameName q))
+  pure
+    Entry
+      { eName = text (qnameName q)
+      , eModule = text (qnameModule q)
+      , eFile = text top
+      , eKind = k
+      , eType = ty
+      , eNf = if nf == ty || T.length nf > 400 then Nothing else Just nf
+      , eLine = maybe 0 (fromIntegral . posLine) pos
+      , ePos = maybe 0 (fromIntegral . posPos) pos
+      , -- from a module application, with the instantiated type
+        eCopy = defCopy def
+      , eAlias = Nothing
+      , eDepth = 0
+      }
+  where
+    q = defName def
+    pp t = T.pack . unwords . words . render <$> prettyTCM t
+
+-- open X public renaming (a to b), as b
+aliases :: TCM [Entry]
+aliases = do
+  i <- curIF
+  catMaybes
+    <$> sequence
+      [ alias (scopeName s) c a
+      | s <- Map.elems (iScope i)
+      -- public opens land in the imported namespace
+      , (ImportedNS, ns) <- scopeNameSpaces s
+      , (c, as) <- Map.toList (nsNames ns)
+      , a <- List1.toList as
+      , let c' = prettyShow c
+      , c' /= prettyShow (qnameName (anameName a)) && c' /= "constructor"
+      ]
+  where
+    alias m c a =
+      getConstInfo' (anameName a) >>= \case
+        Right def | Just k <- kind (theDef def) -> do
+          e <- make k def
+          -- no source line for the renaming
+          pure . Just $ e {eName = text c, eModule = text m, eLine = 0, ePos = 0, eCopy = False, eAlias = Just (text (anameName a)), eDepth = depth (anameLineage a)}
+        _ -> pure Nothing
+    depth w = case w of
+      Defined -> 0 :: Int
+      Opened _ w' -> 1 + depth w'
+      Applied _ w' -> 1 + depth w'
 
 -- interfaces drop private imports, so names print fully qualified
 unqualify :: Set.Set T.Text -> T.Text -> T.Text
@@ -180,7 +218,11 @@ kind d = case d of
 writeIndex :: Opts -> IsMain -> Map.Map TopLevelModuleName Mod -> TCM ()
 writeIndex o _ mods = liftIO $ do
   let ms = Set.insert "Agda.Primitive" (foldMap snd mods)
-      es = concatMap fst (Map.elems mods)
+      all' = concatMap fst (Map.elems mods)
+      -- each alias once, from the module that renames it
+      closest a b = if (eDepth a, T.length (eModule a)) <= (eDepth b, T.length (eModule b)) then a else b
+      renamed = Map.fromListWith closest [((eName e, t), e) | e <- all', Just t <- [eAlias e]]
+      es = [e | e <- all', null (eAlias e)] ++ Map.elems renamed
       meta =
         J.object
           [ "library" .= optLib o
@@ -202,6 +244,7 @@ writeIndex o _ mods = liftIO $ do
           , "pos" .= ePos e
           ]
             <> ["copy" .= True | eCopy e]
+            <> ["alias" .= t | Just t <- [eAlias e]]
   BL.writeFile (optOut o) . J.encode $ J.object ["meta" .= meta, "entries" .= map json es]
   putStrLn $ "indexed " ++ show (length es) ++ " definitions to " ++ optOut o
 
