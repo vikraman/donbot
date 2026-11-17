@@ -32,6 +32,8 @@ jobs:
     outputs:
       skip: ${{ steps.commits.outputs.skip }}
       stamp: ${{ steps.commits.outputs.stamp }}
+      cubical: ${{ steps.commits.outputs.cubical }}
+      stdlib: ${{ steps.commits.outputs.stdlib }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,7 +65,8 @@ jobs:
             echo "stdlib=$stdlib"
             echo "stamp=$stamp"
           } >> "$GITHUB_OUTPUT"
-          last=$(gh release view "$TAG" --json body -q .body 2>/dev/null || true)
+          # stamp hides in a comment in the release notes
+          last=$(gh release view "$TAG" --json body -q .body 2>/dev/null | sed -n 's/^<!-- stamp: \(.*\) -->$/\1/p' || true)
           if [ "$last" = "$stamp" ] && [ "${{ inputs.force }}" != "true" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
@@ -204,10 +207,26 @@ jobs:
       - name: Publish
         env:
           STAMP: ${{ needs.index.outputs.stamp }}
+          CUBICAL: ${{ needs.index.outputs.cubical }}
+          STDLIB: ${{ needs.index.outputs.stdlib }}
         run: |
+          count() { gunzip -c "$1" | jq '.meta.count'; }
+          commit() { echo "[\`$(echo "$2" | cut -c1-7)\`](https://github.com/$1/commit/$2)"; }
+          cat > notes.md <<EOF
+          Search index of [agda/cubical](https://github.com/agda/cubical) and [agda/agda-stdlib](https://github.com/agda/agda-stdlib) for donbot's \`agda\` command.
+
+          | library | commit | definitions |
+          |---|---|---:|
+          | cubical | $(commit agda/cubical "$CUBICAL") | $(count cubical.json.gz) |
+          | stdlib | $(commit agda/agda-stdlib "$STDLIB") | $(count stdlib.json.gz) |
+
+          Agda $AGDA_VERSION · GHC $GHC_VERSION · built $(date -u +%F) by [run $GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)
+
+          <!-- stamp: $STAMP -->
+          EOF
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "agda index" --notes "" --latest=false
           gh release upload "$TAG" cubical.json.gz stdlib.json.gz --clobber
-          gh release edit "$TAG" --notes "$STAMP"
+          gh release edit "$TAG" --notes-file notes.md
 
       - name: Close failure issue
         run: |
