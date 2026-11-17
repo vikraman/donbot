@@ -7,6 +7,7 @@
 //   hubot agda search <words> - Fuzzy name search.
 //   hubot agda about <names> - Definitions whose type mentions every name, -name excludes.
 //   hubot agda type <type> - Type search, for types without an arrow or equation.
+//   hubot agda <query> lib:stdlib kind:data in:Data.List - Filters any search, filters alone list matches.
 //   hubot agda more - Shows more of the last results.
 //   hubot agda index - Shows which library versions are indexed.
 //   hubot agda reindex - Reloads the index (owner only).
@@ -14,7 +15,7 @@
 
 import type { Robot, Response } from 'hubot'
 
-import { ascii, displayType, indexSize, libraries, loadIndex, lookupName, MAX_QUERY, searchAbout, searchNames, searchType, urlFor, type Hit } from './lib/agdaIndex.ts'
+import { ascii, displayType, indexSize, libraries, loadIndex, lookupName, MAX_QUERY, searchAbout, searchNames, searchType, splitFilters, urlFor, type Hit } from './lib/agdaIndex.ts'
 import { isOwner, OWNER_ONLY } from './lib/owner.ts'
 
 const RELEASE = 'https://github.com/vikraman/donbot/releases/download/agda-index'
@@ -50,8 +51,11 @@ const via = (h: Hit): string => (h.via ? ` · up to ${h.via}` : '')
 
 const code = (s: string): string => s.replace(/`/g, "'")
 
+// renamed re-export, hcomp for primHComp
+const alias = (h: Hit): string => (h.entry.alias ? ` · = \`${code(h.entry.alias.split('.').pop()!)}\`` : '')
+
 // names as code, _++_ is markdown
-const title = (h: Hit): string => `\`${code(h.entry.name)}\` · ${link(h)}${via(h)}`
+const title = (h: Hit): string => `\`${code(h.entry.name)}\` · ${link(h)}${alias(h)}${via(h)}`
 
 const single = (h: Hit): string => {
   const head = title(h)
@@ -129,8 +133,17 @@ export default async (robot: Robot) => {
       await res.send(`That query is too long, keep it under ${MAX_QUERY} characters.`)
       return
     }
-    const [command, ...rest] = q.split(' ')
+    const { query, keep, error } = splitFilters(q)
+    if (error) {
+      await res.send(error)
+      return
+    }
+    if (!query && keep) return answer(res, q, () => searchNames('', keep))
+    const [command, ...rest] = query.split(' ')
     const arg = rest.join(' ')
+    // the query and its filters, without the command
+    const words = q.split(' ')
+    const sub = words.filter((_, i) => i !== words.indexOf(command!)).join(' ')
     switch (command!.toLowerCase()) {
       case 'more': {
         const page = pages.get(res.message.room)
@@ -155,21 +168,21 @@ export default async (robot: Robot) => {
         await res.send(failure ? `Reindex failed: ${failure}` : `Reloaded ${indexSize()} definitions.`)
         return
       case 'search':
-        if (arg) return answer(res, arg, () => searchNames(arg))
+        if (arg) return answer(res, sub, () => searchNames(arg, keep))
         break
       case 'about':
-        if (arg) return answer(res, arg, () => searchAbout(arg))
+        if (arg) return answer(res, sub, () => searchAbout(arg, keep))
         break
       case 'type':
-        if (arg) return answer(res, arg, () => searchType(arg))
+        if (arg) return answer(res, sub, () => searchType(arg, keep))
         break
     }
     // isProp->isSet is a name, isProp A -> isSet A a type
     return answer(res, q, () => {
-      const exact = rest.length === 0 ? lookupName(q) : []
+      const exact = rest.length === 0 ? lookupName(query, keep) : []
       if (exact.length > 0) return exact
-      const typed = TYPE_LIKE.test(ascii(q)) ? searchType(q) : []
-      return typed.length > 0 ? typed : searchNames(q)
+      const typed = TYPE_LIKE.test(ascii(query)) ? searchType(query, keep) : []
+      return typed.length > 0 ? typed : searchNames(query, keep)
     })
   })
 }

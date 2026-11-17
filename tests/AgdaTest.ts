@@ -104,6 +104,27 @@ describe('Agda', () => {
     assert.match(sent[0]!, /matches for `\|\|_\|\|1 isProp`:\n`isPropPropTrunc`/)
   })
 
+  it('filters any search', async () => {
+    const lib = await ask('agda ++ lib:stdlib')
+    assert.ok(lib[0]!.startsWith('`_++_` · [Data.List.Base]'))
+    const searched = await ask('agda search iso kind:record')
+    assert.ok(searched[0]!.startsWith('`Iso` · '))
+    const listed = await ask('agda in:HLevels kind:fun')
+    assert.match(listed[0]!, /^4 matches for `in:HLevels kind:fun`:\n`isSetΣ`/)
+    const typed = await ask('agda type isProp A -> isSet A in:Data')
+    assert.strictEqual(typed[0], 'No matches for `isProp A -> isSet A in:Data`.')
+    const bad = await ask('agda sym kind:lemma')
+    assert.match(bad[0]!, /^Unknown kind `lemma`/)
+  })
+
+  it('shows what a renamed re-export renames', async () => {
+    await new Promise(resolve => setTimeout(resolve, 50))
+    setIndex([{ meta: { library: 'cubical', commit: '', url: 'https://example.org/' }, entries: [{ name: 'hcomp', module: 'Cubical.Core.Primitives', file: 'Cubical.Core.Primitives', kind: 'prim', type: 'I → I', nf: null, line: 0, pos: 0, alias: 'Agda.Primitive.Cubical.primHComp' }] } as IndexFile])
+    const sent = await ask('agda hcomp')
+    assert.match(sent[0]!, /^`hcomp` · \[Cubical\.Core\.Primitives\]\(<[^>]+>\) · = `primHComp`\n/)
+    await loadIndex(FIXTURES.split(','))
+  })
+
   it('reports no matches', async () => {
     const sent = await ask('agda type Nonsense A -> A')
     assert.strictEqual(sent[0], 'No matches for `Nonsense A -> A`.')

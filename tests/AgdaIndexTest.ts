@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
-import { ascii, displayType, indexSize, libraries, loadIndex, lookupName, searchAbout, searchNames, searchType, setIndex, urlFor, type Hit, type IndexFile } from '../scripts/lib/agdaIndex.ts'
+import { ascii, displayType, indexSize, libraries, loadIndex, lookupName, searchAbout, searchNames, searchType, setIndex, splitFilters, urlFor, type Hit, type IndexFile } from '../scripts/lib/agdaIndex.ts'
 
 const FIXTURES = ['tests/fixtures/agda-cubical.json', 'tests/fixtures/agda-stdlib.json']
 
@@ -82,6 +82,17 @@ describe('agda index', () => {
 
     it('falls back to subsequences', () => {
       assert.ok(names(searchNames('isPrSt')).includes('Cubical.Foundations.Prelude.isProp→isSet'))
+    })
+
+    it('drops subsequences when closer matches exist', () => {
+      // isSet is also a subsequence of isProp→isSet
+      assert.deepStrictEqual(names(searchNames('isset')), ['Cubical.Foundations.Prelude.isSet', 'Cubical.Foundations.HLevels.isSetΣ', 'Cubical.Foundations.Prelude.isProp→isSet'])
+      assert.deepStrictEqual(names(searchNames('trnsprt')), ['Cubical.Foundations.Prelude.transport'])
+    })
+
+    it('matches module segments, not substrings', () => {
+      assert.deepStrictEqual(names(searchNames('univalence')), ['Cubical.Foundations.Univalence.ua'])
+      assert.deepStrictEqual(names(searchNames('univ')), [])
     })
   })
 
@@ -323,9 +334,63 @@ describe('agda index', () => {
       assert.deepStrictEqual(names(flipped), ['M.≈-sym'])
     })
 
+    it('ranks word starts above other substrings', () => {
+      setIndex([file('x', [entry('involPathComp', 'M'), entry('primHComp', 'M'), entry('transp-hcomp', 'M'), entry('hcomp-cong', 'M'), entry('hcomp', 'M'), entry('hcmp', 'M')])])
+      assert.deepStrictEqual(names(searchNames('hcomp')), ['M.hcomp', 'M.hcomp-cong', 'M.primHComp', 'M.transp-hcomp', 'M.involPathComp'])
+    })
+
+    it('finds renamed re-exports', () => {
+      const prim = { ...entry('primHComp', 'Agda.Primitive.Cubical'), kind: 'prim', type: '{A : Set} {φ : I} → (I → Partial φ A) → A → A' }
+      setIndex([file('x', [prim, { ...prim, name: 'hcomp', module: 'Cubical.Core.Primitives', file: 'Cubical.Core.Primitives', line: 0, alias: 'Agda.Primitive.Cubical.primHComp' }])])
+      assert.deepStrictEqual(names(lookupName('hcomp')), ['Cubical.Core.Primitives.hcomp'])
+      assert.strictEqual(lookupName('hcomp')[0]!.entry.alias, 'Agda.Primitive.Cubical.primHComp')
+      assert.deepStrictEqual(names(searchType('(I -> Partial phi A) -> A -> A')).sort(), ['Agda.Primitive.Cubical.primHComp', 'Cubical.Core.Primitives.hcomp'])
+      setIndex([file('x', [prim, { ...prim, name: 'hcomp', alias: 1 }])])
+      assert.strictEqual(indexSize(), 1)
+    })
+
     it('keeps one copy of agda builtins', () => {
       setIndex([file('x', [entry('fst', 'Agda.Builtin.Sigma.Σ')]), file('y', [entry('fst', 'Agda.Builtin.Sigma.Σ'), entry('fst', 'M')])])
       assert.deepStrictEqual(libraries().map(l => [l.name, l.count]), [['x', 1], ['y', 1]])
+    })
+
+    after(async () => {
+      await loadIndex(FIXTURES)
+    })
+  })
+
+  describe('filters', () => {
+    const split = splitFilters
+
+    it('splits filters off the query', () => {
+      assert.strictEqual(split('isProp A lib:cubical kind:fun in:Prelude').query, 'isProp A')
+      assert.strictEqual(split('isProp A').keep, undefined)
+      assert.match(split('sym kind:lemma').error!, /^Unknown kind `lemma`, try fun, data, record/)
+    })
+
+    it('narrows by library', () => {
+      const { query, keep } = split('++ lib:std')
+      assert.deepStrictEqual(names(lookupName(query, keep)), ['Data.List.Base._++_'])
+    })
+
+    it('narrows by kind', () => {
+      const { query, keep } = split('iso kind:record')
+      assert.deepStrictEqual(names(searchNames(query, keep)), ['Cubical.Foundations.Isomorphism.Iso'])
+      assert.deepStrictEqual(names(lookupName('fun', split('kind:field').keep)).sort(), ['Cubical.Foundations.Isomorphism.Iso.fun', 'Cubical.Relation.Binary.Base.RelIso.fun'])
+    })
+
+    it('narrows by whole module segments', () => {
+      assert.deepStrictEqual(names(searchNames('is', split('in:HLevels').keep)), ['Cubical.Foundations.HLevels.isSetΣ', 'Cubical.Foundations.HLevels.isPropΣ', 'Cubical.Foundations.HLevels.isProp×', 'Cubical.Foundations.HLevels.isPropΠ'])
+      assert.deepStrictEqual(searchNames('is', split('in:HLevel').keep), [])
+      assert.deepStrictEqual(names(searchType('isProp A -> isSet A', split('in:Cubical.Foundations').keep)), ['Cubical.Foundations.Prelude.isProp→isSet'])
+      assert.deepStrictEqual(searchType('isProp A -> isSet A', split('in:Data').keep), [])
+      assert.deepStrictEqual(names(searchAbout('+', split('lib:stdlib').keep)), ['Data.Nat.Properties.+-comm'])
+    })
+
+    it('filters before the result limit', () => {
+      setIndex([{ meta: { library: 'x', commit: '', url: '' }, entries: Array.from({ length: 300 }, (_, i) => ({ name: `a${i}`, module: i === 299 ? 'Far' : 'M', file: 'M', kind: 'fun', type: 'Set', nf: null, line: 1, pos: 1 })) }])
+      assert.deepStrictEqual(names(searchNames('a', split('in:Far').keep)), ['Far.a299'])
+      assert.strictEqual(searchNames('', split('in:M').keep).length, 200)
     })
 
     after(async () => {

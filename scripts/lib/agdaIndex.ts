@@ -13,6 +13,8 @@ export interface AgdaEntry {
   pos: number
   // from a module application
   copy?: boolean
+  // qualified target of a renamed re-export
+  alias?: string
 }
 
 export interface IndexFile {
@@ -38,9 +40,12 @@ export interface Hit {
 }
 
 interface Doc extends Hit {
-  // ascii, lowercased, for name search
+  // ascii name, and lowercased
+  folded: string
   key: string
 }
+
+export type Keep = (h: Hit) => boolean
 
 let docs: Doc[] = []
 let libs: Library[] = []
@@ -103,7 +108,8 @@ const TYPE_KINDS = new Set(['data', 'record', 'prim', 'postulate'])
 
 const validEntry = (e: AgdaEntry): boolean =>
   Boolean(e) && typeof e.name === 'string' && typeof e.module === 'string' && typeof e.file === 'string' &&
-  typeof e.type === 'string' && typeof e.pos === 'number' && (e.nf == null || typeof e.nf === 'string')
+  typeof e.type === 'string' && typeof e.pos === 'number' && (e.nf == null || typeof e.nf === 'string') &&
+  (e.alias == null || typeof e.alias === 'string')
 
 // swaps in only once every file is read
 export const setIndex = (files: IndexFile[]) => {
@@ -132,7 +138,7 @@ export const setIndex = (files: IndexFile[]) => {
       entry.kind = intern(entry.kind)
       const id = next.docs.length
       const name = ascii(entry.name)
-      next.docs.push({ entry, lib, key: name.toLowerCase() })
+      next.docs.push({ entry, lib, folded: name, key: name.toLowerCase() })
       lib.count++
       push(next.byName, name, id)
       // _++_ is also found as ++
@@ -146,6 +152,7 @@ export const setIndex = (files: IndexFile[]) => {
   }
   ;({ docs, libs, byName, byToken, byNfToken } = next)
   concreteNames = next.concrete
+  segmentCache = new Map()
   shortFirst = docs.map((_, id) => id).sort((a, b) => docs[a]!.entry.type.length - docs[b]!.entry.type.length)
 }
 
@@ -443,9 +450,9 @@ const tiebreak = (d: Doc): number => d.entry.name.length + d.entry.module.length
 
 const plainModule = (m: string): string => m.split('.').filter(p => p !== '_').join('.')
 
-const lookupIn = (name: string, quals: string[]): Hit[] => {
+const lookupIn = (name: string, quals: string[], keep: Keep): Hit[] => {
   const qual = ascii(quals.join('.'))
-  let found = (byName.get(ascii(name)) ?? []).map(id => docs[id]!).filter(d => {
+  let found = (byName.get(ascii(name)) ?? []).map(id => docs[id]!).filter(keep).filter(d => {
     const m = ascii(plainModule(d.entry.module))
     return !qual || m === qual || `${m}.`.endsWith(`.${qual}.`)
   })
@@ -458,13 +465,13 @@ const lookupIn = (name: string, quals: string[]): Hit[] => {
 }
 
 // exact or qualified name, split before ∙ folds to .
-export const lookupName = (q: string): Hit[] => {
+export const lookupName = (q: string, keep: Keep = () => true): Hit[] => {
   const segs = q.split('.')
   for (let k = segs.length - 1; k >= 0; k--) {
     const quals = segs.slice(0, k)
     const name = segs.slice(k).join('.')
     if (!name || !quals.every(s => /^\p{L}/u.test(s))) continue
-    const found = lookupIn(name, quals)
+    const found = lookupIn(name, quals, keep)
     if (found.length > 0) return found
   }
   return []
@@ -476,26 +483,59 @@ const subsequence = (needle: string, hay: string): boolean => {
   return i === needle.length
 }
 
-export const searchNames = (q: string): Hit[] => {
+const WORD = /[\p{L}\p{N}]/u
+const UPPER = /\p{Lu}/u
+
+// t starts a word of name, after a symbol or at a camel hump, hcomp in transp-hcomp or primHComp
+const atWord = (t: string, d: Doc): boolean => {
+  for (let i = d.key.indexOf(t, 1); i > 0; i = d.key.indexOf(t, i + 1)) {
+    const prev = d.folded[i - 1]!
+    if (!WORD.test(prev) || (UPPER.test(d.folded[i]!) && !UPPER.test(prev))) return true
+  }
+  return false
+}
+
+// folded module segments, per interned module
+let segmentCache = new Map<string, string[]>()
+const segments = (m: string): string[] => {
+  let segs = segmentCache.get(m)
+  if (!segs) segmentCache.set(m, (segs = ascii(plainModule(m)).toLowerCase().split('.')))
+  return segs
+}
+
+// exact, prefix, word, substring, module segment, subsequence
+const tier = (t: string, d: Doc): number | null =>
+  d.key === t ? 0
+  : d.key.startsWith(t) ? 1
+  : atWord(t, d) ? 2
+  : d.key.includes(t) ? 3
+  : segments(d.entry.module).includes(t) ? 4
+  : subsequence(t, d.key) ? 6
+  : null
+
+// filters alone list everything they allow
+export const searchNames = (q: string, keep?: Keep): Hit[] => {
   const terms = ascii(q).toLowerCase().split(/\s+/).filter(Boolean)
-  if (terms.length === 0) return []
-  const scored: [number, Doc][] = []
+  if (terms.length === 0 && !keep) return []
+  const scored: [number, Doc, boolean][] = []
   for (const d of docs) {
+    if (keep && !keep(d)) continue
     let score = 0
+    let loose = false
     for (const t of terms) {
-      if (d.key === t) continue
-      else if (d.key.startsWith(t)) score += 1
-      else if (d.key.includes(t)) score += 2
-      else if (ascii(d.entry.module).toLowerCase().includes(t)) score += 3
-      else if (subsequence(t, d.key)) score += 5
-      else {
+      const k = tier(t, d)
+      if (k === null) {
         score = -1
         break
       }
+      score += k
+      loose ||= k === 6
     }
-    if (score >= 0) scored.push([score * 100 + tiebreak(d), d])
+    if (score >= 0) scored.push([score * 100 + tiebreak(d), d, loose])
   }
-  return scored.sort((a, b) => a[0] - b[0]).slice(0, LIMIT).map(([, d]) => hit(d))
+  // subsequences only when nothing closer matches
+  const close = scored.some(([, , loose]) => !loose) ? scored.filter(([, , loose]) => !loose) : scored
+  return close.sort((a, b) => a[0] - b[0]).slice(0, LIMIT).map(([, d]) => hit(d))
 }
 
 // mixfix names match by their parts, ||_||1 needs || and ||1
@@ -515,7 +555,7 @@ const mentioning = (tokens: string[]): Map<number, number> | null => {
 }
 
 // definitions whose type mentions every id, -id excludes
-export const searchAbout = (q: string): Hit[] => {
+export const searchAbout = (q: string, keep: Keep = () => true): Hit[] => {
   const ids = q.split(/\s+/).filter(Boolean)
   const include = ids.filter(id => !id.startsWith('-')).flatMap(parts)
   const exclude = new Set(ids.filter(id => id.startsWith('-') && id.length > 1).flatMap(id => parts(id.slice(1))))
@@ -524,6 +564,7 @@ export const searchAbout = (q: string): Hit[] => {
   const scored: [number, Doc][] = []
   for (const [id, viaNf] of found) {
     const d = docs[id]!
+    if (!keep(d)) continue
     if (exclude.size > 0 && [...tokensOf(d.entry.type)].some(t => exclude.has(t))) continue
     scored.push([viaNf * 1000 + d.entry.type.length + d.entry.name.length, d])
   }
@@ -610,10 +651,11 @@ const variants = (q: Sig): Variant[] => {
 }
 
 // doc id to score; concrete is false for a full scan
-const rank = (query: Sig, deadline: number): { scored: Map<number, number>, concrete: boolean } => {
+const rank = (query: Sig, deadline: number, keep?: Keep): { scored: Map<number, number>, concrete: boolean } => {
   const concrete = [...new Set([...query.args.flat(), ...query.result])].filter(t => !isQueryVar(t) && !query.vars.has(t) && !NOISE.test(t))
   const found = mentioning(concrete)
-  const ids = found ? [...found.keys()].sort((a, b) => docs[a]!.entry.type.length - docs[b]!.entry.type.length) : shortFirst
+  const sorted = found ? [...found.keys()].sort((a, b) => docs[a]!.entry.type.length - docs[b]!.entry.type.length) : shortFirst
+  const ids = keep ? sorted.filter(id => keep(docs[id]!)) : sorted
   const scored = new Map<number, number>()
   for (let k = 0; k < ids.length; k++) {
     if ((k & 127) === 0 && performance.now() > deadline) break
@@ -631,12 +673,12 @@ const rank = (query: Sig, deadline: number): { scored: Map<number, number>, conc
   return { scored, concrete: found !== null }
 }
 
-export const searchType = (q: string): Hit[] => {
+export const searchType = (q: string, keep?: Keep): Hit[] => {
   if (q.length > MAX_QUERY) return []
   const query = querySig(q)
   if (query.result.length === 0 || query.args.length > MAX_ARGS) return []
   const deadline = performance.now() + SEARCH_MS
-  const { scored, concrete } = rank(query, deadline)
+  const { scored, concrete } = rank(query, deadline, keep)
   const exact = [...scored].sort((a, b) => a[1] - b[1]).slice(0, LIMIT)
   const hits = exact.map(([id]) => hit(docs[id]!))
   // no rewrites for bare-variable queries
@@ -644,13 +686,56 @@ export const searchType = (q: string): Hit[] => {
   const seen = new Set(exact.map(([id]) => id))
   const more = new Map<number, [number, string]>()
   for (const { sig, via } of variants(query)) {
-    for (const [id, score] of rank(sig, deadline).scored) {
+    for (const [id, score] of rank(sig, deadline, keep).scored) {
       const prev = more.get(id)
       if (!seen.has(id) && (!prev || score < prev[0])) more.set(id, [score, via])
     }
   }
   const rest = [...more].sort((a, b) => a[1][0] - b[1][0]).slice(0, LIMIT - hits.length)
   return [...hits, ...rest.map(([id, [, via]]) => ({ ...hit(docs[id]!), via }))]
+}
+
+// filters
+
+const KINDS: Record<string, string> = {
+  fun: 'fun', function: 'fun', def: 'fun', data: 'data', record: 'record', con: 'con', constructor: 'con',
+  field: 'field', prim: 'prim', primitive: 'prim', postulate: 'postulate', axiom: 'postulate', alias: 'alias'
+}
+
+const FILTER = /^(lib|kind|in):(\S+)$/i
+
+// lib:stdlib kind:data in:Data.List
+export const splitFilters = (q: string): { query: string, keep?: Keep, error?: string } => {
+  const tests: Keep[] = []
+  const words: string[] = []
+  for (const w of q.split(' ').filter(Boolean)) {
+    const m = FILTER.exec(w)
+    if (!m) {
+      words.push(w)
+      continue
+    }
+    const value = m[2]!
+    switch (m[1]!.toLowerCase()) {
+      case 'lib': {
+        const v = value.toLowerCase()
+        tests.push(h => h.lib.name.toLowerCase().startsWith(v))
+        break
+      }
+      case 'kind': {
+        const k = KINDS[value.toLowerCase()]
+        if (!k) return { query: q, error: `Unknown kind \`${value}\`, try ${[...new Set(Object.values(KINDS))].join(', ')}.` }
+        tests.push(k === 'alias' ? h => h.entry.alias != null : h => h.entry.kind === k)
+        break
+      }
+      case 'in': {
+        // whole segments, in:Foundations or in:Cubical.Foundations
+        const v = `.${ascii(value).toLowerCase().replace(/^\.+|\.+$/g, '')}.`
+        tests.push(h => `.${segments(h.entry.module).join('.')}.`.includes(v))
+        break
+      }
+    }
+  }
+  return { query: words.join(' '), keep: tests.length > 0 ? h => tests.every(t => t(h)) : undefined }
 }
 
 // display
