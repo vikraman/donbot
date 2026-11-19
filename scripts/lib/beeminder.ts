@@ -183,9 +183,9 @@ export interface Quiet {
   end: number
 }
 
-export const QUIET: Quiet = { start: 23, end: 8 }
+export const QUIET: Quiet = { start: 1, end: 8 }
 
-// "23-8", hours in the user's tz; "off" disables
+// "1-8", hours in the user's tz; "off" disables
 export const parseQuiet = (text: string | undefined): Quiet | undefined => {
   if (!text) return QUIET
   if (/^(off|none)$/i.test(text.trim())) return undefined

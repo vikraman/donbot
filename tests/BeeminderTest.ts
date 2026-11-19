@@ -117,15 +117,17 @@ describe('beeminder lib', () => {
 
   it('knows quiet hours, across midnight', () => {
     const quiet = parseQuiet(undefined)!
-    assert.deepEqual(quiet, { start: 23, end: 8 })
+    assert.deepEqual(quiet, { start: 1, end: 8 })
     assert.deepEqual(parseQuiet('22-7'), { start: 22, end: 7 })
     assert.equal(parseQuiet('off'), undefined)
-    assert.ok(isQuiet(Date.parse('2026-11-17T23:30:00Z'), 'Europe/London', quiet))
+    assert.ok(!isQuiet(Date.parse('2026-11-17T23:30:00Z'), 'Europe/London', quiet))
+    assert.ok(!isQuiet(Date.parse('2026-11-18T00:30:00Z'), 'Europe/London', quiet))
+    assert.ok(isQuiet(Date.parse('2026-11-17T23:30:00Z'), 'Europe/London', parseQuiet('23-8')))
     assert.ok(isQuiet(Date.parse('2026-11-18T03:00:00Z'), 'Europe/London', quiet))
     assert.ok(!isQuiet(Date.parse('2026-11-18T08:00:00Z'), 'Europe/London', quiet))
     assert.ok(!isQuiet(NOW, 'Europe/London', quiet))
     assert.ok(!isQuiet(Date.parse('2026-11-18T03:00:00Z'), 'Europe/London', undefined))
-    assert.equal(quietEnd(Date.parse('2026-11-17T23:30:00Z'), 'Europe/London', quiet), Date.parse('2026-11-18T08:00:00Z'))
+    assert.equal(quietEnd(Date.parse('2026-11-18T01:30:00Z'), 'Europe/London', quiet), Date.parse('2026-11-18T08:00:00Z'))
     assert.equal(quietEnd(Date.parse('2026-11-18T03:00:00Z'), 'Europe/London', quiet), Date.parse('2026-11-18T08:00:00Z'))
   })
 
@@ -383,12 +385,23 @@ describe('Beeminder', () => {
       assert.match(sent[2]!.text, /^🐝 🚨/)
     })
 
-    it('holds a goal that turns red overnight until morning', async () => {
+    it('alerts when a midnight goal turns red around midnight', async () => {
       const { robot } = state
       const tomorrow = TONIGHT / 1000 + 86_400
       fake.goals = [goal('pushups', { losedate: tomorrow, safebuf: 1, roadstatuscolor: 'orange' })]
       await subscribe()
       setNow(TONIGHT + 2 * MINUTE_MS)
+      fake.goals = [redGoal('pushups', { losedate: tomorrow })]
+      await pollNow(robot)
+      assert.deepEqual(sent.map(s => s.text), ['🐝 <@1001>, *pushups* is a beemergency: +3 pushups by today at 11:59pm.'])
+    })
+
+    it('holds a goal that turns red overnight until morning', async () => {
+      const { robot } = state
+      const tomorrow = TONIGHT / 1000 + 86_400
+      fake.goals = [goal('pushups', { losedate: tomorrow, safebuf: 1, roadstatuscolor: 'orange' })]
+      await subscribe()
+      setNow(TONIGHT + 2 * HOUR_MS)
       fake.goals = [redGoal('pushups', { losedate: tomorrow })]
       await pollNow(robot)
       assert.equal(sent.length, 0)
@@ -426,7 +439,7 @@ describe('Beeminder', () => {
       const tomorrow = TONIGHT / 1000 + 86_400
       fake.goals = [goal('pushups', { losedate: tomorrow, safebuf: 1, roadstatuscolor: 'orange' })]
       await subscribe()
-      setNow(TONIGHT + 2 * MINUTE_MS)
+      setNow(TONIGHT + 2 * HOUR_MS)
       fake.goals = [redGoal('pushups', { losedate: tomorrow })]
       await pollNow(robot)
       assert.equal(sent.length, 1)

@@ -19,7 +19,7 @@
 //   BEEMINDER_TOKEN_KEY - Key that encrypts stored tokens, 32 bytes as base64 (openssl rand -base64 32). Linking is off without it.
 //   BEEMINDER_MAX_POLL_HOURS - Longest gap between polls of a subscribed member. Defaults to 2.
 //   BEEMINDER_ZENO_START_HOURS - First countdown alert this long before a red goal derails, then half as long each time. Defaults to 8.
-//   BEEMINDER_QUIET_HOURS - Hours in each member's Beeminder timezone when "went red" and derail alerts wait, e.g. 23-8 (the default) or off. Countdowns still go out.
+//   BEEMINDER_QUIET_HOURS - Hours in each member's Beeminder timezone when "went red" and derail alerts wait, e.g. 1-8 (the default) or off. Countdowns still go out.
 //
 
 import type { Robot, Response } from 'hubot'
