@@ -170,7 +170,9 @@ describe('WebChat testing Hubot scripts', () => {
     const csp = res.headers.get('content-security-policy')!
     const nonce = csp.match(/'nonce-([^']+)'/)![1]!
     const html = await res.text()
-    assert.ok(html.includes(`<script nonce="${nonce}">`))
+    // rocket loader would rewrite it and trip the csp
+    assert.ok(html.includes(`<script nonce="${nonce}" data-cfasync="false">`))
+    assert.strictEqual(res.headers.get('cache-control'), 'no-store')
     assert.ok(html.includes('<title>Chat with Dumbotheelephant</title>'))
   })
 })

@@ -198,6 +198,8 @@ export default async (robot: Robot) => {
     res.set('Content-Security-Policy', `default-src 'self'; img-src https:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`)
     res.set('X-Content-Type-Options', 'nosniff')
     res.set('Referrer-Policy', 'no-referrer')
+    // fresh nonce per load, no edge caching
+    res.set('Cache-Control', 'no-store')
     res.type('html').send(page.replaceAll('{{name}}', robot.name).replaceAll('{{nonce}}', nonce))
   })
 
