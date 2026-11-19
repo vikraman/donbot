@@ -13,10 +13,11 @@
 //   GEMINI_MODELS - Comma-separated models to try in turn when one is busy. Defaults to gemini-flash-latest, gemini-flash-lite-latest, gemini-2.5-flash-lite.
 //
 
-import type { Robot } from 'hubot'
+import type { Response, Robot } from 'hubot'
 
 import { geminiText } from './lib/gemini.ts'
 import { required } from './lib/match.ts'
+import { isWebRoom } from './lib/web.ts'
 
 type Source = 'gg' | 'ddg' | 'wiki'
 
@@ -104,23 +105,23 @@ const NO_ANSWER = "I don't have an answer for that."
 const formatAnswer = (result: AskResult | null): string =>
   result ? `${result.text} [${SOURCE_LABELS[result.source]}]` : NO_ANSWER
 
+const direct = async (res: Response) => {
+  const source = required(res.match, 1).toLowerCase() as Source
+  const question = required(res.match, 2).trim()
+  await res.send(formatAnswer(await SOURCES[source](question)))
+}
+
+// no gemini for web visitors
+const fallback = async (res: Response) => {
+  const question = required(res.match, 1).trim()
+  const gemini = isWebRoom(res.message.room) ? null : await askGemini(question)
+  const result = gemini || await askDuckDuckGo(question) || await askWikipedia(question)
+  await res.send(formatAnswer(result))
+}
+
 export default async (robot: Robot) => {
-  robot.respond(/ask (gg|ddg|wiki) (.+)$/i, { id: 'ask.source' }, async res => {
-    const source = required(res.match, 1).toLowerCase() as Source
-    const question = required(res.match, 2).trim()
-    const result = await SOURCES[source](question)
-    await res.send(formatAnswer(result))
-  })
-
-  robot.respond(/(?:please\s+)?ask (?!gg\s|ddg\s|wiki\s)(.+)$/i, { id: 'ask.question' }, async res => {
-    const question = required(res.match, 1).trim()
-    const result = await askGemini(question) || await askDuckDuckGo(question) || await askWikipedia(question)
-    await res.send(formatAnswer(result))
-  })
-
-  robot.respond(/tell me about (.+)$/i, { id: 'ask.about' }, async res => {
-    const question = required(res.match, 1).trim()
-    const result = await askGemini(question) || await askDuckDuckGo(question) || await askWikipedia(question)
-    await res.send(formatAnswer(result))
-  })
+  robot.respond(/ask (gg) (.+)$/i, { id: 'ask.gemini' }, direct)
+  robot.respond(/ask (ddg|wiki) (.+)$/i, { id: 'ask.source' }, direct)
+  robot.respond(/(?:please\s+)?ask (?!gg\s|ddg\s|wiki\s)(.+)$/i, { id: 'ask.question' }, fallback)
+  robot.respond(/tell me about (.+)$/i, { id: 'ask.about' }, fallback)
 }

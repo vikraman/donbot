@@ -3,9 +3,6 @@
 //   else, including hear and catch-all listeners, is dropped for web rooms. Replies are
 //   captured and never reach the chat adapter.
 //
-// Configuration:
-//   WEB_ASK_DAILY - Web "ask" calls allowed per UTC day across all visitors. Defaults to 30.
-//
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -13,9 +10,13 @@ import { readFileSync } from 'node:fs'
 import { TextMessage, User } from 'hubot'
 import type { ListenerMiddlewareContext, Robot } from 'hubot'
 
+import { WEB_PREFIX, isWebRoom } from './lib/web.ts'
+
 interface Allowed {
   id: string
   help: string[]
+  // shown instead of the scraped line
+  lines?: string[]
 }
 
 // public listeners, by hubot listener id
@@ -34,8 +35,8 @@ export const ALLOWED: Allowed[] = [
   { id: 'garble.text', help: ['hubot garble'] },
   { id: 'define.word', help: ['hubot define'] },
   { id: 'weather.show', help: ['hubot weather'] },
-  { id: 'ask.source', help: ['hubot ask gg', 'hubot ask ddg', 'hubot ask wiki'] },
-  { id: 'ask.question', help: ['hubot ask <'] },
+  { id: 'ask.source', help: ['hubot ask ddg', 'hubot ask wiki'] },
+  { id: 'ask.question', help: [], lines: ['hubot ask <question> - Answers <question>, trying DuckDuckGo, then Wikipedia.'] },
   { id: 'ask.about', help: ['hubot tell me about'] },
   { id: 'rules.show', help: ['hubot the rules'] },
   { id: 'diagnostics.ping', help: ['hubot ping'] }
@@ -49,7 +50,6 @@ const EXTERNAL: [string, string][] = [
   ['PING$', 'diagnostics.ping']
 ]
 
-export const WEB_PREFIX = 'web:'
 export const MAX_TEXT = 500
 const TIMEOUT_MS = 60 * 1000
 const SETTLE_MS = 50
@@ -58,25 +58,18 @@ const MAX_PER_WINDOW = 10
 const BASE_COOLDOWN_MS = 30 * 1000
 const MAX_COOLDOWN_MS = 30 * 60 * 1000
 const MAX_IN_FLIGHT = 4
-const ASK_PER_VISITOR = 5
-const ASK_KEY = 'web:ask:budget'
 const DAY_MS = 24 * 60 * 60 * 1000
 
 // per process, so visitor ids never map back to an ip
 const SALT = randomBytes(16)
 
-const isWebRoom = (room: unknown): boolean => typeof room === 'string' && room.startsWith(WEB_PREFIX)
-
 const escapeRegExp = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-const dayKey = (now: number): string => new Date(now).toISOString().slice(0, 10)
 
 interface Visitor {
   hits: number[]
   until: number
   offenses: number
   busy: boolean
-  asks: { day: string, count: number }
   seen: number
 }
 
@@ -101,7 +94,6 @@ interface Res {
 
 export default async (robot: Robot) => {
   const page = readFileSync(new URL('../public/chat.html', import.meta.url), 'utf8')
-  const askDaily = Number(process.env.WEB_ASK_DAILY) || 30
   const visitors = new Map<string, Visitor>()
   const collectors = new Map<string, string[]>()
   let inFlight = 0
@@ -116,7 +108,7 @@ export default async (robot: Robot) => {
   const visitorFor = (key: string, now: number): Visitor => {
     let v = visitors.get(key)
     if (!v) {
-      v = { hits: [], until: 0, offenses: 0, busy: false, asks: { day: dayKey(now), count: 0 }, seen: now }
+      v = { hits: [], until: 0, offenses: 0, busy: false, seen: now }
       visitors.set(key, v)
     }
     v.seen = now
@@ -130,32 +122,13 @@ export default async (robot: Robot) => {
     }
   }
 
-  // false when over budget, counts otherwise
-  const takeAsk = (visitorKey: string): boolean => {
-    const now = Date.now()
-    const today = dayKey(now)
-    const v = visitorFor(visitorKey, now)
-    if (v.asks.day !== today) v.asks = { day: today, count: 0 }
-    const stored = robot.brain.get<{ day?: string, count?: number }>(ASK_KEY)
-    const global = stored && stored.day === today && typeof stored.count === 'number' ? stored.count : 0
-    if (v.asks.count >= ASK_PER_VISITOR || global >= askDaily) return false
-    v.asks.count++
-    robot.brain.set(ASK_KEY, { day: today, count: global + 1 })
-    return true
-  }
-
   const gate = async ({ listener, response }: ListenerMiddlewareContext): Promise<boolean> => {
     const room = response.message.room
     if (!isWebRoom(room)) return true
     // hubot runs the listener when middleware throws
     try {
       const id = listenerId(listener as ListenerLike)
-      if (!id || !ALLOWED_IDS.has(id)) return false
-      if (id.startsWith('ask.') && !takeAsk(room.slice(WEB_PREFIX.length))) {
-        await response.send("I've answered enough questions from the web for today, try again tomorrow.")
-        return false
-      }
-      return true
+      return Boolean(id && ALLOWED_IDS.has(id))
     } catch (err) {
       robot.logger.error(`web chat gate: ${err instanceof Error ? err.message : String(err)}`)
       return false
@@ -185,8 +158,9 @@ export default async (robot: Robot) => {
 
   const helpText = (): string => {
     const prefixes = ALLOWED.flatMap(a => a.help)
-    return robot.helpCommands()
-      .filter(line => prefixes.some(p => line.startsWith(p)))
+    const scraped = robot.helpCommands().filter(line => prefixes.some(p => line.startsWith(p)))
+    return [...scraped, ...ALLOWED.flatMap(a => a.lines ?? [])]
+      .sort()
       .map(line => line.replace(/^hubot/, robot.name))
       .join('\n')
   }

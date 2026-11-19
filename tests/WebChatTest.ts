@@ -32,7 +32,7 @@ const mockFetchText = (text: string) =>
 
 describe('WebChat testing Hubot scripts', () => {
   const state = setupRobot(['Eightball.ts', 'Fortune.ts', 'Killit.ts', 'Kudos.ts', 'Remind.ts', 'Ask.ts', 'RateLimit.ts', 'WebChat.ts'], {
-    envVars: ['WEB_ASK_DAILY', 'OWNER_USER_ID'],
+    envVars: ['GEMINI_API_KEY', 'OWNER_USER_ID'],
     deferLoad: true
   })
 
@@ -115,7 +115,8 @@ describe('WebChat testing Hubot scripts', () => {
     assert.match(help, /Dumbotheelephant fortune/)
     assert.match(help, /Dumbotheelephant the rules/)
     assert.match(help, /Dumbotheelephant ping/)
-    assert.doesNotMatch(help, /remind|kudos|leaderboard|echo|adapter/i)
+    assert.match(help, /Dumbotheelephant ask <question> - Answers <question>, trying DuckDuckGo, then Wikipedia\./)
+    assert.doesNotMatch(help, /remind|kudos|leaderboard|echo|adapter|gemini|ask gg/i)
   })
 
   it('rejects bad input', async () => {
@@ -135,14 +136,30 @@ describe('WebChat testing Hubot scripts', () => {
     assert.strictEqual((await post(robot, '8ball ok?', '198.51.100.7')).status, 200)
   })
 
-  it('caps web asks per day', async () => {
-    await load({ WEB_ASK_DAILY: '2' })
+  it('keeps gemini out of web asks', async () => {
+    await load({ GEMINI_API_KEY: 'test-key' })
     const { robot } = state
-    mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ AbstractText: 'Answer.' }), { status: 200 }))
-    assert.deepStrictEqual((await post(robot, 'ask ddg what')).body.replies, ['Answer. [DuckDuckGo]'])
-    assert.deepStrictEqual((await post(robot, 'ask ddg what', '198.51.100.7')).body.replies, ['Answer. [DuckDuckGo]'])
-    const third = await post(robot, 'ask ddg what', '198.51.100.8')
-    assert.match(third.body.replies![0]!, /enough questions/)
+    const urls: string[] = []
+    mock.method(globalThis, 'fetch', async (url: string) => {
+      urls.push(String(url))
+      return new Response(JSON.stringify({ AbstractText: 'Answer.' }), { status: 200 })
+    })
+    assert.deepStrictEqual((await post(robot, 'ask gg what')).body.replies, [])
+    assert.deepStrictEqual((await post(robot, 'ask what is rust')).body.replies, ['Answer. [DuckDuckGo]'])
+    assert.deepStrictEqual((await post(robot, 'tell me about rust')).body.replies, ['Answer. [DuckDuckGo]'])
+    assert.deepStrictEqual((await post(robot, 'ask wiki rust')).body.replies!.length, 1)
+    assert.ok(urls.length > 0)
+    assert.ok(urls.every(u => !u.includes('generativelanguage')))
+  })
+
+  it('still asks gemini in chat rooms', async () => {
+    await load({ GEMINI_API_KEY: 'test-key' })
+    const { robot } = state
+    mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Gemini says.' }] } }] }), { status: 200 }))
+    const user = brainUser(robot, 'test-user', 'test user')
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant ask what is rust', 'test-room')
+    assert.deepStrictEqual(sent, ['Gemini says. [Gemini]'])
   })
 
   it('keeps visitors apart from the owner', async () => {

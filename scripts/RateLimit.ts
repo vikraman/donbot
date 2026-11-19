@@ -18,6 +18,7 @@ import { formatDuration } from './lib/duration.ts'
 import { mentionFor } from './lib/mention.ts'
 import { defineLines } from './lib/lines.ts'
 import { userTz } from './lib/timezone.ts'
+import { isWebRoom } from './lib/web.ts'
 
 const WINDOW_MS = 60 * 1000
 const MAX_COMMANDS_PER_WINDOW = 5
@@ -103,7 +104,7 @@ export default async (robot: Robot) => {
     const ownerId = process.env.OWNER_USER_ID
     if (ownerId && String(user.id) === ownerId) return true
     // WebChat limits its own
-    if (String(user.id).startsWith('web:')) return true
+    if (isWebRoom(String(user.id))) return true
 
     const key = RATE_KEY(user.id, message.room)
     const now = Date.now()
