@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat with {{name}}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { max-width: 640px; margin: 0 auto; padding: 16px; font: 15px/1.4 system-ui, sans-serif; }
+  #log div { margin: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .me { text-align: right; opacity: .7; }
+  .note { opacity: .6; font-style: italic; }
+  img { display: block; max-width: 100%; max-height: 320px; }
+  form { display: flex; gap: 8px; margin-top: 12px; }
+  input { flex: 1; min-width: 0; padding: 8px; font: inherit; }
+</style>
+</head>
+<body>
+<h1>{{name}}</h1>
+<p>Say <b>help</b> to see what I can do.</p>
+<div id="log"></div>
+<form id="form">
+  <input id="text" autocomplete="off" maxlength="500" autofocus>
+  <button>Send</button>
+</form>
+<script nonce="{{nonce}}">
+  const log = document.getElementById('log')
+  const input = document.getElementById('text')
+
+  const escape = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+  // links, images inline
+  const render = s => escape(s)
+    .replace(/&lt;(https?:\/\/[^\s&]+)&gt;/g, '$1')
+    .replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g, url =>
+      `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>` +
+      (/\.(png|jpe?g|gif|webp)$/i.test(url) ? `<img src="${url}" alt="">` : ''))
+
+  const add = (cls, html) => {
+    const div = document.createElement('div')
+    div.className = cls
+    div.innerHTML = html
+    log.append(div)
+    div.scrollIntoView()
+    return div
+  }
+
+  document.getElementById('form').addEventListener('submit', async e => {
+    e.preventDefault()
+    const text = input.value.trim()
+    if (!text) return
+    input.value = ''
+    add('me', escape(text))
+    const wait = add('note', '…')
+    try {
+      const res = await fetch('/chat/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text })
+      })
+      const body = await res.json().catch(() => ({}))
+      wait.remove()
+      if (!res.ok) add('note', escape(body.error || `error ${res.status}`))
+      else if (!body.replies?.length) add('note', 'No idea, try help.')
+      else for (const r of body.replies) add('bot', render(r))
+    } catch {
+      wait.remove()
+      add('note', "Couldn't reach me.")
+    }
+  })
+</script>
+</body>
+</html>

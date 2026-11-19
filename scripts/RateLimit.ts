@@ -102,6 +102,8 @@ export default async (robot: Robot) => {
 
     const ownerId = process.env.OWNER_USER_ID
     if (ownerId && String(user.id) === ownerId) return true
+    // WebChat limits its own
+    if (String(user.id).startsWith('web:')) return true
 
     const key = RATE_KEY(user.id, message.room)
     const now = Date.now()

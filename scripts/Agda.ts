@@ -25,6 +25,7 @@ const PAGE = 5
 const MAX_TYPE = 300
 // discord's limit is 2000
 const MAX_MESSAGE = 1900
+const MAX_PAGES = 200
 
 // type-like query, on folded ascii
 const TYPE_LIKE = /->|[=<>|]|\*|\s:\s|\bforall\b|\bSigma\b/
@@ -122,7 +123,10 @@ export default async (robot: Robot) => {
       return
     }
     const page = { label, hits: search(), shown: 0 }
+    pages.delete(res.message.room)
     pages.set(res.message.room, page)
+    // web visitors each get a room
+    if (pages.size > MAX_PAGES) pages.delete(pages.keys().next().value!)
     await show(res, page)
   }
 
