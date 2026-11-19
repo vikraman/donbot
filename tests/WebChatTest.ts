@@ -116,7 +116,8 @@ describe('WebChat testing Hubot scripts', () => {
     assert.match(help, /Dumbotheelephant the rules/)
     assert.match(help, /Dumbotheelephant ping/)
     assert.match(help, /Dumbotheelephant ask <question> - Answers <question>, trying DuckDuckGo, then Wikipedia\./)
-    assert.doesNotMatch(help, /remind|kudos|leaderboard|echo|adapter|gemini|ask gg/i)
+    assert.match(help, /Dumbotheelephant tell me about <topic> - Same as Dumbotheelephant ask <topic>\./)
+    assert.doesNotMatch(help, /remind|kudos|leaderboard|echo|adapter|gemini|ask gg|hubot/i)
   })
 
   it('rejects bad input', async () => {

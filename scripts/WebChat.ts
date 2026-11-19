@@ -161,7 +161,7 @@ export default async (robot: Robot) => {
     const scraped = robot.helpCommands().filter(line => prefixes.some(p => line.startsWith(p)))
     return [...scraped, ...ALLOWED.flatMap(a => a.lines ?? [])]
       .sort()
-      .map(line => line.replace(/^hubot/, robot.name))
+      .map(line => line.replace(/\bhubot\b/gi, robot.name))
       .join('\n')
   }
 
