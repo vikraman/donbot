@@ -31,7 +31,7 @@ const mockFetchText = (text: string) =>
   mock.method(globalThis, 'fetch', async () => new Response(text, { status: 200 }))
 
 describe('WebChat testing Hubot scripts', () => {
-  const state = setupRobot(['Eightball.ts', 'Fortune.ts', 'Killit.ts', 'Kudos.ts', 'Remind.ts', 'Ask.ts', 'RateLimit.ts', 'WebChat.ts'], {
+  const state = setupRobot(['Eightball.ts', 'Fortune.ts', 'Joke.ts', 'Killit.ts', 'Kudos.ts', 'Remind.ts', 'Ask.ts', 'RateLimit.ts', 'WebChat.ts'], {
     envVars: ['GEMINI_API_KEY', 'OWNER_USER_ID'],
     deferLoad: true
   })
@@ -161,6 +161,30 @@ describe('WebChat testing Hubot scripts', () => {
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant ask what is rust', 'test-room')
     assert.deepStrictEqual(sent, ['Gemini says. [Gemini]'])
+  })
+
+  it('keeps jokes family friendly', async () => {
+    await load()
+    const { robot } = state
+    const urls: string[] = []
+    const chuck = [{ value: 'An explicit one.', categories: ['explicit'] }, { value: 'A clean one.', categories: [] }]
+    mock.method(globalThis, 'fetch', async (url: string) => {
+      urls.push(String(url))
+      const body = String(url).includes('chucknorris') ? chuck.shift() : { error: false, type: 'single', joke: 'A safe one.' }
+      return new Response(JSON.stringify(body), { status: 200 })
+    })
+    for (const text of ['joke dark', 'tell me a dark joke']) {
+      const reply = (await post(robot, text)).body.replies![0]!
+      assert.match(reply, /don't know the "dark" category/, text)
+      assert.doesNotMatch(reply.split('Try:')[1]!, /dark/, text)
+    }
+    assert.deepStrictEqual(urls, [])
+    assert.deepStrictEqual((await post(robot, 'joke programming')).body.replies, ['A safe one.'])
+    assert.strictEqual(urls.pop(), 'https://v2.jokeapi.dev/joke/programming?safe-mode')
+    assert.deepStrictEqual((await post(robot, 'joke chuck')).body.replies, ['A clean one.'])
+    const help = (await post(robot, 'help')).body.replies![0]!
+    assert.match(help, /Dumbotheelephant joke <category> - .*programming, pun/)
+    assert.doesNotMatch(help, /dark/)
   })
 
   it('keeps visitors apart from the owner', async () => {

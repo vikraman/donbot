@@ -29,7 +29,7 @@ export const ALLOWED: Allowed[] = [
   { id: 'fortune.tell', help: ['hubot fortune'] },
   { id: 'futurama.quote', help: ['hubot quote'] },
   { id: 'futurama.entertain', help: ['hubot entertain me'] },
-  { id: 'joke.tell', help: ['hubot joke', 'hubot tell me a'] },
+  { id: 'joke.tell', help: ['hubot joke -', 'hubot tell me a'], lines: ['hubot joke <category> - Replies with a joke from <category>: programming, pun, misc, spooky, christmas, or chuck.'] },
   { id: 'xkcd.show', help: ['hubot xkcd'] },
   { id: 'pugme.show', help: ['hubot pug me'] },
   { id: 'garble.text', help: ['hubot garble'] },

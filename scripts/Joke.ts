@@ -10,7 +10,10 @@
 
 import type { Robot, Response } from 'hubot'
 
-type JokeFetcher = () => Promise<string | null>
+import { isWebRoom } from './lib/web.ts'
+
+// safe: family-friendly only, for web visitors
+type JokeFetcher = (safe: boolean) => Promise<string | null>
 
 interface DadJokeResponse {
   joke?: string
@@ -18,6 +21,7 @@ interface DadJokeResponse {
 
 interface ChuckNorrisJokeResponse {
   value?: string
+  categories?: string[]
 }
 
 interface JokeApiResponse {
@@ -35,17 +39,26 @@ const fetchDadJoke: JokeFetcher = async () => {
   return data.joke || null
 }
 
-const fetchChuckNorrisJoke: JokeFetcher = async () => {
-  const response = await fetch('https://api.chucknorris.io/jokes/random')
-  if (!response.ok) return null
-  const data: ChuckNorrisJokeResponse = await response.json()
-  return data.value || null
+const CHUCK_TRIES = 3
+
+const fetchChuckNorrisJoke: JokeFetcher = async safe => {
+  // safe skips the explicit category
+  for (let i = 0; i < (safe ? CHUCK_TRIES : 1); i++) {
+    const response = await fetch('https://api.chucknorris.io/jokes/random')
+    if (!response.ok) return null
+    const data: ChuckNorrisJokeResponse = await response.json()
+    if (safe && data.categories?.includes('explicit')) continue
+    return data.value || null
+  }
+  return null
 }
 
 const JOKE_API_CATEGORIES = ['programming', 'dark', 'pun', 'misc', 'spooky', 'christmas']
+const UNSAFE_CATEGORIES = new Set(['dark'])
 
-const fetchJokeApiJoke = (category: string): JokeFetcher => async () => {
-  const url = `https://v2.jokeapi.dev/joke/${category}`
+const fetchJokeApiJoke = (category: string): JokeFetcher => async safe => {
+  // safe-mode drops dark and flagged jokes
+  const url = `https://v2.jokeapi.dev/joke/${category}${safe ? '?safe-mode' : ''}`
   const response = await fetch(url)
   if (!response.ok) return null
   const data: JokeApiResponse = await response.json()
@@ -65,22 +78,24 @@ const CATEGORIES: Record<string, JokeFetcher> = {
 }
 
 const NO_JOKE = "I don't have a joke for you right now."
-const UNKNOWN_CATEGORY = (category: string): string =>
-  `I don't know the "${category}" category. Try: dad, chuck, ${JOKE_API_CATEGORIES.join(', ')}.`
+const UNKNOWN_CATEGORY = (category: string, safe: boolean): string =>
+  `I don't know the "${category}" category. Try: dad, chuck, ${JOKE_API_CATEGORIES.filter(c => !safe || !UNSAFE_CATEGORIES.has(c)).join(', ')}.`
 
 const handleJoke = async (res: Response, category?: string) => {
+  const safe = isWebRoom(res.message.room)
   if (!category) {
-    await res.send(await fetchDadJoke() || NO_JOKE)
+    await res.send(await fetchDadJoke(safe) || NO_JOKE)
     return
   }
 
-  const fetchFn = CATEGORIES[category.toLowerCase()]
+  const key = category.toLowerCase()
+  const fetchFn = safe && UNSAFE_CATEGORIES.has(key) ? undefined : CATEGORIES[key]
   if (!fetchFn) {
-    await res.send(UNKNOWN_CATEGORY(category))
+    await res.send(UNKNOWN_CATEGORY(category, safe))
     return
   }
 
-  await res.send(await fetchFn() || NO_JOKE)
+  await res.send(await fetchFn(safe) || NO_JOKE)
 }
 
 export default async (robot: Robot) => {
