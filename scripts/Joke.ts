@@ -84,7 +84,7 @@ const handleJoke = async (res: Response, category?: string) => {
 }
 
 export default async (robot: Robot) => {
-  robot.respond(/(?:tell me an? (\S+) joke|joke(?:\s+(\S+))?|tell me a joke)$/i, async res => {
+  robot.respond(/(?:tell me an? (\S+) joke|joke(?:\s+(\S+))?|tell me a joke)$/i, { id: 'joke.tell' }, async res => {
     await handleJoke(res, res.match[1] || res.match[2])
   })
 }

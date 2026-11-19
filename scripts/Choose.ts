@@ -17,7 +17,7 @@ import { required } from './lib/match.ts'
 import { randomInt, randomInts } from './lib/random.ts'
 
 export default async (robot: Robot) => {
-  robot.respond(/(?:choose|pick)\s+(.+)$/i, async res => {
+  robot.respond(/(?:choose|pick)\s+(.+)$/i, { id: 'choose.pick' }, async res => {
     const options = required(res.match, 1).split(/\s+or\s+/i).map(o => o.trim()).filter(Boolean)
     if (options.length < 2) {
       await res.send('Give me at least two options, separated by "or".')
@@ -27,14 +27,14 @@ export default async (robot: Robot) => {
     await res.send(options[index] ?? options[0]!)
   })
 
-  robot.respond(/roll (?:a |an )?number (?:between|from) (-?\d+) (?:and|to) (-?\d+)$/i, async res => {
+  robot.respond(/roll (?:a |an )?number (?:between|from) (-?\d+) (?:and|to) (-?\d+)$/i, { id: 'choose.roll' }, async res => {
     const min = Math.min(Number(required(res.match, 1)), Number(required(res.match, 2)))
     const max = Math.max(Number(required(res.match, 1)), Number(required(res.match, 2)))
     const number = await randomInt(robot, min, max)
     await res.send(`${number}`)
   })
 
-  robot.respond(/roll (\d+) numbers (?:between|from) (-?\d+) (?:and|to) (-?\d+)$/i, async res => {
+  robot.respond(/roll (\d+) numbers (?:between|from) (-?\d+) (?:and|to) (-?\d+)$/i, { id: 'choose.rolls' }, async res => {
     const count = Math.min(Number(required(res.match, 1)), 100)
     const min = Math.min(Number(required(res.match, 2)), Number(required(res.match, 3)))
     const max = Math.max(Number(required(res.match, 2)), Number(required(res.match, 3)))

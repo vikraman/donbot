@@ -42,7 +42,7 @@ const WMO_DESCRIPTIONS: Record<number, string> = {
 }
 
 export default async (robot: Robot) => {
-  robot.respond(/(?:weather|forecast)(?: (?:in|for|at))? (.+)$/i, async res => {
+  robot.respond(/(?:weather|forecast)(?: (?:in|for|at))? (.+)$/i, { id: 'weather.show' }, async res => {
     const city = required(res.match, 1).trim()
 
     const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)

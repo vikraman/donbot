@@ -18,7 +18,7 @@ interface XkcdComic {
 }
 
 export default async (robot: Robot) => {
-  robot.respond(/xkcd(?: comic)?\s*(random|\d+)?$/i, async res => {
+  robot.respond(/xkcd(?: comic)?\s*(random|\d+)?$/i, { id: 'xkcd.show' }, async res => {
     let number: string | undefined = res.match[1]
 
     if (number && number.toLowerCase() === 'random') {

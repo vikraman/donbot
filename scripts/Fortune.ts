@@ -10,7 +10,7 @@ import type { Robot } from 'hubot'
 import { bagPick } from './lib/lines.ts'
 
 export default async (robot: Robot) => {
-  robot.respond(/fortune$/i, async res => {
+  robot.respond(/fortune$/i, { id: 'fortune.tell' }, async res => {
     const response = await fetch(`https://cokernelpanic.com/assets/text/fortunes.md`)
 
     if (!response.ok) {

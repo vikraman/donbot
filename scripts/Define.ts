@@ -17,7 +17,7 @@ interface DictionaryEntry {
 }
 
 export default async (robot: Robot) => {
-  robot.respond(/(?:define|definition of|meaning of|what does)\s+(.+?)(?:\s+mean)?$/i, async res => {
+  robot.respond(/(?:define|definition of|meaning of|what does)\s+(.+?)(?:\s+mean)?$/i, { id: 'define.word' }, async res => {
     const word = required(res.match, 1).trim()
     const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`)
 

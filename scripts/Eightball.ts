@@ -33,7 +33,7 @@ const answers = [
 ] as const
 
 export default async (robot: Robot) => {
-  robot.respond(/(?:8ball|8-ball|magic 8 ?ball)\s+(.+)$/i, async res => {
+  robot.respond(/(?:8ball|8-ball|magic 8 ?ball)\s+(.+)$/i, { id: 'eightball.ask' }, async res => {
     // the canonical twenty, no repeats until all are used
     await res.send(bagPick('eightball', answers)!)
   })

@@ -105,20 +105,20 @@ const formatAnswer = (result: AskResult | null): string =>
   result ? `${result.text} [${SOURCE_LABELS[result.source]}]` : NO_ANSWER
 
 export default async (robot: Robot) => {
-  robot.respond(/ask (gg|ddg|wiki) (.+)$/i, async res => {
+  robot.respond(/ask (gg|ddg|wiki) (.+)$/i, { id: 'ask.source' }, async res => {
     const source = required(res.match, 1).toLowerCase() as Source
     const question = required(res.match, 2).trim()
     const result = await SOURCES[source](question)
     await res.send(formatAnswer(result))
   })
 
-  robot.respond(/(?:please\s+)?ask (?!gg\s|ddg\s|wiki\s)(.+)$/i, async res => {
+  robot.respond(/(?:please\s+)?ask (?!gg\s|ddg\s|wiki\s)(.+)$/i, { id: 'ask.question' }, async res => {
     const question = required(res.match, 1).trim()
     const result = await askGemini(question) || await askDuckDuckGo(question) || await askWikipedia(question)
     await res.send(formatAnswer(result))
   })
 
-  robot.respond(/tell me about (.+)$/i, async res => {
+  robot.respond(/tell me about (.+)$/i, { id: 'ask.about' }, async res => {
     const question = required(res.match, 1).trim()
     const result = await askGemini(question) || await askDuckDuckGo(question) || await askWikipedia(question)
     await res.send(formatAnswer(result))

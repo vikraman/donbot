@@ -126,7 +126,7 @@ export default async (robot: Robot) => {
     await show(res, page)
   }
 
-  robot.respond(/agda\s+([\s\S]+?)\s*$/i, async res => {
+  robot.respond(/agda\s+([\s\S]+?)\s*$/i, { id: 'agda.search' }, async res => {
     // discord clients escape markdown, _ arrives as \_
     const q = res.match[1]!.replace(/\\([_*~`|>[\]])/g, '$1').replace(/\s+/g, ' ')
     if (q.length > MAX_QUERY) {

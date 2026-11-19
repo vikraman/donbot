@@ -1,5 +1,6 @@
 declare module 'hubot' {
   export class User {
+    constructor (id: string, options?: Record<string, unknown>)
     id: string
     name: string
     // not core; Roles.ts adds this per-user
@@ -83,8 +84,18 @@ declare module 'hubot' {
   export type Middleware = (context: MiddlewareContext) => boolean | Promise<boolean>
 
   export interface ListenerMiddlewareContext {
-    listener: { regex?: RegExp }
+    listener: { regex?: RegExp, options?: { id?: string | null } }
     response: Response
+  }
+
+  export interface ResponseMiddlewareContext {
+    response: Response
+    strings: string[]
+    method: string
+  }
+
+  export interface ListenerOptions {
+    id?: string
   }
 
   export class Robot {
@@ -98,17 +109,23 @@ declare module 'hubot' {
     listeners?: readonly unknown[]
     adapter: Adapter & { client?: DiscordClient; [key: string]: unknown }
     router: ExpressLike
+    server?: import('node:http').Server
 
     respond(regex: RegExp, callback: (res: Response) => unknown): void
+    respond(regex: RegExp, options: ListenerOptions, callback: (res: Response) => unknown): void
     hear(regex: RegExp, callback: (res: Response) => unknown): void
+    hear(regex: RegExp, options: ListenerOptions, callback: (res: Response) => unknown): void
     receiveMiddleware(middleware: Middleware): void
     listenerMiddleware(middleware: (context: ListenerMiddlewareContext) => boolean | Promise<boolean>): void
+    responseMiddleware(middleware: (context: ResponseMiddlewareContext) => boolean | Promise<boolean>): void
+    helpCommands(): string[]
     messageRoom(room: string, message: string): Promise<void>
 
     // used by the test harness, not scripts
     loadAdapter(adapter?: string): Promise<void>
     loadFile(path: string, filename: string): Promise<void>
     load(path: string): Promise<void>
+    loadExternalScripts(packages: string[]): Promise<void>
     run(): Promise<void>
     shutdown(): void
     receive(message: TextMessage): Promise<void>
@@ -116,9 +133,10 @@ declare module 'hubot' {
     emit(event: string, ...args: unknown[]): void
   }
 
-  // scripts only register GET handlers
+  // handlers type their own req/res
   interface ExpressLike {
-    get(path: string, handler: (req: unknown, res: { send(body: string): void }) => unknown): void
+    get(path: string, handler: (req: any, res: any) => unknown): void
+    post(path: string, handler: (req: any, res: any) => unknown): void
   }
 
   // loose on purpose: scripts probe defensively and doubles are partial
