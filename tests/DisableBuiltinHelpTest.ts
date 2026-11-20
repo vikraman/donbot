@@ -1,13 +1,10 @@
-import { describe, it, beforeEach } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-
-import hubotHelp from 'hubot-help'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
 describe('DisableBuiltinHelp testing Hubot scripts', () => {
-  const state = setupRobot(['DisableBuiltinHelp.ts', 'Count.ts'])
-  beforeEach(async () => { await hubotHelp(state.robot) })
+  const state = setupRobot(['DisableBuiltinHelp.ts', 'Policy.ts', 'Count.ts'])
 
   it('should show comment-scraped commands instead of the built-in scaffolding', async () => {
     const { robot } = state

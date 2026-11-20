@@ -31,7 +31,7 @@ const mockFetchText = (text: string) =>
   mock.method(globalThis, 'fetch', async () => new Response(text, { status: 200 }))
 
 describe('WebChat testing Hubot scripts', () => {
-  const state = setupRobot(['Eightball.ts', 'Fortune.ts', 'Joke.ts', 'Killit.ts', 'Kudos.ts', 'Remind.ts', 'Ask.ts', 'RateLimit.ts', 'WebChat.ts'], {
+  const state = setupRobot(['DisableBuiltinHelp.ts', 'Policy.ts', 'Eightball.ts', 'Fortune.ts', 'Garble.ts', 'Joke.ts', 'Killit.ts', 'Kudos.ts', 'Remind.ts', 'Ask.ts', 'RateLimit.ts', 'WebChat.ts'], {
     envVars: ['GEMINI_API_KEY', 'OWNER_USER_ID'],
     deferLoad: true
   })
@@ -41,7 +41,7 @@ describe('WebChat testing Hubot scripts', () => {
     await state.loadScript()
     const before = state.robot.listeners!.length
     await state.robot.loadExternalScripts(['hubot-rules', 'hubot-diagnostics'])
-    // their index.js doesn't await loadFile
+    // loadFile isn't awaited
     while (state.robot.listeners!.length < before + 5) await new Promise(resolve => setImmediate(resolve))
   }
 
@@ -78,7 +78,7 @@ describe('WebChat testing Hubot scripts', () => {
     await load()
     const { robot } = state
     const sent = collect(robot)
-    for (const text of ['remind me in 5m to stretch', 'leaderboard', 'adapter', 'time']) {
+    for (const text of ['remind me in 5m to stretch', 'leaderboard', 'adapter', 'echo hi', 'garble hello', 'settings', 'mode casual']) {
       const res = await post(robot, text)
       assert.deepStrictEqual(res.body.replies, [], text)
     }
@@ -115,9 +115,9 @@ describe('WebChat testing Hubot scripts', () => {
     assert.match(help, /Dumbotheelephant fortune/)
     assert.match(help, /Dumbotheelephant the rules/)
     assert.match(help, /Dumbotheelephant ping/)
-    assert.match(help, /Dumbotheelephant ask <question> - Answers <question>, trying DuckDuckGo, then Wikipedia\./)
+    assert.match(help, /Dumbotheelephant ask <question> - Answers <question>, trying each source in turn\./)
     assert.match(help, /Dumbotheelephant tell me about <topic> - Same as Dumbotheelephant ask <topic>\./)
-    assert.doesNotMatch(help, /remind|kudos|leaderboard|echo|adapter|gemini|ask gg|hubot/i)
+    assert.doesNotMatch(help, /remind|kudos|leaderboard|echo|adapter|gemini|ask gg|hubot|garble|settings|enable/i)
   })
 
   it('rejects bad input', async () => {

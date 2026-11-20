@@ -1,6 +1,6 @@
 // Description:
-//   Unregisters core's "help" so hubot-help's comment-scraped listing runs instead.
-//   Core's help uses rigid --flags and shadows other help handlers via middleware.
+//   Unregisters core's "help" so the policy-filtered help in Policy.ts runs instead.
+//   Core's help uses rigid --flags, shadows other help handlers and would skip the gate.
 //
 
 import type { Robot } from 'hubot'

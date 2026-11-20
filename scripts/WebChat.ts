@@ -1,54 +1,17 @@
 // Description:
-//   Public web chat at /chat. Visitors get only the allowlisted commands below; everything
-//   else, including hear and catch-all listeners, is dropped for web rooms. Replies are
-//   captured and never reach the chat adapter.
+//   Public web chat at /chat. Visitors get only professional features marked for the web (see
+//   lib/policy.ts); everything else, including hear and catch-all listeners, is dropped for web
+//   rooms. Replies are captured and never reach the chat adapter.
 //
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 
 import { TextMessage, User } from 'hubot'
-import type { ListenerMiddlewareContext, Robot } from 'hubot'
+import type { Robot } from 'hubot'
 
+import { installGate } from './lib/gate.ts'
 import { WEB_PREFIX, isWebRoom } from './lib/web.ts'
-
-interface Allowed {
-  id: string
-  help: string[]
-  // shown instead of the scraped line
-  lines?: string[]
-}
-
-// public listeners, by hubot listener id
-export const ALLOWED: Allowed[] = [
-  { id: 'agda.search', help: ['hubot agda <', 'hubot agda search', 'hubot agda about', 'hubot agda type', 'hubot agda more', 'hubot agda index'] },
-  { id: 'choose.pick', help: ['hubot choose'] },
-  { id: 'choose.roll', help: ['hubot roll a number'] },
-  { id: 'choose.rolls', help: ['hubot roll <N>'] },
-  { id: 'eightball.ask', help: ['hubot 8ball'] },
-  { id: 'fortune.tell', help: ['hubot fortune'] },
-  { id: 'futurama.quote', help: ['hubot quote'] },
-  { id: 'futurama.entertain', help: ['hubot entertain me'] },
-  { id: 'joke.tell', help: ['hubot joke -', 'hubot tell me a'], lines: ['hubot joke <category> - Replies with a joke from <category>: programming, pun, misc, spooky, christmas, or chuck.'] },
-  { id: 'xkcd.show', help: ['hubot xkcd'] },
-  { id: 'pugme.show', help: ['hubot pug me'] },
-  { id: 'garble.text', help: ['hubot garble'] },
-  { id: 'define.word', help: ['hubot define'] },
-  { id: 'weather.show', help: ['hubot weather'] },
-  { id: 'ask.source', help: ['hubot ask ddg', 'hubot ask wiki'] },
-  { id: 'ask.question', help: [], lines: ['hubot ask <question> - Answers <question>, trying DuckDuckGo, then Wikipedia.'] },
-  { id: 'ask.about', help: ['hubot tell me about'] },
-  { id: 'rules.show', help: ['hubot the rules'] },
-  { id: 'diagnostics.ping', help: ['hubot ping'] }
-]
-
-const ALLOWED_IDS = new Set(ALLOWED.map(a => a.id))
-
-// external listeners can't take ids, matched on their respond pattern
-const EXTERNAL: [string, string][] = [
-  ['(what are )?the (three |3 )?(rules|laws)', 'rules.show'],
-  ['PING$', 'diagnostics.ping']
-]
 
 export const MAX_TEXT = 500
 const TIMEOUT_MS = 60 * 1000
@@ -73,11 +36,6 @@ interface Visitor {
   seen: number
 }
 
-interface ListenerLike {
-  options?: { id?: string | null }
-  regex?: RegExp
-}
-
 interface Req {
   body?: { text?: unknown }
   headers: Record<string, string | string[] | undefined>
@@ -98,13 +56,6 @@ export default async (robot: Robot) => {
   const collectors = new Map<string, string[]>()
   let inFlight = 0
 
-  const listenerId = (listener: ListenerLike): string | null => {
-    const id = listener.options?.id
-    if (id) return id
-    const source = listener.regex?.source ?? ''
-    return EXTERNAL.find(([tail]) => source.endsWith(`(?:${tail})`))?.[1] ?? null
-  }
-
   const visitorFor = (key: string, now: number): Visitor => {
     let v = visitors.get(key)
     if (!v) {
@@ -122,22 +73,8 @@ export default async (robot: Robot) => {
     }
   }
 
-  const gate = async ({ listener, response }: ListenerMiddlewareContext): Promise<boolean> => {
-    const room = response.message.room
-    if (!isWebRoom(room)) return true
-    // hubot runs the listener when middleware throws
-    try {
-      const id = listenerId(listener as ListenerLike)
-      return Boolean(id && ALLOWED_IDS.has(id))
-    } catch (err) {
-      robot.logger.error(`web chat gate: ${err instanceof Error ? err.message : String(err)}`)
-      return false
-    }
-  }
-  robot.listenerMiddleware(gate)
-  // ahead of other middleware, a throw there would skip the gate
-  const stack = (robot as unknown as { middleware: { listener: { stack: unknown[] } } }).middleware.listener.stack
-  stack.unshift(stack.pop())
+  // allowlist lives in lib/policy.ts
+  installGate(robot)
 
   robot.responseMiddleware(async ({ response, strings }) => {
     const room = (response.envelope as { room?: string } | undefined)?.room
@@ -154,15 +91,6 @@ export default async (robot: Robot) => {
       return
     }
     return send(envelope, ...strings)
-  }
-
-  const helpText = (): string => {
-    const prefixes = ALLOWED.flatMap(a => a.help)
-    const scraped = robot.helpCommands().filter(line => prefixes.some(p => line.startsWith(p)))
-    return [...scraped, ...ALLOWED.flatMap(a => a.lines ?? [])]
-      .sort()
-      .map(line => line.replace(/\bhubot\b/gi, robot.name))
-      .join('\n')
   }
 
   const botName = new RegExp(`^@?(?:${[robot.name, robot.alias].filter(Boolean).map(n => escapeRegExp(n!)).join('|')})[:,]?\\s+`, 'i')
@@ -204,8 +132,6 @@ export default async (robot: Robot) => {
       res.set('Retry-After', String(Math.ceil((v.until - now) / 1000)))
       return res.status(429).json({ error: 'slow down' })
     }
-
-    if (/^help\??$/i.test(text)) return res.json({ replies: [helpText()] })
 
     if (v.busy) return res.status(429).json({ error: 'one message at a time' })
     if (inFlight >= MAX_IN_FLIGHT) return res.status(503).json({ error: 'busy, try again in a moment' })
