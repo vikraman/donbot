@@ -75,6 +75,8 @@ declare module 'hubot' {
     usersForFuzzyName(fuzzyName: string): User[]
     on(event: 'connected' | 'loaded' | 'save' | 'close', listener: (...args: unknown[]) => void): void
     emit(event: string, ...args: unknown[]): boolean
+    setMaxListeners(n: number): this
+    getMaxListeners(): number
   }
 
   export interface MiddlewareContext {
@@ -84,7 +86,7 @@ declare module 'hubot' {
   export type Middleware = (context: MiddlewareContext) => boolean | Promise<boolean>
 
   export interface ListenerMiddlewareContext {
-    listener: { regex?: RegExp, options?: { id?: string | null } }
+    listener: { regex?: RegExp, options?: { id?: string | null, hint?: boolean } }
     response: Response
   }
 
@@ -96,6 +98,8 @@ declare module 'hubot' {
 
   export interface ListenerOptions {
     id?: string
+    // false: no blocked hint
+    hint?: boolean
   }
 
   export class Robot {

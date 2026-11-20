@@ -4,6 +4,9 @@ import { Robot } from 'hubot'
 import type { User } from 'hubot'
 
 import { configureLines, resetLines } from '../../scripts/lib/lines.ts'
+import { configurePolicy, policyFor } from '../../scripts/lib/policy.ts'
+import { configureSpaces } from '../../scripts/lib/spaces.ts'
+import type { Mode } from '../../scripts/lib/policy.ts'
 import { setRandomSource } from '../../scripts/lib/random.ts'
 import dummyRobot from '../doubles/DummyAdapter.ts'
 import type { DummyAdapter } from '../doubles/DummyAdapter.ts'
@@ -34,7 +37,11 @@ export const setupRobot = (scriptFiles: string | string[], { envVars = [], defer
     process.env.EXPRESS_PORT = '0'
     // chance-based line extras off; whimsy tests opt back in
     resetLines()
-    configureLines({ extras: false, aiAllowed: () => true })
+    configureLines({ extras: false, casual: () => true })
+    // test rooms are unplaced; casual here
+    configurePolicy({ unknownMode: 'casual' })
+    // unplaced rooms use the global space
+    configureSpaces({ unplaced: 'global' })
     for (const name of envVars) originalEnv[name] = process.env[name]
     state.robot = new Robot(dummyRobot, true, 'Dumbotheelephant') as TestRobot
     await state.robot.loadAdapter()
@@ -78,4 +85,14 @@ export const sendReturnsIds = (robot: Robot, prefix: string) => {
     await send(...args)
     return [{ id: `${prefix}-${++next}` }]
   })
+}
+
+// fake guild channels, optional server mode
+export const inGuild = (robot: Robot, guild: string, rooms: string[], mode?: Mode, { nsfw = false } = {}) => {
+  const adapter = robot.adapter as unknown as { client?: { channels?: { cache?: Map<string, unknown> } } }
+  adapter.client ??= {}
+  adapter.client.channels ??= {}
+  adapter.client.channels.cache ??= new Map()
+  for (const room of rooms) adapter.client.channels.cache.set(room, { id: room, guildId: guild, nsfw })
+  if (mode) policyFor(robot).update(d => { d.guilds[guild] = { mode, on: [], off: [] } })
 }
