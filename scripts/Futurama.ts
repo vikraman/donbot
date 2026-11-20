@@ -8,6 +8,9 @@
 //
 
 import type { Robot } from 'hubot'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'futurama', label: 'Futurama quotes', level: 'professional', web: true, help: ['hubot quote', 'hubot entertain me'] })
 
 interface FuturamaQuote {
   quote: string

@@ -5,8 +5,9 @@ import { EventEmitter } from 'node:events'
 import type { DiscordClient } from 'hubot'
 
 import { configureLines, defineLines, keptFor, poolFor, refillAi, scoresFor } from '../scripts/lib/lines.ts'
+import { policyFor } from '../scripts/lib/policy.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, collect, brainUser, inGuild } from './helpers/setup.ts'
 
 const gemini = (lines: unknown) => mock.method(global, 'fetch', async () => ({
   ok: true,
@@ -23,8 +24,8 @@ describe('Whimsy', () => {
     return client
   }
 
-  const react = async (client: EventEmitter, emoji: string, content: string, { userId = 'u1', remove = false, author = 'bot-id' } = {}) => {
-    const reaction = { partial: false, emoji: { name: emoji }, message: { id: 'm1', channelId: 'room', author: { id: author }, content } }
+  const react = async (client: EventEmitter, emoji: string, content: string, { userId = 'u1', remove = false, author = 'bot-id', room = 'room' } = {}) => {
+    const reaction = { partial: false, emoji: { name: emoji }, message: { id: 'm1', channelId: room, author: { id: author }, content } }
     client.emit(remove ? 'messageReactionRemove' : 'messageReactionAdd', reaction, { id: userId, bot: false })
     await new Promise(resolve => setImmediate(resolve))
   }
@@ -45,6 +46,15 @@ describe('Whimsy', () => {
     await react(client, '⭐', text, { userId: 'u3' })
     await react(client, '😂', text, { userId: 'u4', author: 'someone' })
     assert.deepEqual(scoresFor('whimsy.test'), { 'Hello, {who}.': -1 })
+  })
+  it('ignores reactions where learning from them is off', async () => {
+    const client = await withClient()
+    inGuild(state.robot, 'g1', ['quiet'], 'casual')
+    policyFor(state.robot).update(d => { d.channels.quiet = { on: [], off: ['lines.scoring'] } })
+    setRandomSource(() => 0)
+    const text = defineLines('whimsy.off', { fallback: ['Hi, {who}.'] })({ who: 'ada' })
+    await react(client, '😂', text, { room: 'quiet' })
+    assert.deepEqual(scoresFor('whimsy.off'), {})
   })
   it('counts one vote per person however many emoji they use', async () => {
     const client = await withClient()
@@ -100,12 +110,15 @@ describe('Whimsy', () => {
   it('turns ai lines off per channel', async () => {
     process.env.GEMINI_API_KEY = 'key'
     gemini(['Fresh, {who}.'])
+    process.env.OWNER_USER_ID = 'u1'
     await state.loadScript()
     const { robot } = state
+    await robot.loadFile('./scripts', 'Policy.ts')
+    inGuild(robot, 'g1', ['quiet', 'loud'], 'casual')
     const user = brainUser(robot, 'u1', 'alice')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant ai lines off', 'quiet')
-    assert.match(sent[0]!, /^AI-written lines off in this channel/)
+    assert.match(sent[0]!, /^AI-written lines: off for this channel\.$/)
     const line = defineLines('whimsy.room', { fallback: ['Static, {who}.'], ai: { about: 'x', slots: ['who'] } })
     await refillAi('whimsy.room')
     configureLines({ extras: true })

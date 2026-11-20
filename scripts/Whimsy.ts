@@ -5,9 +5,6 @@
 //   negative ones (🙄 👎 🤡 🧢 😬 …) retire it. See lib/reactions.ts.
 //
 // Commands:
-//   hubot ai lines - Shows whether AI-written lines are on in this channel.
-//   hubot ai lines off - Uses only the built-in lines in this channel.
-//   hubot ai lines on - Mixes AI-written lines back in.
 //   hubot whimsy - Shows how many fresh, kept and retired lines each kind has.
 //   hubot whimsy refill - (Owner only) Tops up every AI line reserve now.
 //
@@ -20,16 +17,19 @@
 
 import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
 
-import { AI_DAILY_CALLS, aiCallsToday, aiKinds, configureLines, keptFor, lineKinds, linesIn, poolFor, refillAi, RETIRE_SCORE, scoreLine, scoresFor, useLines } from './lib/lines.ts'
+import { AI_DAILY_CALLS, aiCallsToday, aiKinds, keptFor, lineKinds, linesIn, poolFor, refillAi, RETIRE_SCORE, scoreLine, scoresFor, useLines } from './lib/lines.ts'
 import { valenceOf } from './lib/reactions.ts'
-import { roomToggle } from './lib/roomToggle.ts'
+import { defineFeature } from './lib/features.ts'
+import { isOwner, OWNER_ONLY } from './lib/owner.ts'
+import { allowsRoom } from './lib/policy.ts'
+
+defineFeature({ id: 'whimsy', label: 'Line stats', level: 'professional', help: ['hubot whimsy'] })
+defineFeature({ id: 'lines.scoring', label: 'Learning from reactions', level: 'professional', passive: true, stores: "reactions to the bot's own lines, as scores per line" })
 
 
 export default async (robot: Robot) => {
   robot.brain.on('connected', () => useLines(robot))
 
-  const { isDisabled } = roomToggle(robot, { command: 'ai lines', brainKey: 'lines:ai-off', label: 'AI-written lines' })
-  configureLines({ aiAllowed: room => !room || !isDisabled(room) })
 
   // user:message -> their scoring emoji; each person is one vote per message, whatever they react with
   const reacted = new Map<string, Set<string>>()
@@ -49,6 +49,7 @@ export default async (robot: Robot) => {
       const message = reaction.message
       const botId = client.user?.id
       if (!message.author || message.author.id !== botId || !message.content) return
+      if (!allowsRoom(robot, message.channelId, 'lines.scoring')) return
       const key = `${user.id}:${message.id}`
       const emojis = reacted.get(key) ?? new Set<string>()
       if (sign > 0 ? emojis.has(emoji) : !emojis.has(emoji)) return
@@ -65,7 +66,7 @@ export default async (robot: Robot) => {
     client.on('messageReactionRemove', onReaction(-1))
   }
 
-  robot.respond(/whimsy$/i, async res => {
+  robot.respond(/whimsy$/i, { id: 'whimsy.stats' }, async res => {
     const stats = lineKinds().map(kind => ({
       kind,
       fresh: aiKinds().includes(kind) ? poolFor(kind).lines.length : 0,
@@ -82,9 +83,9 @@ export default async (robot: Robot) => {
     await res.send([head, ...rows].join('\n') + ai)
   })
 
-  robot.respond(/whimsy refill$/i, async res => {
-    if (res.message.user.id !== process.env.OWNER_USER_ID) {
-      await res.send('Only my owner can do that.')
+  robot.respond(/whimsy refill$/i, { id: 'whimsy.refill' }, async res => {
+    if (!isOwner(res)) {
+      await res.send(OWNER_ONLY)
       return
     }
     if (!process.env.GEMINI_API_KEY) {

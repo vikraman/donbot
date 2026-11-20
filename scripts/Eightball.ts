@@ -8,6 +8,9 @@
 import type { Robot } from 'hubot'
 
 import { bagPick } from './lib/lines.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'eightball', label: 'Magic 8-ball', level: 'professional', web: true, help: ['hubot 8ball'] })
 
 const answers = [
   'It is certain.',

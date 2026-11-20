@@ -8,6 +8,9 @@
 import type { Robot } from 'hubot'
 
 import { required } from './lib/match.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'weather', label: 'Weather', level: 'professional', web: true, help: ['hubot weather'] })
 
 interface GeocodingResult {
   results?: { name: string; country: string; latitude: number; longitude: number }[]

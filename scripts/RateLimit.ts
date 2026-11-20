@@ -19,6 +19,11 @@ import { mentionFor } from './lib/mention.ts'
 import { defineLines } from './lib/lines.ts'
 import { userTz } from './lib/timezone.ts'
 import { isWebRoom } from './lib/web.ts'
+import { defineFeature } from './lib/features.ts'
+import { isOwner } from './lib/owner.ts'
+
+defineFeature({ id: 'ratelimit', label: 'Rate limit status', level: 'professional', help: ['hubot who\'s rate limited', 'hubot rate limit'] })
+defineFeature({ id: 'lines.ratelimit', label: 'Sassy rate-limit replies', level: 'casual' })
 
 const WINDOW_MS = 60 * 1000
 const MAX_COMMANDS_PER_WINDOW = 5
@@ -57,6 +62,12 @@ const dismissal = defineLines('ratelimit.dismissal', {
     'The window is closed. Try again when it opens. It opens later.',
     "You're on the list now. The bad one. Cool it for a bit."
   ],
+  professional: [
+    "You've hit the rate limit. Please wait a little before trying again.",
+    "That's a lot of commands in a short time. Give it a minute, then try again.",
+    "I'm pausing replies to you for a moment. Please try again shortly."
+  ],
+  feature: 'lines.ratelimit',
   rare: [
     '📵 This line has been disconnected by order of the family. Please hang up and try again later.',
     "🧊 I'm putting you on ice. Don't worry, it's temporary. Probably.",
@@ -137,9 +148,8 @@ export default async (robot: Robot) => {
     return true
   })
 
-  robot.respond(/(?:who'?s rate limited|rate limits?|rate limit status)\??$/i, async res => {
-    const ownerId = process.env.OWNER_USER_ID
-    if (!ownerId || String(res.message.user.id) !== ownerId) {
+  robot.respond(/(?:who'?s rate limited|rate limits?|rate limit status)\??$/i, { id: 'ratelimit.status' }, async res => {
+    if (!isOwner(res)) {
       await res.send("That's need-to-know, and you don't need to know.")
       return
     }

@@ -3,17 +3,24 @@
 //
 // Commands:
 //   hubot joke - Replies with a random dad joke.
-//   hubot joke <category> - Replies with a joke from <category>: programming, dark, pun, misc, spooky, christmas, or chuck.
+//   hubot joke <category> - Replies with a joke from <category>, e.g. programming, pun, spooky or chuck.
 //   hubot tell me a joke - Same as "joke".
 //   hubot tell me a <category> joke - Same as "joke <category>".
 //
 
 import type { Robot, Response } from 'hubot'
 
-import { isWebRoom } from './lib/web.ts'
+import { defineFeature } from './lib/features.ts'
+import { allows } from './lib/policy.ts'
 
-// safe: family-friendly only, for web visitors
-type JokeFetcher = (safe: boolean) => Promise<string | null>
+defineFeature({ id: 'joke', label: 'Jokes', level: 'professional', web: true, help: ['hubot joke', 'hubot tell me a'] })
+defineFeature({ id: 'joke.unfiltered', label: 'Edgier jokes (flagged ones still filtered)', level: 'casual' })
+defineFeature({ id: 'joke.dark', label: 'Dark jokes', level: 'mature' })
+defineFeature({ id: 'joke.chuck.explicit', label: 'Explicit Chuck Norris jokes', level: 'mature' })
+
+// safe, flagged-filtered or unfiltered
+type Filter = 'safe' | 'flagged' | 'none'
+type JokeFetcher = (filter: Filter) => Promise<string | null>
 
 interface DadJokeResponse {
   joke?: string
@@ -41,7 +48,8 @@ const fetchDadJoke: JokeFetcher = async () => {
 
 const CHUCK_TRIES = 3
 
-const fetchChuckNorrisJoke: JokeFetcher = async safe => {
+const fetchChuckNorrisJoke: JokeFetcher = async filter => {
+  const safe = filter !== 'none'
   // safe skips the explicit category
   for (let i = 0; i < (safe ? CHUCK_TRIES : 1); i++) {
     const response = await fetch('https://api.chucknorris.io/jokes/random')
@@ -54,11 +62,15 @@ const fetchChuckNorrisJoke: JokeFetcher = async safe => {
 }
 
 const JOKE_API_CATEGORIES = ['programming', 'dark', 'pun', 'misc', 'spooky', 'christmas']
-const UNSAFE_CATEGORIES = new Set(['dark'])
 
-const fetchJokeApiJoke = (category: string): JokeFetcher => async safe => {
-  // safe-mode drops dark and flagged jokes
-  const url = `https://v2.jokeapi.dev/joke/${category}${safe ? '?safe-mode' : ''}`
+const JOKE_API_QUERY: Record<Filter, string> = {
+  safe: '?safe-mode',
+  flagged: '?blacklistFlags=nsfw,religious,political,racist,sexist,explicit',
+  none: ''
+}
+
+const fetchJokeApiJoke = (category: string): JokeFetcher => async filter => {
+  const url = `https://v2.jokeapi.dev/joke/${category}${JOKE_API_QUERY[filter]}`
   const response = await fetch(url)
   if (!response.ok) return null
   const data: JokeApiResponse = await response.json()
@@ -78,28 +90,31 @@ const CATEGORIES: Record<string, JokeFetcher> = {
 }
 
 const NO_JOKE = "I don't have a joke for you right now."
-const UNKNOWN_CATEGORY = (category: string, safe: boolean): string =>
-  `I don't know the "${category}" category. Try: dad, chuck, ${JOKE_API_CATEGORIES.filter(c => !safe || !UNSAFE_CATEGORIES.has(c)).join(', ')}.`
+// no pings in the echo
+const UNKNOWN_CATEGORY = (category: string, dark: boolean): string =>
+  `I don't know the "${category.replace(/[<>@#&!]/g, '')}" category. Try: dad, chuck, ${JOKE_API_CATEGORIES.filter(c => dark || c !== 'dark').join(', ')}.`
 
-const handleJoke = async (res: Response, category?: string) => {
-  const safe = isWebRoom(res.message.room)
+const handleJoke = async (robot: Robot, res: Response, category?: string) => {
+  const dark = allows(robot, res, 'joke.dark')
+  const filter: Filter = dark ? 'none' : allows(robot, res, 'joke.unfiltered') ? 'flagged' : 'safe'
   if (!category) {
-    await res.send(await fetchDadJoke(safe) || NO_JOKE)
+    await res.send(await fetchDadJoke(filter) || NO_JOKE)
     return
   }
 
   const key = category.toLowerCase()
-  const fetchFn = safe && UNSAFE_CATEGORIES.has(key) ? undefined : CATEGORIES[key]
+  const fetchFn = key === 'dark' && !dark ? undefined : CATEGORIES[key]
   if (!fetchFn) {
-    await res.send(UNKNOWN_CATEGORY(category, safe))
+    await res.send(UNKNOWN_CATEGORY(category, dark))
     return
   }
 
-  await res.send(await fetchFn(safe) || NO_JOKE)
+  const chuck: Filter = allows(robot, res, 'joke.chuck.explicit') ? 'none' : 'safe'
+  await res.send(await fetchFn(fetchFn === fetchChuckNorrisJoke ? chuck : filter) || NO_JOKE)
 }
 
 export default async (robot: Robot) => {
   robot.respond(/(?:tell me an? (\S+) joke|joke(?:\s+(\S+))?|tell me a joke)$/i, { id: 'joke.tell' }, async res => {
-    await handleJoke(res, res.match[1] || res.match[2])
+    await handleJoke(robot, res, res.match[1] || res.match[2])
   })
 }

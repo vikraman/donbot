@@ -3,7 +3,7 @@
 //
 // Commands:
 //   hubot status - Shows a quick status summary.
-//   hubot status verbose - Shows detailed bot status.
+//   hubot status verbose - (Owner only) Shows detailed bot status.
 //   hubot uptime - Shows how long the bot has been running.
 //
 
@@ -12,6 +12,10 @@ import type { Robot } from 'hubot'
 import hubotPackage from 'hubot/package.json' with { type: 'json' }
 
 import { formatDuration } from './lib/duration.ts'
+import { defineFeature } from './lib/features.ts'
+import { isOwner } from './lib/owner.ts'
+
+defineFeature({ id: 'status', label: 'Status', level: 'professional', help: ['hubot status', 'hubot uptime'] })
 
 
 const redisHost = () => {
@@ -78,12 +82,13 @@ const discordInfo = (robot: Robot): string | null => {
 }
 
 export default async (robot: Robot) => {
-  robot.respond(/uptime$/i, async res => {
+  robot.respond(/uptime$/i, { id: 'status.uptime' }, async res => {
     await res.send(`Uptime: ${formatDuration(process.uptime() * 1000)}`)
   })
 
-  robot.respond(/(?:status|health(?:check)?|how are you(?: doing| feeling)?)(\s+verbose|\s+detailed)?$/i, async res => {
-    const verbose = Boolean(res.match[1])
+  robot.respond(/(?:status|health(?:check)?|how are you(?: doing| feeling)?)(\s+verbose|\s+detailed)?$/i, { id: 'status.show' }, async res => {
+    // counts span every server
+    const verbose = Boolean(res.match[1]) && isOwner(res)
     const uptime = formatDuration(process.uptime() * 1000, { units: verbose ? 3 : 2 })
     const brain = brainDetails(robot)
 

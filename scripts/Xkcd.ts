@@ -10,6 +10,9 @@
 import type { Robot } from 'hubot'
 
 import { secureRandomInt } from './lib/random.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'xkcd', label: 'xkcd', level: 'professional', web: true, help: ['hubot xkcd'] })
 
 interface XkcdComic {
   title: string

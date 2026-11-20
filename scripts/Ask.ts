@@ -2,7 +2,7 @@
 //   Answers a question via Gemini, DuckDuckGo, or Wikipedia (fallback chain or direct). Tags source.
 //
 // Commands:
-//   hubot ask <question> - Answers <question>, trying Gemini, DuckDuckGo, then Wikipedia in turn.
+//   hubot ask <question> - Answers <question>, trying each source in turn.
 //   hubot ask gg <question> - Answers <question> using Gemini only.
 //   hubot ask ddg <question> - Answers <question> using DuckDuckGo only.
 //   hubot ask wiki <question> - Answers <question> using Wikipedia only.
@@ -17,7 +17,11 @@ import type { Response, Robot } from 'hubot'
 
 import { geminiText } from './lib/gemini.ts'
 import { required } from './lib/match.ts'
-import { isWebRoom } from './lib/web.ts'
+import { allows } from './lib/policy.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'ask', label: 'Answers', level: 'professional', web: true, help: ['hubot ask', 'hubot tell me about'] })
+defineFeature({ id: 'ask.gemini', label: 'Gemini answers', level: 'casual', help: ['hubot ask gg'] })
 
 type Source = 'gg' | 'ddg' | 'wiki'
 
@@ -111,10 +115,10 @@ const direct = async (res: Response) => {
   await res.send(formatAnswer(await SOURCES[source](question)))
 }
 
-// no gemini for web visitors
-const fallback = async (res: Response) => {
+// gemini where allowed
+const fallback = (robot: Robot) => async (res: Response) => {
   const question = required(res.match, 1).trim()
-  const gemini = isWebRoom(res.message.room) ? null : await askGemini(question)
+  const gemini = allows(robot, res, 'ask.gemini') ? await askGemini(question) : null
   const result = gemini || await askDuckDuckGo(question) || await askWikipedia(question)
   await res.send(formatAnswer(result))
 }
@@ -122,6 +126,6 @@ const fallback = async (res: Response) => {
 export default async (robot: Robot) => {
   robot.respond(/ask (gg) (.+)$/i, { id: 'ask.gemini' }, direct)
   robot.respond(/ask (ddg|wiki) (.+)$/i, { id: 'ask.source' }, direct)
-  robot.respond(/(?:please\s+)?ask (?!gg\s|ddg\s|wiki\s)(.+)$/i, { id: 'ask.question' }, fallback)
-  robot.respond(/tell me about (.+)$/i, { id: 'ask.about' }, fallback)
+  robot.respond(/(?:please\s+)?ask (?!gg\s|ddg\s|wiki\s)(.+)$/i, { id: 'ask.question' }, fallback(robot))
+  robot.respond(/tell me about (.+)$/i, { id: 'ask.about' }, fallback(robot))
 }

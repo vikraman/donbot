@@ -10,6 +10,9 @@ import type { Robot } from 'hubot'
 import { required } from './lib/match.ts'
 
 import { shuffle } from './lib/random.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'garble', label: 'Garble', level: 'casual', help: ['hubot garble'] })
 
 const garbleWord = (word: string): string => {
   if (word.length <= 3) return word

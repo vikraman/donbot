@@ -8,6 +8,9 @@
 import type { Robot } from 'hubot'
 
 import { required } from './lib/match.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'define', label: 'Dictionary', level: 'professional', web: true, help: ['hubot define'] })
 
 interface DictionaryEntry {
   meanings?: {

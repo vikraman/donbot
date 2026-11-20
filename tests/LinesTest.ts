@@ -18,7 +18,7 @@ describe('lines', () => {
   let originalKey: string | undefined
   beforeEach(() => {
     resetLines()
-    configureLines({ extras: false, aiAllowed: () => true })
+    configureLines({ extras: false, casual: () => true })
     originalKey = process.env.GEMINI_API_KEY
     delete process.env.GEMINI_API_KEY
   })
@@ -65,6 +65,25 @@ describe('lines', () => {
     configureLines({ extras: true })
     assert.equal(line({}, { tz: 'UTC' }), '✨ legendary Strong start to the week.')
   })
+  it('keeps to professional lines where casual ones are off', async () => {
+    process.env.GEMINI_API_KEY = 'key'
+    gemini(['Fresh, {who}.'])
+    setRandomSource(() => 0)
+    mock.method(Date, 'now', () => MONDAY_10AM)
+    const line = defineLines('test.pro', { fallback: ['Yo {who}, nailed it.'], professional: ['Well done, {who}.'], rare: ['✨ legend'], flair: true, ai: { about: 'x', slots: ['who'] } })
+    await refillAi('test.pro')
+    configureLines({ extras: true, casual: (room, feature) => room === 'casual' && feature !== 'lines.ratelimit' })
+    for (let i = 0; i < 5; i++) assert.equal(line({ who: 'bo' }, { room: 'pro', tz: 'UTC' }), 'Well done, bo.')
+    // no room is professional
+    assert.equal(line({ who: 'bo' }, { tz: 'UTC' }), 'Well done, bo.')
+    assert.equal(line({ who: 'bo' }, { room: 'casual', tz: 'UTC' }), '✨ legend Strong start to the week.')
+    // per-kind feature
+    const sass = defineLines('test.sass', { fallback: ['Get lost.'], professional: ['Please wait.'], feature: 'lines.ratelimit' })
+    assert.equal(sass({}, { room: 'casual' }), 'Please wait.')
+    // no pro list: plain lines
+    const plain = defineLines('test.plain', { fallback: ['Plain.'], rare: ['✨'] })
+    assert.equal(plain({}, { room: 'pro' }), 'Plain.')
+  })
   it('validates ai lines', () => {
     assert.equal(validAiLine('Nice one, {who}!', ['who']), true)
     assert.equal(validAiLine('Nice one!', ['who']), false)
@@ -109,7 +128,7 @@ describe('lines', () => {
     line({ who: 'bo' })
     await new Promise(resolve => setImmediate(resolve))
     assert.equal(fetch.mock.callCount(), 2)
-    configureLines({ aiAllowed: room => room !== 'quiet' })
+    configureLines({ casual: (room, feature) => feature !== 'lines.ai' || room !== 'quiet' })
     assert.equal(line({ who: 'bo' }, { room: 'quiet' }), 'Static, bo.')
     assert.ok(AI_POOL_SIZE > 10)
   })
@@ -136,6 +155,11 @@ describe('lines', () => {
     const picks = Array.from({ length: 6 }, () => line({ who: 'cy' }))
     assert.ok(!picks.includes('Meh, cy.'))
     assert.ok(picks.includes('Loved, cy.'))
+
+    // no kept ai lines where ai is off
+    configureLines({ casual: (_room, feature) => feature !== 'lines.ai' })
+    const noAi = Array.from({ length: 6 }, () => line({ who: 'cy' }, { room: 'r' }))
+    assert.ok(!noAi.includes('Loved, cy.'))
   })
   it('treats the small hours as the night before', () => {
     // 02:00 monday utc

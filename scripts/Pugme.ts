@@ -6,6 +6,9 @@
 //
 
 import type { Robot } from 'hubot'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'pugme', label: 'Dog pictures', level: 'professional', web: true, help: ['hubot pug me'] })
 
 interface DogApiResponse {
   message: string

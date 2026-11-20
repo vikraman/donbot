@@ -1,4 +1,4 @@
-import { describe, it, mock } from 'node:test'
+import { beforeEach, describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
 import type { DiscordClient } from 'hubot'
@@ -6,7 +6,18 @@ import type { DiscordClient } from 'hubot'
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
 describe('Status testing Hubot scripts', () => {
-  const state = setupRobot('Status.ts')
+  const state = setupRobot('Status.ts', { envVars: ['OWNER_USER_ID'] })
+
+  // verbose counts span servers
+  beforeEach(() => { process.env.OWNER_USER_ID = 'test-user' })
+
+  it('keeps verbose status for the owner', async () => {
+    const { robot } = state
+    const user = brainUser(robot, 'someone', 'someone')
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant status verbose', 'test-room')
+    assert.match(sent[0]!, /^Uptime: .+ \| Brain: connected \| All good\.$/)
+  })
 
   it('should report a simple status by default', async () => {
     const { robot } = state

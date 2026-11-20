@@ -17,6 +17,9 @@ import type { Robot, Response } from 'hubot'
 
 import { ascii, displayType, indexSize, libraries, loadIndex, lookupName, MAX_QUERY, searchAbout, searchNames, searchType, splitFilters, urlFor, type Hit } from './lib/agdaIndex.ts'
 import { isOwner, OWNER_ONLY } from './lib/owner.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'agda', label: 'Agda search', level: 'professional', web: true, help: ['hubot agda'] })
 
 const RELEASE = 'https://github.com/vikraman/donbot/releases/download/agda-index'
 const DEFAULT_SOURCES = `${RELEASE}/cubical.json.gz,${RELEASE}/stdlib.json.gz`

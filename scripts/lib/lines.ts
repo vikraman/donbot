@@ -1,5 +1,6 @@
 import type { Robot } from 'hubot'
 
+import { defineFeature } from './features.ts'
 import { GeminiError, geminiText } from './gemini.ts'
 import { chance, randomBelow } from './random.ts'
 import { zonedParts } from './time.ts'
@@ -9,6 +10,9 @@ import { defaultTz } from './timezone.ts'
 // gemini-written lines kept in reserve, and reactions that retire or keep lines
 
 type Lines = readonly string[]
+
+defineFeature({ id: 'lines.extras', label: 'Playful lines', level: 'casual' })
+defineFeature({ id: 'lines.ai', label: 'AI-written lines', level: 'casual' })
 
 // composed as open + body + close; '' entries mean "skip this part"
 export interface Parts {
@@ -25,6 +29,10 @@ export interface LineSpec {
   flair?: boolean
   // gemini refills a reserve of fresh lines for this kind
   ai?: { about: string, slots?: readonly string[] }
+  // lines for professional rooms
+  professional?: Lines | Parts
+  // gating feature, default lines.extras
+  feature?: string
 }
 
 export type Vars = Record<string, string | number | undefined>
@@ -90,15 +98,16 @@ const refilling = new Set<string>()
 
 let linesRobot: Robot | null = null
 let extras = true
-let aiAllowed: (room?: string) => boolean = () => true
+// set by Policy.ts; no room means professional
+let casualAllowed: (room: string | undefined, feature: string) => boolean = () => true
 
 // call once at startup so bags, scores and reserves persist
 export const useLines = (robot: Robot) => { linesRobot = robot }
 
 // tests turn off chance-based extras so picks stay deterministic
-export const configureLines = (options: { extras?: boolean, aiAllowed?: (room?: string) => boolean }) => {
+export const configureLines = (options: { extras?: boolean, casual?: (room: string | undefined, feature: string) => boolean }) => {
   if (options.extras !== undefined) extras = options.extras
-  if (options.aiAllowed) aiAllowed = options.aiAllowed
+  if (options.casual) casualAllowed = options.casual
 }
 
 export const resetLines = () => {
@@ -315,9 +324,10 @@ const takeAi = (kind: string): string | undefined => {
   return line
 }
 
-const pickStatic = (kind: string, spec: LineSpec): { template: string, source: LineRef['source'] } => {
+// kept lines are ai-written
+const pickStatic = (kind: string, spec: LineSpec, withKept = true): { template: string, source: LineRef['source'] } => {
   const scores = scoresFor(kind)
-  const kept = keptFor(kind)
+  const kept = withKept ? keptFor(kind) : []
   if (Array.isArray(spec.fallback)) {
     const items = [...spec.fallback as Lines, ...kept]
     const template = drawFromBag(kind, items, scores) ?? ''
@@ -338,20 +348,32 @@ export const defineLines = (kind: string, spec: LineSpec): LineFn => {
   specs.set(kind, spec)
   return (vars = {}, { room, tz = defaultTz() }: LineOptions = {}) => {
     const all = { ...contextVars(tz), ...vars }
+    const casual = casualAllowed(room, spec.feature ?? 'lines.extras')
+    if (!casual) {
+      const pro = spec.professional
+      const proKind = pro ? `${kind}:pro` : kind
+      const { template, source } = pickStatic(proKind, pro ? { fallback: pro } : spec, false)
+      const text = fill(template, all)
+      // score the pro list
+      remember(text, { kind: proKind, template, source })
+      return text
+    }
+    const aiOk = extras && spec.ai && casualAllowed(room, 'lines.ai')
     let template: string
     let source: LineRef['source']
     if (extras && spec.rare?.length && chance(RARE_CHANCE)) {
       template = drawFromBag(`${kind}:rare`, spec.rare) ?? ''
       source = 'rare'
     } else {
-      const ai = extras && spec.ai && aiAllowed(room) && chance(AI_SHARE) ? takeAi(kind) : undefined
+      const ai = aiOk && chance(AI_SHARE) ? takeAi(kind) : undefined
       if (ai) {
         template = ai
         source = 'ai'
       } else {
-        ;({ template, source } = pickStatic(kind, spec))
+        // no kept ai lines where ai is off
+        ;({ template, source } = pickStatic(kind, spec, casualAllowed(room, 'lines.ai')))
         // keeps the reserve topped up even before the first ai pick
-        if (extras && spec.ai && aiAllowed(room) && poolFor(kind).lines.length <= AI_LOW_WATER) void refillAi(kind)
+        if (aiOk && poolFor(kind).lines.length <= AI_LOW_WATER) void refillAi(kind)
       }
     }
     const text = fill(template, all)

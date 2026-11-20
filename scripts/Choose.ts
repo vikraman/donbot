@@ -15,6 +15,9 @@ import type { Robot } from 'hubot'
 import { required } from './lib/match.ts'
 
 import { randomInt, randomInts } from './lib/random.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'choose', label: 'Random picks', level: 'professional', web: true, help: ['hubot choose', 'hubot roll'] })
 
 export default async (robot: Robot) => {
   robot.respond(/(?:choose|pick)\s+(.+)$/i, { id: 'choose.pick' }, async res => {

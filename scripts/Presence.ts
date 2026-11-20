@@ -52,11 +52,6 @@ const buildStatuses = (robot: Robot): (() => string | null)[] => [
     if (tocks === working.length) return tocks === 1 ? '1 person on a tock 🕰️' : `${tocks} people on tocks 🕰️`
     return working.length === 1 ? '1 person focusing 🤫' : `${working.length} people focusing 🤫`
   },
-  () => {
-    const users = Object.values(robot.brain.data.users || {})
-    const count = users.length
-    return count === 1 ? 'Watching over 1 person' : `Watching over ${count} people`
-  },
   () => bagPick('presence.quote', DONBOT_QUOTES) ?? null,
   () => {
     const client = robot.adapter && robot.adapter.client

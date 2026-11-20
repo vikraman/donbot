@@ -8,6 +8,9 @@
 import type { Robot } from 'hubot'
 
 import { bagPick } from './lib/lines.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'fortune', label: 'Fortune cookies', level: 'professional', web: true, help: ['hubot fortune'] })
 
 export default async (robot: Robot) => {
   robot.respond(/fortune$/i, { id: 'fortune.tell' }, async res => {
