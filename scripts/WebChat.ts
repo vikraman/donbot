@@ -1,7 +1,7 @@
 // Description:
-//   Public web chat at /chat. Visitors get only professional features marked for the web (see
-//   lib/policy.ts); everything else, including hear and catch-all listeners, is dropped for web
-//   rooms. Replies are captured and never reach the chat adapter.
+//   Public web chat at /chat, a CDE-style terminal (public/chat). Visitors get only professional
+//   features marked for the web (see lib/policy.ts); everything else, including hear and catch-all
+//   listeners, is dropped for web rooms. Replies are captured and never reach the chat adapter.
 //
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
@@ -11,6 +11,8 @@ import { TextMessage, User } from 'hubot'
 import type { Robot } from 'hubot'
 
 import { installGate } from './lib/gate.ts'
+import { helpLines } from './lib/help.ts'
+import { policyFor } from './lib/policy.ts'
 import { WEB_PREFIX, isWebRoom } from './lib/web.ts'
 
 export const MAX_TEXT = 500
@@ -27,6 +29,17 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const SALT = randomBytes(16)
 
 const escapeRegExp = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const STATIC: Record<string, string> = { 'app.js': 'text/javascript', 'lib.js': 'text/javascript', 'chat.css': 'text/css' }
+const dir = new URL('../public/chat/', import.meta.url)
+const assets = Object.fromEntries(Object.entries(STATIC).map(([name, type]) => [name, { type, body: readFileSync(new URL(name, dir), 'utf8') }]))
+// cache buster
+const version = createHash('sha256').update(Object.values(assets).map(a => a.body).join('')).digest('hex').slice(0, 10)
+
+export interface WebCommand {
+  cmd: string
+  desc: string
+}
 
 interface Visitor {
   hits: number[]
@@ -51,7 +64,7 @@ interface Res {
 }
 
 export default async (robot: Robot) => {
-  const page = readFileSync(new URL('../public/chat.html', import.meta.url), 'utf8')
+  const template = readFileSync(new URL('index.html', dir), 'utf8')
   const visitors = new Map<string, Visitor>()
   const collectors = new Map<string, string[]>()
   let inFlight = 0
@@ -95,14 +108,35 @@ export default async (robot: Robot) => {
 
   const botName = new RegExp(`^@?(?:${[robot.name, robot.alias].filter(Boolean).map(n => escapeRegExp(n!)).join('|')})[:,]?\\s+`, 'i')
 
+  // completion data, once scripts have loaded
+  let page: string | undefined
+  const render = (): string => {
+    const lead = new RegExp(`^${escapeRegExp(robot.name)} `, 'i')
+    const commands: WebCommand[] = helpLines(robot, id => policyFor(robot).allowsRoom(`${WEB_PREFIX}page`, id)).map(line => {
+      const at = line.indexOf(' - ')
+      return { cmd: (at < 0 ? line : line.slice(0, at)).replace(lead, ''), desc: at < 0 ? '' : line.slice(at + 3) }
+    })
+    // keep </script> out
+    const json = JSON.stringify(commands).replace(/</g, '\\u003c')
+    return template.replaceAll('{{name}}', robot.name).replaceAll('{{v}}', version).replace('{{commands}}', json)
+  }
+
   robot.router.get('/chat', (_req: Req, res: Res) => {
-    const nonce = randomBytes(16).toString('base64')
-    res.set('Content-Security-Policy', `default-src 'self'; img-src https:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`)
+    page ??= render()
+    res.set('Content-Security-Policy', "default-src 'self'; img-src https: data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
     res.set('X-Content-Type-Options', 'nosniff')
     res.set('Referrer-Policy', 'no-referrer')
-    // fresh nonce per load, no edge caching
+    // no edge caching
     res.set('Cache-Control', 'no-store')
-    res.type('html').send(page.replaceAll('{{name}}', robot.name).replaceAll('{{nonce}}', nonce))
+    res.type('html').send(page)
+  })
+
+  robot.router.get('/chat/static/:file', (req: Req & { params: { file: string } }, res: Res) => {
+    const asset = Object.hasOwn(assets, req.params.file) ? assets[req.params.file] : undefined
+    if (!asset) return res.status(404).send('not found')
+    res.set('X-Content-Type-Options', 'nosniff')
+    res.set('Cache-Control', 'public, max-age=31536000, immutable')
+    res.type(asset.type).send(asset.body)
   })
 
   robot.router.post('/chat/send', async (req: Req, res: Res) => {

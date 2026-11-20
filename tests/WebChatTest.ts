@@ -207,16 +207,34 @@ describe('WebChat testing Hubot scripts', () => {
     assert.deepStrictEqual(res.body.replies, [])
   })
 
-  it('serves the page with a nonce csp', async () => {
+  it('serves the terminal page with web commands for completion', async () => {
     await load()
     const { port } = state.robot.server!.address() as AddressInfo
     const res = await realFetch(`http://127.0.0.1:${port}/chat`)
-    const csp = res.headers.get('content-security-policy')!
-    const nonce = csp.match(/'nonce-([^']+)'/)![1]!
-    const html = await res.text()
-    // rocket loader would rewrite it and trip the csp
-    assert.ok(html.includes(`<script nonce="${nonce}" data-cfasync="false">`))
+    assert.match(res.headers.get('content-security-policy')!, /script-src 'self'; .*/)
     assert.strictEqual(res.headers.get('cache-control'), 'no-store')
-    assert.ok(html.includes('<title>Chat with Dumbotheelephant</title>'))
+    const html = await res.text()
+    assert.ok(html.includes('<title>dtterm : Dumbotheelephant</title>'))
+    // rocket loader would rewrite it and trip the csp
+    assert.match(html, /<script type="module" src="\/chat\/static\/app\.js\?v=\w+" data-cfasync="false">/)
+    const json = html.match(/<script type="application\/json" id="commands">(.*?)<\/script>/)![1]!
+    const commands = JSON.parse(json) as { cmd: string, desc: string }[]
+    assert.ok(commands.some(c => c.cmd === 'joke <category>' && /programming/.test(c.desc)))
+    assert.ok(commands.some(c => c.cmd === 'help [query]'))
+    assert.ok(!commands.some(c => /remind|kudos|settings|enable|Dumbotheelephant /.test(c.cmd)))
+  })
+
+  it('serves the assets with long caching, and nothing else', async () => {
+    await load()
+    const { port } = state.robot.server!.address() as AddressInfo
+    const js = await realFetch(`http://127.0.0.1:${port}/chat/static/app.js?v=x`)
+    assert.strictEqual(js.status, 200)
+    assert.match(js.headers.get('content-type')!, /^text\/javascript/)
+    assert.match(js.headers.get('cache-control')!, /immutable/)
+    const css = await realFetch(`http://127.0.0.1:${port}/chat/static/chat.css`)
+    assert.match(css.headers.get('content-type')!, /^text\/css/)
+    for (const file of ['index.html', '__proto__', '..%2FWebChat.ts']) {
+      assert.strictEqual((await realFetch(`http://127.0.0.1:${port}/chat/static/${file}`)).status, 404, file)
+    }
   })
 })

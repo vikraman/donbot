@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-palette="crimson" data-backdrop="lattice">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>dtterm : {{name}}</title>
+<link rel="stylesheet" href="/chat/static/chat.css?v={{v}}">
+<script type="module" src="/chat/static/app.js?v={{v}}" data-cfasync="false"></script>
+<script type="application/json" id="commands">{{commands}}</script>
+</head>
+<body>
+<div class="win bevel">
+  <div class="title">
+    <button class="wbtn menu bevel" id="wmenu" aria-label="Window menu" aria-expanded="false"><i></i></button>
+    <div class="name sunk">dtterm : {{name}}</div>
+    <button class="wbtn min bevel" id="min" aria-label="Minimise"><i></i></button>
+    <button class="wbtn max bevel" id="max" aria-label="Maximise"><i></i></button>
+  </div>
+  <nav class="menubar bevel">
+    <div><button class="top" data-menu="window" aria-expanded="false">Window</button></div>
+    <div><button class="top" data-menu="options" aria-expanded="false">Options</button></div>
+    <div><button class="top" data-menu="help" aria-expanded="false">Help</button></div>
+  </nav>
+  <div class="term sunk">
+    <div class="screen" id="screen">
+    <div class="log" id="log" role="log" aria-live="polite"></div>
+    <form class="prompt" id="form">
+      <span class="ps1">guest@{{name}}$</span>
+      <div class="line">
+        <div class="ghost" id="ghost" aria-hidden="true"></div>
+        <input id="input" aria-label="Command" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="500" enterkeyhint="send" autofocus>
+      </div>
+      <div class="complete bevel" id="complete" role="listbox" hidden></div>
+    </form>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+</div>
+<button class="icon-win bevel" id="restore" aria-label="Restore dtterm">
+  <svg viewBox="0 0 44 36" aria-hidden="true"><rect x="1" y="1" width="42" height="28" fill="var(--panel-hi)" stroke="var(--panel-fg)"/><rect x="5" y="5" width="34" height="20" fill="#000"/><path d="M8 10l4 3-4 3M14 17h6" stroke="#fff" stroke-width="1.5" fill="none"/><rect x="14" y="30" width="16" height="5" fill="var(--panel-lo)"/></svg>
+  dtterm
+</button>
+<div class="panel bevel">
+  <div class="grip"><b class="bevel"></b><span></span></div>
+  <div class="slot"><span class="tab bevel"></span><div class="tile bevel" title="World clock">
+    <svg class="globe" viewBox="0 0 46 46" aria-hidden="true">
+      <circle cx="23" cy="23" r="21" fill="#2b62c4" stroke="#13306b" stroke-width="1.5"/>
+      <path fill="#3fa34d" d="M8 14c4-3 9-4 11-1s-2 6 1 8 7-1 8 3-4 7-3 11c-5 1-8-3-9-7s-6-4-8-8zM27 6c5 0 10 3 12 7-3 1-6-1-8 1s0 5-3 5-4-4-3-7zM31 27c3-1 7 0 8 3-1 5-5 9-9 10 1-4-2-6 0-9z"/>
+      <ellipse cx="17" cy="15" rx="7" ry="4" fill="#fff" fill-opacity=".25"/>
+      <g id="hour"><line x1="23" y1="23" x2="23" y2="12" stroke="#fff" stroke-width="5"/><line x1="23" y1="23" x2="23" y2="12" stroke="#d81e1e" stroke-width="3"/></g>
+      <g id="minute"><line x1="23" y1="23" x2="23" y2="6" stroke="#fff" stroke-width="4"/><line x1="23" y1="23" x2="23" y2="6" stroke="#d81e1e" stroke-width="2"/></g>
+      <circle cx="23" cy="23" r="2" fill="#d81e1e"/>
+    </svg>
+  </div></div>
+  <div class="slot"><span class="tab bevel"></span><div class="tile bevel" title="Today"><div class="cal sunk" id="cal"></div></div></div>
+  <div class="slot"><button class="tab bevel" data-sub="style" aria-label="Style Manager">▲</button><button class="tile bevel" data-sub="style" title="Style Manager: palette and backdrop"><div class="swatches"><i></i><i></i><i></i><i></i></div></button></div>
+  <div class="switch bevel">
+    <svg class="lock" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V5a4 4 0 0 1 8 0v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="1" y="7" width="12" height="9" fill="currentColor"/></svg>
+    <button class="ws sunk" data-ws="1">One</button><button class="ws sunk" data-ws="2">Two</button>
+    <span class="busy sunk" id="busy" title="Busy while {{name}} answers"></span>
+    <span></span>
+    <button class="ws sunk" data-ws="3">Three</button><button class="ws sunk" data-ws="4">Four</button>
+    <button class="exit bevel" data-act="clear" title="Clear this workspace">EXIT</button>
+  </div>
+  <div class="slot"><button class="tab bevel" data-sub="help" aria-label="Help">▲</button><button class="tile bevel" data-act="help" title="Help: list commands">
+    <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="8" width="7" height="26" fill="var(--panel-lo)"/><rect x="12" y="6" width="7" height="28" fill="var(--frame-lo)"/><rect x="20" y="8" width="16" height="26" fill="var(--term-bg)" stroke="var(--panel-fg)"/><text x="28" y="28" font-family="Helvetica,Arial" font-weight="700" font-size="17" text-anchor="middle" fill="var(--panel-fg)">?</text></svg>
+  </button></div>
+  <div class="slot"><span class="tab bevel"></span><button class="tile bevel" data-act="forget" title="Trash: forget command history">
+    <svg viewBox="0 0 40 40" aria-hidden="true"><rect x="10" y="8" width="20" height="4" fill="var(--panel-lo)"/><path d="M12 13h16l-2 21H14z" fill="var(--panel-hi)" stroke="var(--panel-lo)" stroke-width="1.5"/><path d="M17 17v13M20 17v13M23 17v13" stroke="var(--panel-lo)"/></svg>
+  </button></div>
+  <div class="grip"><b class="bevel"></b><span></span></div>
+</div>
+</body>
+</html>
