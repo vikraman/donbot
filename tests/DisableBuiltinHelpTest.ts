@@ -11,7 +11,7 @@ describe('DisableBuiltinHelp testing Hubot scripts', () => {
     const user = brainUser(robot, 'test-user', 'test user')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant help', 'test-room')
-    assert.match(sent[0]!, /count - Increments and returns the counter\./)
+    assert.match(sent[0]!, /\*\*Counter\*\*: `count`/)
     assert.doesNotMatch(sent[0]!, /No commands registered/)
     assert.doesNotMatch(sent[0]!, /Show commands with prefix/)
   })

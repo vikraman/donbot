@@ -111,13 +111,15 @@ describe('WebChat testing Hubot scripts', () => {
     await load()
     const res = await post(state.robot, 'help')
     const help = res.body.replies![0]!
-    assert.match(help, /Dumbotheelephant 8ball/)
-    assert.match(help, /Dumbotheelephant fortune/)
-    assert.match(help, /Dumbotheelephant the rules/)
-    assert.match(help, /Dumbotheelephant ping/)
-    assert.match(help, /Dumbotheelephant ask <question> - Answers <question>, trying each source in turn\./)
-    assert.match(help, /Dumbotheelephant tell me about <topic> - Same as Dumbotheelephant ask <topic>\./)
+    assert.match(help, /`8ball <question>`/)
+    assert.match(help, /`fortune`/)
+    assert.match(help, /`the rules`/)
+    assert.match(help, /`ping`/)
+    assert.match(help, /\*\*Answers\*\*: `ask <question>`/)
     assert.doesNotMatch(help, /remind|kudos|leaderboard|echo|adapter|gemini|ask gg|hubot|garble|settings|enable/i)
+    const ask = (await post(state.robot, 'help ask')).body.replies![0]!
+    assert.match(ask, /`Dumbotheelephant ask <question>` – Answers <question>, trying each source in turn\./)
+    assert.match(ask, /`Dumbotheelephant tell me about <topic>` – Same as Dumbotheelephant ask <topic>\./)
   })
 
   it('rejects bad input', async () => {
@@ -182,8 +184,8 @@ describe('WebChat testing Hubot scripts', () => {
     assert.deepStrictEqual((await post(robot, 'joke programming')).body.replies, ['A safe one.'])
     assert.strictEqual(urls.pop(), 'https://v2.jokeapi.dev/joke/programming?safe-mode')
     assert.deepStrictEqual((await post(robot, 'joke chuck')).body.replies, ['A clean one.'])
-    const help = (await post(robot, 'help')).body.replies![0]!
-    assert.match(help, /Dumbotheelephant joke <category> - .*programming, pun/)
+    const help = (await post(robot, 'help joke')).body.replies![0]!
+    assert.match(help, /`Dumbotheelephant joke <category>` – .*programming, pun/)
     assert.doesNotMatch(help, /dark/)
   })
 

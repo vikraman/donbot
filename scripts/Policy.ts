@@ -22,7 +22,7 @@ import type { Response, Robot } from 'hubot'
 
 import { defineFeature, featureById, features, type Feature, type Level } from './lib/features.ts'
 import { installGate } from './lib/gate.ts'
-import { helpLines } from './lib/help.ts'
+import { formatHelpLine, helpIndex, helpLines } from './lib/help.ts'
 import { configureLines } from './lib/lines.ts'
 import { canManage, MANAGE_ONLY, type ManageScope } from './lib/permissions.ts'
 import { isOwner } from './lib/owner.ts'
@@ -145,7 +145,8 @@ export default async (robot: Robot) => {
 
   const describeRec = (r: Rec | undefined): string => {
     if (!r || (!r.mode && r.on.length === 0 && r.off.length === 0)) return 'no changes'
-    return [r.mode && `mode ${r.mode}`, r.on.length > 0 && `on: ${r.on.join(', ')}`, r.off.length > 0 && `off: ${r.off.join(', ')}`].filter(Boolean).join('; ')
+    const ids = (list: string[]) => list.map(id => `\`${id}\``).join(', ')
+    return [r.mode && `mode ${r.mode}`, r.on.length > 0 && `on: ${ids(r.on)}`, r.off.length > 0 && `off: ${ids(r.off)}`].filter(Boolean).join('; ')
   }
 
   const visible = (): Feature[] => features().filter(f => !f.infra)
@@ -155,17 +156,17 @@ export default async (robot: Robot) => {
     const resolved = policy.resolve(res.message.room, raw)
     const { scope } = resolved
     const d = policy.data()
-    const lines = [`Mode here: ${resolved.mode}.`]
+    const lines = [`**Mode here**: ${resolved.mode}`]
     if (scope.kind === 'guild') {
-      lines.push(`Server: ${describeRec(d.guilds[scope.guild!])}.`, `Channel: ${describeRec(d.channels[scope.channel!])}.`)
+      lines.push(`**Server**: ${describeRec(d.guilds[scope.guild!])}`, `**Channel**: ${describeRec(d.channels[scope.channel!])}`)
     } else if (scope.kind === 'dm') {
-      lines.push(`Our DMs: ${describeRec(d.dms[scope.user!])}.`)
+      lines.push(`**Our DMs**: ${describeRec(d.dms[scope.user!])}`)
     }
     const off = visible().filter(f => !policy.allows(res, f.id) && f.level !== 'mature')
-    if (off.length > 0) lines.push(`Off here: ${off.map(f => f.id).join(', ')}.`)
+    if (off.length > 0) lines.push(`**Off here**: ${off.map(f => `\`${f.id}\``).join(', ')}`)
     const known = new Set(features().map(f => f.id))
     const stale = [...resolved.layers.flatMap(r => [...r.on, ...r.off])].filter(id => !known.has(id))
-    if (stale.length > 0) lines.push(`No longer exist: ${[...new Set(stale)].join(', ')}.`)
+    if (stale.length > 0) lines.push(`**No longer exist**: ${[...new Set(stale)].map(id => `\`${id}\``).join(', ')}`)
     lines.push(`\`${robot.name} features\` lists everything; \`${robot.name} enable <feature>\` turns one on.`)
     await res.send(lines.join('\n'))
   })
@@ -287,9 +288,9 @@ export default async (robot: Robot) => {
 
   robot.respond(/privacy$/i, { id: 'policy.privacy' }, async res => {
     const passive = visible().filter(f => f.passive)
-    const rows = passive.map(f => `${policy.allows(res, f.id) ? '👁 on ' : '⛔ off'} ${f.label}${f.stores ? `: ${f.stores}` : ''}`)
+    const rows = passive.map(f => `${policy.allows(res, f.id) ? '👁 on' : '⛔ off'} **${f.label}**${f.stores ? `: ${f.stores}` : ''}`)
     await res.send([
-      'What donbot reads or keeps from ordinary messages here:',
+      `What ${robot.name} reads or keeps from ordinary messages here:`,
       ...rows,
       'Commands you send it are handled like any other message. Names, scores and seen times stay within this server, but anyone here can see them, including activity from channels they can\'t read.',
       `Activity logs (kudos, wins, focus, standups, GitHub) are kept for ${LOG_RETENTION_MS / DAY_MS} days; names, scores and seen times have no expiry.`
@@ -298,8 +299,14 @@ export default async (robot: Robot) => {
 
   robot.respond(/help\??(?:\s+(.*))?$/i, { id: 'help.list' }, async res => {
     const query = res.match[1]?.trim()
-    const lines = helpLines(robot, id => policy.allows(res, id), query)
-    await res.send(lines.length > 0 ? lines.join('\n') : query ? "Nothing here matches that." : 'Nothing is enabled here.')
+    const allowed = (id: string) => policy.allows(res, id)
+    if (!query) {
+      const index = helpIndex(robot, allowed)
+      await res.send(index.length > 0 ? [...index, `\`${robot.name} help <word>\` explains the commands matching <word>.`].join('\n') : 'Nothing is enabled here.')
+      return
+    }
+    const lines = helpLines(robot, allowed, query)
+    await res.send(lines.length > 0 ? lines.map(formatHelpLine).join('\n') : 'Nothing here matches that.')
   })
 }
 
