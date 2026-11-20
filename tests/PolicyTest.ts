@@ -237,6 +237,21 @@ describe('Policy', () => {
       assert.match(sent.at(-1)!, /\*\*Mature\*\*: .*⛔ joke\.dark/)
       await say(bot('privacy'), 'room', {})
       assert.match(sent.at(-1)!, /👁 on  Last seen: when each person last spoke/)
+      assert.match(sent.at(-1)!, /kept for 60 days/)
+    })
+
+    it('applies presets with the right permission', async () => {
+      const sent = collect(state.robot)
+      await say(bot('presets'), 'room', {})
+      assert.match(sent.at(-1)!, /`class`: professional, without streaks/)
+      await say(bot('preset class'), 'room', { manageChannels: true })
+      assert.strictEqual(sent.at(-1), 'Only someone who can manage this server can do that.')
+      policyFor(state.robot).update(d => { d.guilds.g1 = { mode: 'casual', on: ['x'], off: [] } })
+      await say(bot('preset class'), 'room', { manageGuild: true })
+      assert.match(sent.at(-1)!, /^This server now uses the `class` preset/)
+      assert.deepStrictEqual(policyFor(state.robot).data().guilds.g1, { mode: 'professional', on: [], off: ['streaks', 'history'], by: 'alice', at: policyFor(state.robot).data().guilds.g1!.at })
+      await say(bot('preset nope'), 'room', { manageGuild: true })
+      assert.match(sent.at(-1)!, /no preset called `nope`/)
     })
 
     it('filters help to what is on here', async () => {

@@ -10,6 +10,8 @@
 //   hubot enable <feature> [server|channel] - Turns a feature on (this channel by default).
 //   hubot disable <feature> [server|channel] - Turns a feature off.
 //   hubot reset <feature> [server|channel] - Drops a feature's on/off setting, back to the mode's default.
+//   hubot preset <name> [server|channel] - Applies a named setup, replacing that scope's mode and feature changes.
+//   hubot presets - Lists the presets.
 //   hubot features - Lists every feature, its level, and whether it's on here.
 //   hubot privacy - Shows what donbot reads or keeps in this channel.
 //   hubot puns|pep talks|reactions|ai lines|github nudges [on|off] - Same as enable/disable for this channel.
@@ -24,10 +26,12 @@ import { helpLines } from './lib/help.ts'
 import { configureLines } from './lib/lines.ts'
 import { canManage, MANAGE_ONLY, type ManageScope } from './lib/permissions.ts'
 import { isOwner } from './lib/owner.ts'
+import { LOG_RETENTION_MS } from './lib/eventLog.ts'
+import { DAY_MS } from './lib/time.ts'
 import { defineMigration, fetchRoom, guildIds, installMigrations } from './lib/migrations.ts'
 import { policyFor, type Mode, type RawLike, type Rec } from './lib/policy.ts'
 
-defineFeature({ id: 'policy', label: 'Settings', level: 'professional', locked: true, help: ['hubot settings', 'hubot mode', 'hubot enable', 'hubot disable', 'hubot reset', 'hubot features', 'hubot privacy', 'hubot puns|'] })
+defineFeature({ id: 'policy', label: 'Settings', level: 'professional', locked: true, help: ['hubot settings', 'hubot mode', 'hubot enable', 'hubot disable', 'hubot reset', 'hubot preset', 'hubot features', 'hubot privacy', 'hubot puns|'] })
 defineFeature({ id: 'help', label: 'Help', level: 'professional', locked: true, web: true, help: ['hubot help'] })
 
 // old toggle words
@@ -51,6 +55,20 @@ const OLD_TOGGLES: Record<string, string> = {
 const LEVEL_LABEL: Record<Level, string> = { professional: 'Professional', casual: 'Casual', mature: 'Mature' }
 
 const rec = (): Rec => ({ on: [], off: [] })
+
+interface Preset {
+  about: string
+  mode: Mode
+  on?: string[]
+  off?: string[]
+}
+
+// one-step setups; a preset replaces the scope's mode and feature changes
+const PRESETS: Record<string, Preset> = {
+  professional: { about: 'professional defaults, no feature changes', mode: 'professional' },
+  class: { about: 'professional, without streaks or message lookups', mode: 'professional', off: ['streaks', 'history'] },
+  casual: { about: 'casual defaults, no feature changes', mode: 'casual' }
+}
 
 // legacy data means grandfathering
 const LEGACY_SIGNS = [...Object.keys(OLD_TOGGLES), 'seen:last']
@@ -150,6 +168,27 @@ export default async (robot: Robot) => {
     if (stale.length > 0) lines.push(`No longer exist: ${[...new Set(stale)].join(', ')}.`)
     lines.push(`\`${robot.name} features\` lists everything; \`${robot.name} enable <feature>\` turns one on.`)
     await res.send(lines.join('\n'))
+  })
+
+  robot.respond(/presets$/i, { id: 'policy.presets' }, async res => {
+    const lines = Object.entries(PRESETS).map(([name, p]) => `• \`${name}\`: ${p.about}`)
+    await res.send([...lines, `\`${robot.name} preset <name>\` applies one to the server; add \`channel\` for just this channel.`].join('\n'))
+  })
+
+  robot.respond(/preset ([\w-]+)(?: (server|channel))?$/i, { id: 'policy.preset' }, async res => {
+    const name = res.match[1]!.toLowerCase()
+    const preset = PRESETS[name]
+    if (!preset) {
+      await res.send(`There's no preset called \`${name}\`. \`${robot.name} presets\` lists them.`)
+      return
+    }
+    const target = await authorize(res, targetFor(res, res.match[2]?.toLowerCase(), 'server'))
+    if (!target) return
+    policy.update(d => {
+      d[target.table][target.key] = { mode: preset.mode, on: [...preset.on ?? []], off: [...preset.off ?? []], by: res.message.user.name, at: Date.now() }
+    })
+    const note = target.table === 'guilds' ? ' Channels with their own settings keep them.' : ''
+    await res.send(`${target.label[0]!.toUpperCase()}${target.label.slice(1)} now uses the \`${name}\` preset: ${preset.about}.${note}`)
   })
 
   robot.respond(/mode(?: (professional|casual|default))?(?: (server|channel))?$/i, { id: 'policy.mode' }, async res => {
@@ -252,7 +291,8 @@ export default async (robot: Robot) => {
     await res.send([
       'What donbot reads or keeps from ordinary messages here:',
       ...rows,
-      'Commands you send it are handled like any other message. Names, scores and seen times stay within this server, but anyone here can see them, including activity from channels they can\'t read.'
+      'Commands you send it are handled like any other message. Names, scores and seen times stay within this server, but anyone here can see them, including activity from channels they can\'t read.',
+      `Activity logs (kudos, wins, focus, standups, GitHub) are kept for ${LOG_RETENTION_MS / DAY_MS} days; names, scores and seen times have no expiry.`
     ].join('\n'))
   })
 
