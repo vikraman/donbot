@@ -9,10 +9,10 @@ import type { Activity, GhEvent, Run } from '../scripts/Github.ts'
 import { parseRepo } from '../scripts/lib/github.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
 import type { GithubLog } from '../scripts/Github.ts'
-import { setupRobot, brainUser } from './helpers/setup.ts'
+import { setupRobot, brainUser, inGuild } from './helpers/setup.ts'
 import type { TestRobot } from './helpers/setup.ts'
 
-const ENV = ['GITHUB_TOKEN', 'GITHUB_POLL_SECONDS', 'GITHUB_POLL_MAX_SECONDS']
+const ENV = ['GITHUB_TOKEN', 'GITHUB_POLL_SECONDS', 'GITHUB_POLL_MAX_SECONDS', 'OWNER_USER_ID']
 const START = Date.parse('2026-11-15T12:00:00Z')
 const TICK = 15_000
 
@@ -727,10 +727,13 @@ describe('Github testing Hubot scripts', () => {
     const job = (state.robot.brain.get('schedule:github-nudge') as { id: string, at: number, tz: string }[])[0]
     // start is a sunday
     assert.deepStrictEqual([job?.id, job?.at, job?.tz], ['daily', Date.parse('2026-11-16T10:00:00Z'), 'Europe/London'])
+    process.env.OWNER_USER_ID = 'u1'
+    await state.robot.loadFile('./scripts', 'Policy.ts')
+    inGuild(state.robot, 'g1', ['room-a', 'room-b'])
     await say(state.robot, 'github subscribe octo/demo prs', 'room-a')
     await say(state.robot, 'github subscribe octo/demo prs', 'room-b')
     await say(state.robot, 'github nudges off', 'room-b')
-    assert.match(texts('room-b').at(-1) || '', /Review nudges off in this channel/)
+    assert.match(texts('room-b').at(-1) || '', /Weekday review nudges: off for this channel/)
     repo.prList.push(openPr(7, 3))
     const fire = async () => {
       state.robot.brain.set('schedule:github-nudge', [{ ...job, at: now - 1000 }])

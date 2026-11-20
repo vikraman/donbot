@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events'
 
 import type { DiscordClient } from 'hubot'
 
-import { setupRobot, collect, sendReturnsIds } from './helpers/setup.ts'
+import { setupRobot, collect, sendReturnsIds, inGuild } from './helpers/setup.ts'
 
 describe('StarReact testing Hubot scripts', () => {
   const state = setupRobot('StarReact.ts', { deferLoad: true })
@@ -29,6 +29,18 @@ describe('StarReact testing Hubot scripts', () => {
     await new Promise(resolve => setImmediate(resolve))
 
     assert.strictEqual(sent[0], '⭐ bob starred a message from alice')
+  })
+  it('stays quiet in professional servers', async () => {
+    const { robot } = state
+    const client = new EventEmitter()
+    robot.adapter.client = client as unknown as DiscordClient
+    await state.loadScript()
+    inGuild(robot, 'g1', ['pro-room'])
+    const sent = collect(robot)
+    const reaction = { partial: false, emoji: { name: '⭐' }, message: { channelId: 'pro-room', author: { username: 'alice' } } }
+    client.emit('messageReactionAdd', reaction, { bot: false, username: 'bob' })
+    await new Promise(resolve => setImmediate(resolve))
+    assert.deepStrictEqual(sent, [])
   })
   it('should ignore reactions from bots', async () => {
     const { robot } = state

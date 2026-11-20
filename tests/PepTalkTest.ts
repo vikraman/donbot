@@ -3,32 +3,44 @@ import assert from 'node:assert/strict'
 
 import { isFrustrated, ROOM_COOLDOWN_MS, USER_COOLDOWN_MS } from '../scripts/PepTalk.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, collect, brainUser, inGuild } from './helpers/setup.ts'
 
 describe('PepTalk', () => {
-  const state = setupRobot('PepTalk.ts')
+  const state = setupRobot(['PepTalk.ts', 'Policy.ts'], { envVars: ['OWNER_USER_ID'] })
 
   it('spots frustration', () => {
     assert.equal(isFrustrated('ugh the build is broken again'), true)
     assert.equal(isFrustrated("why won't this compile"), true)
     assert.equal(isFrustrated('lunch at noon?'), false)
   })
-  it('is on by default and toggles per channel', async () => {
+  it('toggles per channel', async () => {
     const { robot } = state
+    process.env.OWNER_USER_ID = 'u1'
+    inGuild(robot, 'g1', ['room'], 'casual')
     const user = brainUser(robot, 'u1', 'alice')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant pep talks', 'room')
-    assert.equal(sent[0], 'Pep talks are on in this channel.')
+    assert.equal(sent[0], 'Pep talks: on here.')
     await robot.adapter.say(user, '@Dumbotheelephant pep talks off', 'room')
-    assert.equal(sent[1], 'Pep talks off in this channel. `Dumbotheelephant pep talks on` brings them back.')
+    assert.equal(sent[1], 'Pep talks: off for this channel.')
     await robot.adapter.say(user, '@Dumbotheelephant pep talks on', 'room')
-    assert.equal(sent[2], 'Pep talks on in this channel.')
+    assert.equal(sent[2], 'Pep talks: on for this channel.')
     assert.equal(sent.length, 3)
   })
   it('stays quiet when turned off', async () => {
     const { robot } = state
+    process.env.OWNER_USER_ID = 'u1'
+    inGuild(robot, 'g1', ['room'], 'casual')
     const user = brainUser(robot, 'u1', 'alice')
     await robot.adapter.say(user, '@Dumbotheelephant pep talks off', 'room')
+    const sent = collect(robot)
+    for (let i = 0; i < 4; i++) await robot.adapter.say(user, 'ugh still stuck', 'room')
+    assert.deepEqual(sent, [])
+  })
+  it('stays quiet in a professional server', async () => {
+    const { robot } = state
+    inGuild(robot, 'g2', ['room'])
+    const user = brainUser(robot, 'u1', 'alice')
     const sent = collect(robot)
     for (let i = 0; i < 4; i++) await robot.adapter.say(user, 'ugh still stuck', 'room')
     assert.deepEqual(sent, [])

@@ -16,6 +16,11 @@ import { formatDuration } from './lib/duration.ts'
 import { required } from './lib/match.ts'
 import { scheduler } from './lib/schedule.ts'
 import { DAY_MS, unitMs } from './lib/time.ts'
+import { defineFeature } from './lib/features.ts'
+import { isOwner } from './lib/owner.ts'
+import { postToRoom } from './lib/rooms.ts'
+
+defineFeature({ id: 'poll', label: 'Polls', level: 'professional', help: ['hubot poll'] })
 
 interface PollState {
   question: string
@@ -101,7 +106,7 @@ export default async (robot: Robot) => {
     }
     const message = await ch.messages.fetch(poll.messageId)
     const counts = await tally(message, poll)
-    await robot.messageRoom(room, `📊 Poll closed: ${formatTally(poll, counts)}\n${formatWinner(poll, counts)}`)
+    await postToRoom(robot, room, `📊 Poll closed: ${formatTally(poll, counts)}\n${formatWinner(poll, counts)}`, 'poll')
   }
 
   const closer = scheduler<CloseJob>(robot, 'poll', async job => {
@@ -111,7 +116,7 @@ export default async (robot: Robot) => {
     await close(job.data.room, poll)
   })
 
-  robot.respond(/poll results$/i, async res => {
+  robot.respond(/poll results$/i, { id: 'poll.results' }, async res => {
     const room = res.message.room
     const poll = robot.brain.get<PollState>(pollKey(room))
     if (!poll) {
@@ -131,15 +136,14 @@ export default async (robot: Robot) => {
     await res.send(`${formatTally(poll, counts)}\n(${status})`)
   })
 
-  robot.respond(/poll close$/i, async res => {
+  robot.respond(/poll close$/i, { id: 'poll.close' }, async res => {
     const room = res.message.room
     const poll = robot.brain.get<PollState>(pollKey(room))
     if (!poll || poll.closed) {
       await res.send('There is no open poll in this room.')
       return
     }
-    const user = res.message.user.id
-    if (user !== poll.creatorId && user !== process.env.OWNER_USER_ID) {
+    if (res.message.user.id !== poll.creatorId && !isOwner(res)) {
       await res.send('Only whoever started the poll can close it.')
       return
     }
@@ -152,7 +156,7 @@ export default async (robot: Robot) => {
     await close(room, poll, channel)
   })
 
-  robot.respond(/poll (?!(?:results|close)$)(.+)$/i, async res => {
+  robot.respond(/poll (?!(?:results|close)$)(.+)$/i, { id: 'poll.create' }, async res => {
     const room = res.message.room
     let text = required(res.match, 1).trim()
 

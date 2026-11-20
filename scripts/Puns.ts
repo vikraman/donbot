@@ -3,11 +3,10 @@
 //   "I'm hungry" -> "Hi Hungry, I'm donbot!", "I can't" -> "Not with that attitude!", replies to
 //   "no pun intended", and math/programming in-jokes. At most one pun per channel every so often.
 //   Like (😂 👍) or dislike (🙄 👎) reactions on a pun make that kind of pun more or less likely in the channel.
+//   Turned on and off with `puns on|off`, see Policy.ts.
 //
 // Commands:
-//   hubot puns - show whether puns are on in this channel, and how likely each kind is
-//   hubot puns off - turn puns off in this channel
-//   hubot puns on - turn puns back on in this channel
+//   hubot puns chances - Shows how likely each kind of pun is in this channel.
 //
 
 import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
@@ -18,9 +17,13 @@ import { JARGON } from './lib/punJargon.ts'
 import { bagPick, defineLines } from './lib/lines.ts'
 import { pick, chance } from './lib/random.ts'
 import { valenceOf } from './lib/reactions.ts'
-import { addressesBot, roomToggle } from './lib/roomToggle.ts'
+import { addressesBot } from './lib/address.ts'
+import { allowsRoom } from './lib/policy.ts'
 import { scoreTone } from './lib/sentiment.ts'
 import { isRareWord, wordRank } from './lib/wordRarity.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'puns', label: 'Puns', level: 'casual', passive: true, stores: 'which of its puns got which reactions', help: ['hubot puns chances'] })
 
 // starting chance, before any feedback
 export const PUN_CHANCE = 0.314
@@ -42,7 +45,6 @@ export const REPEAT_WINDOW_MS = 24 * 60 * 60 * 1000
 const EM_MIN_RANK = 4000
 const DAD_MIN_RANK = 2000
 
-const DISABLED_KEY = 'puns:disabled'
 const SENT_KEY = 'puns:sent'
 
 
@@ -285,11 +287,10 @@ export default async (robot: Robot) => {
   const chanceIn = (room: string, kind: PunKind): number =>
     chanceFor(feedbackFor(readRecords(robot), room, kind, Date.now()))
 
-  const details = (room: string): string =>
-    'Chance per pun: ' + (Object.keys(KIND_LABEL) as PunKind[])
-      .map(kind => `${KIND_LABEL[kind]} ${Math.round(chanceIn(room, kind) * 100)}%`).join(', ') + '.'
-
-  const { isDisabled } = roomToggle(robot, { command: 'puns', brainKey: DISABLED_KEY, label: 'Puns', details })
+  robot.respond(/puns? chances$/i, { id: 'puns.chances' }, async res => {
+    await res.send('Chance per pun: ' + (Object.keys(KIND_LABEL) as PunKind[])
+      .map(kind => `${KIND_LABEL[kind]} ${Math.round(chanceIn(res.message.room, kind) * 100)}%`).join(', ') + '.')
+  })
 
   const remember = (ids: string[], room: string, kind: PunKind, now: number) => {
     if (ids.length === 0) return
@@ -313,10 +314,10 @@ export default async (robot: Robot) => {
   // keyed by room:word
   const wordCooldown = cooldown(REPEAT_WINDOW_MS)
 
-  robot.hear(/[a-z]/i, async res => {
+  robot.hear(/[a-z]/i, { id: 'puns.listen' }, async res => {
     const room = res.message.room
     const text = res.message.text || ''
-    if (isDisabled(room) || addressesBot(robot, text)) return
+    if (addressesBot(robot, text)) return
 
     const now = Date.now()
     if (!roomCooldown.ready(room, now)) return
@@ -340,6 +341,7 @@ export default async (robot: Robot) => {
     if (user.bot) return
     const sign = signOf(reaction.emoji.name)
     if (sign === 0 || !reaction.message?.id) return
+    if (!allowsRoom(robot, reaction.message.channelId, 'puns')) return
     vote(reaction.message.id, user.id, sign, add)
   }
   client.on('messageReactionAdd', onReaction(true))

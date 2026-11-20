@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import type { User } from 'hubot'
 
-import { setupRobot, brainUser, collect } from './helpers/setup.ts'
+import { setupRobot, brainUser, collect, inGuild } from './helpers/setup.ts'
 import type { TestRobot } from './helpers/setup.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
@@ -73,7 +73,7 @@ describe('ReactEmoji emoji data', () => {
 })
 
 describe('ReactEmoji testing Hubot scripts', () => {
-  const state = setupRobot('ReactEmoji.ts')
+  const state = setupRobot(['ReactEmoji.ts', 'Policy.ts'], { envVars: ['OWNER_USER_ID'] })
   let now: number
 
   beforeEach(() => {
@@ -224,43 +224,46 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
 
   describe('channel toggle', () => {
+    beforeEach(() => {
+      process.env.OWNER_USER_ID = 'toggler'
+      inGuild(state.robot, 'g1', ['test-room', 'other-room'], 'casual')
+    })
     it('turns reactions off and on per channel', async () => {
       const replies = collect(state.robot)
       const fake = fakeUser(state.robot, 'toggler', 'toggler')
       await say(state.robot, fake, `${state.robot.name} reactions off`)
-      assert.match(replies.at(-1)!, /off in this channel/)
+      assert.match(replies.at(-1)!, /off for this channel/)
       await say(state.robot, fake, 'saw an octopus today')
       await say(state.robot, fake, 'saw an octopus today', 'other-room')
       await settle()
       assert.deepStrictEqual(fake.reacted, ['🐙'])
 
       await say(state.robot, fake, `${state.robot.name} reactions on`)
-      assert.match(replies.at(-1)!, /on in this channel/)
+      assert.match(replies.at(-1)!, /on for this channel/)
       await say(state.robot, fake, 'saw an octopus today')
       await settle()
       assert.deepStrictEqual(fake.reacted, ['🐙', '🐙'])
     })
     it('drops a pending reaction when the channel is turned off during the delay', async () => {
-      const fake = fakeUser(state.robot)
+      const fake = fakeUser(state.robot, 'toggler', 'toggler')
       await say(state.robot, fake, 'saw an octopus today')
       await say(state.robot, fake, `${state.robot.name} reactions off`)
       await settle()
       assert.deepStrictEqual(fake.reacted, [])
     })
-    it('reports status with who turned it off', async () => {
-      const replies = collect(state.robot)
-      const fake = fakeUser(state.robot, 'toggler', 'toggler')
-      await say(state.robot, fake, `${state.robot.name} reactions`)
-      assert.match(replies.at(-1)!, /are on/)
-      await say(state.robot, fake, `${state.robot.name} reactions off`)
-      await say(state.robot, fake, `${state.robot.name} reactions status`)
-      assert.match(replies.at(-1)!, /are off .*toggler/)
+    it('stays off in a professional server', async () => {
+      inGuild(state.robot, 'g2', ['pro-room'])
+      const fake = fakeUser(state.robot)
+      await say(state.robot, fake, 'saw an octopus today', 'pro-room')
+      await settle()
+      assert.deepStrictEqual(fake.reacted, [])
     })
   })
 
-  it('removes legacy tone history on brain load', async () => {
+  it('removes legacy tone history once the brain connects', async () => {
     state.robot.brain.set('reactemoji:history:old-room', [{ comparative: 1, ts: 1 }])
-    state.robot.brain.emit('loaded', state.robot.brain.data)
+    assert.ok(state.robot.brain.get('reactemoji:history:old-room'))
+    state.robot.brain.emit('connected')
     assert.strictEqual(state.robot.brain.get('reactemoji:history:old-room'), null)
   })
 })

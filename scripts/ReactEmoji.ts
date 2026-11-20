@@ -1,11 +1,7 @@
 // Description:
 //   Occasionally reacts with one fitting emoji for specific vocabulary, plus one sentiment emoji
 //   when a conversation's mood clearly shifts. Never reacts over people's reactions. Discord only.
-//
-// Commands:
-//   hubot reactions - show whether emoji reactions are on in this channel
-//   hubot reactions off - turn emoji reactions off in this channel
-//   hubot reactions on - turn emoji reactions back on in this channel
+//   Turned on and off with `reactions on|off`, see Policy.ts.
 //
 
 import type { Robot } from 'hubot'
@@ -16,10 +12,14 @@ import { rawMessageOf } from './lib/discordMessage.ts'
 import { EMOJI_VOCAB } from './lib/emojiVocab.ts'
 import { bagPick } from './lib/lines.ts'
 import { pick } from './lib/random.ts'
-import { addressesBot, roomToggle } from './lib/roomToggle.ts'
+import { addressesBot } from './lib/address.ts'
+import { allowsRoom } from './lib/policy.ts'
 import { scoreTone } from './lib/sentiment.ts'
 import type { ToneResult } from './lib/sentiment.ts'
 import { wordRank } from './lib/wordRarity.ts'
+import { defineFeature } from './lib/features.ts'
+
+defineFeature({ id: 'reactemoji', label: 'Emoji reactions', level: 'casual', passive: true, stores: 'a running mood score per channel' })
 
 // less common mood emojis avoiding basic emojis
 export const SENTIMENT_EMOJI: Record<'positive' | 'negative', readonly [string, ...string[]]> = {
@@ -54,7 +54,6 @@ export const REACT_DELAY_MS = 60 * 1000
 // same emoji not repeated in a room within this window
 export const REPEAT_WINDOW_MS = 30 * 60 * 1000
 
-const DISABLED_KEY = 'reactemoji:disabled'
 const TONE_KEY = (room: string): string => `reactemoji:tone:${room}`
 const LEGACY_HISTORY_PREFIX = 'reactemoji:history:'
 
@@ -153,21 +152,19 @@ export default async (robot: Robot) => {
   const claimFresh = (room: string, emoji: string | null): string | null =>
     emoji && emojiCooldown.take(`${room}:${emoji}`) ? emoji : null
 
-  robot.brain.on('loaded', () => {
+  robot.brain.on('connected', () => {
     for (const [suffix] of entriesWithPrefix(robot, LEGACY_HISTORY_PREFIX)) {
       robot.brain.remove(`${LEGACY_HISTORY_PREFIX}${suffix}`)
     }
   })
 
-  const { isDisabled } = roomToggle(robot, { command: 'reactions', brainKey: DISABLED_KEY, label: 'Emoji reactions' })
-
   // hears everything so the room's tone is tracked
-  robot.hear(/.*/, async res => {
+  robot.hear(/.*/, { id: 'reactemoji.listen' }, async res => {
     const room = res.message.room
     const text = res.message.text || ''
     const mood = recordTone(robot, room, scoreTone(text))
 
-    if (isDisabled(room) || addressesBot(robot, text)) return
+    if (addressesBot(robot, text)) return
 
     const message = rawMessageOf(res)
     if (!message || typeof message.react !== 'function') return
@@ -178,7 +175,8 @@ export default async (robot: Robot) => {
 
     // reaction delay so people's reactions land first
     const timer = setTimeout(async () => {
-      if (isDisabled(room)) return
+      // may be off by now
+      if (!allowsRoom(robot, room, 'reactemoji')) return
       if (message.reactions && message.reactions.cache.size > 0) return
       try {
         // vocab emoji not repeated; sentiment is limited by mood switches

@@ -1,15 +1,13 @@
 // Description:
 //   When someone sounds stuck or frustrated a few times in a row, now and then sends them a short
-//   word of encouragement. On by default; channels can turn it off.
+//   word of encouragement. Turned on and off with `pep talks on|off`, see Policy.ts.
 //
 // Commands:
-//   hubot pep talks on - Turns pep talks on in this channel.
-//   hubot pep talks off - Turns them off.
-//   hubot pep talks - Shows whether they're on here.
 //   hubot pep talk [<user>] - Sends a pep talk right now.
 //
-// Each person gets at most one unprompted pep talk every 6 hours, and a channel at most one an hour.
-// Only a count of recent frustrated messages is kept, never their text.
+// Notes:
+//   Each person gets at most one unprompted pep talk every 6 hours, and a channel at most one an hour.
+//   Only a count of recent frustrated messages is kept, never their text.
 //
 
 import type { Robot } from 'hubot'
@@ -18,12 +16,15 @@ import { cooldown } from './lib/cooldown.ts'
 import { defineLines } from './lib/lines.ts'
 import type { LineOptions } from './lib/lines.ts'
 import { mentionFor } from './lib/mention.ts'
-import { addressesBot, roomToggle } from './lib/roomToggle.ts'
+import { addressesBot } from './lib/address.ts'
 import { scoreTone } from './lib/sentiment.ts'
 import { HOUR_MS, MINUTE_MS } from './lib/time.ts'
 import { userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { peopleFor } from './lib/spaces.ts'
 
-const DISABLED_KEY = 'peptalk:disabled'
+defineFeature({ id: 'peptalk', label: 'Pep talks', level: 'casual', passive: true, stores: 'how many frustrated-sounding messages each person sent recently, in memory only', help: ['hubot pep talk'] })
+
 // opt-in list from when pep talks were off by default
 const LEGACY_ENABLED_KEY = 'peptalk:enabled'
 
@@ -75,11 +76,10 @@ export default async (robot: Robot) => {
   // user:room -> recent frustrated timestamps, in memory only
   const recent = new Map<string, number[]>()
 
-  robot.brain.on('loaded', () => { robot.brain.remove(LEGACY_ENABLED_KEY) })
+  robot.brain.on('connected', () => { robot.brain.remove(LEGACY_ENABLED_KEY) })
 
-  const { isDisabled } = roomToggle(robot, { command: 'pep talks', brainKey: DISABLED_KEY, label: 'Pep talks' })
 
-  robot.respond(/pep ?talk (?:for |to )?@?(?!on$|off$|status$)(.+?)\s*$/i, async res => {
+  robot.respond(/pep ?talk (?:for |to )?@?(?!on$|off$|status$)(.+?)\s*$/i, { id: 'peptalk.for' }, async res => {
     const who = res.match[1]!
     const mention = who.match(/^<@!?(\d+)>$/)
     if (mention || who.toLowerCase() === 'me') {
@@ -87,20 +87,20 @@ export default async (robot: Robot) => {
       await res.send(pepTalkFor(mentionFor(target), { room: res.message.room, tz: userTz(robot, target.id) }))
       return
     }
-    const users = robot.brain.usersForFuzzyName(who)
+    const users = peopleFor(robot, res, who)
     const sole = users.length === 1 ? users[0] : undefined
     await res.send(pepTalkFor(mentionFor(sole ?? { name: who }), { room: res.message.room, tz: userTz(robot, sole?.id) }))
   })
 
-  robot.respond(/pep ?talk$/i, async res => {
+  robot.respond(/pep ?talk$/i, { id: 'peptalk.me' }, async res => {
     await res.send(pepTalkFor(mentionFor(res.message.user), { room: res.message.room, tz: userTz(robot, res.message.user.id) }))
   })
 
-  robot.hear(/.*/, async res => {
+  robot.hear(/.*/, { id: 'peptalk.listen' }, async res => {
     const room = res.message.room
     const text = res.message.text || ''
     const user = res.message.user
-    if (!user?.id || addressesBot(robot, text) || isDisabled(room)) return
+    if (!user?.id || addressesBot(robot, text)) return
     if (!isFrustrated(text)) return
 
     const key = `${user.id}:${room}`

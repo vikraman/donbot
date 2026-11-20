@@ -2,7 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, collect, brainUser, inGuild } from './helpers/setup.ts'
 import type { DiscordChannel, DiscordClient, DiscordMessage } from 'hubot'
 
 interface HistoryEntry {
@@ -65,6 +65,18 @@ describe('History testing Hubot scripts', () => {
     assert.strictEqual(entries.length, 1)
     assert.strictEqual(entries[0]!.kind, 'reaction-feedback')
     assert.strictEqual(entries[0]!.valence, 1)
+  })
+
+  it('logs no reactions where history tracking is off', async () => {
+    const { robot } = state
+    const client = new EventEmitter()
+    robot.adapter.client = client as unknown as DiscordClient
+    await state.loadScript()
+    inGuild(robot, 'g1', ['pro-room'])
+    const reaction = { partial: false, emoji: { name: '👍' }, message: { id: 'msg-1', channelId: 'pro-room', author: { id: 'author-1' } } }
+    client.emit('messageReactionAdd', reaction, { bot: false, username: 'bob' })
+    await new Promise(resolve => setImmediate(resolve))
+    assert.strictEqual(robot.brain.get('history:pro-room'), null)
   })
 
   it('should log negative valence when a positive reaction is removed', async () => {

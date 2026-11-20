@@ -22,6 +22,12 @@ import { formatAgo } from './lib/duration.ts'
 import { required } from './lib/match.ts'
 import { valenceOf } from './lib/reactions.ts'
 import { mentionFor } from './lib/mention.ts'
+import { defineFeature } from './lib/features.ts'
+import { peopleFor } from './lib/spaces.ts'
+import { allowsRoom } from './lib/policy.ts'
+
+defineFeature({ id: 'history', label: 'Message stats', level: 'professional', help: ['hubot top', 'hubot most', 'hubot least', 'hubot last message'] })
+defineFeature({ id: 'history.track', label: 'Message stats tracking', level: 'professional', passive: true, stores: 'message ids, authors and reaction scores (no text)' })
 
 type EntryKind = 'bot-message' | 'user-message' | 'reaction-feedback'
 
@@ -153,7 +159,7 @@ const resolveWindow = (period?: string): WindowRange => {
 }
 
 export default async (robot: Robot) => {
-  robot.hear(/.*/, async res => {
+  robot.hear(/.*/, { id: 'history.track.message' }, async res => {
     const user = res.message.user
     const raw = rawMessageOf(res)
     if (!user || user.id == null || !raw || !raw.id) return
@@ -166,6 +172,7 @@ export default async (robot: Robot) => {
       if (user.bot) return
       const valence = valenceOf(reaction.emoji.name)
       if (!valence) return
+      if (!allowsRoom(robot, reaction.message.channelId, 'history.track')) return
       if (reaction.partial) {
         try {
           await reaction.fetch()
@@ -185,7 +192,7 @@ export default async (robot: Robot) => {
     client.on('messageReactionRemove', recordFeedback(true))
   }
 
-  robot.respond(/top message(?: (today|day|this week|week|last week|this month|month|last month|this year|year|last year))?$/i, async res => {
+  robot.respond(/top message(?: (today|day|this week|week|last week|this month|month|last month|this year|year|last year))?$/i, { id: 'history.top' }, async res => {
     const raw = rawMessageOf(res)
     const channel = raw && raw.channel
     if (!channel) {
@@ -203,7 +210,7 @@ export default async (robot: Robot) => {
     await res.send(await describeMessage(robot, channel, entries, winner[0], winner[1]))
   })
 
-  robot.respond(/most downvoted message$/i, async res => {
+  robot.respond(/most downvoted message$/i, { id: 'history.downvoted' }, async res => {
     const raw = rawMessageOf(res)
     const channel = raw && raw.channel
     if (!channel) {
@@ -219,7 +226,7 @@ export default async (robot: Robot) => {
     await res.send(await describeMessage(robot, channel, entries, loser[0], loser[1]))
   })
 
-  robot.respond(/top (\d+) messages$/i, async res => {
+  robot.respond(/top (\d+) messages$/i, { id: 'history.topn' }, async res => {
     const raw = rawMessageOf(res)
     const channel = raw && raw.channel
     if (!channel) {
@@ -243,7 +250,7 @@ export default async (robot: Robot) => {
     await res.send(lines.join('\n'))
   })
 
-  robot.respond(/last message from @?([\w .-]+?)\??\s*$/i, async res => {
+  robot.respond(/last message from @?([\w .-]+?)\??\s*$/i, { id: 'history.last' }, async res => {
     const raw = rawMessageOf(res)
     const channel = raw && raw.channel
     if (!channel) {
@@ -251,7 +258,7 @@ export default async (robot: Robot) => {
       return
     }
     const name = required(res.match, 1).trim()
-    const users = robot.brain.usersForFuzzyName(name)
+    const users = peopleFor(robot, res, name)
     if (users.length === 0) {
       await res.send(`I don't know anything about ${name}.`)
       return
@@ -281,7 +288,7 @@ export default async (robot: Robot) => {
     await res.send(`${mention} said: "${text}" (${formatAgo(latest.ts)})`)
   })
 
-  robot.respond(/(most|least) active user(?: (today|day|this week|week|last week|this month|month|last month|this year|year|last year))?$/i, async res => {
+  robot.respond(/(most|least) active user(?: (today|day|this week|week|last week|this month|month|last month|this year|year|last year))?$/i, { id: 'history.active' }, async res => {
     const entries = robot.brain.get<HistoryEntry[]>(HISTORY_KEY(res.message.room)) || []
     const period = res.match[2] && res.match[2].toLowerCase()
     const { since, until } = resolveWindow(period)
@@ -303,7 +310,7 @@ export default async (robot: Robot) => {
     await res.send(`${mention} with ${count} ${count === 1 ? 'message' : 'messages'}.`)
   })
 
-  robot.respond(/top (\d+) active users$/i, async res => {
+  robot.respond(/top (\d+) active users$/i, { id: 'history.activen' }, async res => {
     const entries = robot.brain.get<HistoryEntry[]>(HISTORY_KEY(res.message.room)) || []
     const count = Math.min(Number(res.match[1]), 25)
     const ranked = [...messageCounts(entries).entries()].sort((a, b) => b[1] - a[1]).slice(0, count)

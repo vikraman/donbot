@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events'
 
 import type { User, DiscordClient } from 'hubot'
 
-import { setupRobot, brainUser, collect } from './helpers/setup.ts'
+import { setupRobot, brainUser, collect, inGuild } from './helpers/setup.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
 import { configureLines, resetLines } from '../scripts/lib/lines.ts'
@@ -202,35 +202,56 @@ describe('Puns testing Hubot scripts', () => {
     assert.strictEqual(sent.length, 1)
   })
 
-  describe('channel toggle', () => {
-    it('turns puns off and on per channel', async () => {
-      const sent = collect(state.robot)
-      await say(`${state.robot.name} puns off`)
-      assert.match(sent.at(-1)!, /^Puns off in this channel/)
-      await say('functor')
-      assert.strictEqual(sent.length, 1)
-      await say('functor', 'other-room')
-      assert.strictEqual(sent.length, 2)
+  it('reports the chance per kind', async () => {
+    const sent = collect(state.robot)
+    await say(`${state.robot.name} puns chances`)
+    assert.match(sent.at(-1)!, /knew-her 31%, knew-'em 31%, dad jokes 31%, attitude 31%, pun intended 31%, in-jokes 31%/)
+  })
+})
 
-      await say(`${state.robot.name} puns on`)
-      assert.match(sent.at(-1)!, /^Puns on in this channel/)
-      await say('functor')
-      // second knew-her line; the bag doesn't repeat
-      assert.strictEqual(sent.at(-1), 'Functor? But I barely know her!')
-    })
-    it('reports status with who turned it off', async () => {
-      const sent = collect(state.robot)
-      await say(`${state.robot.name} puns`)
-      assert.match(sent.at(-1)!, /are on/)
-      await say(`${state.robot.name} puns off`)
-      await say(`${state.robot.name} puns status`)
-      assert.match(sent.at(-1)!, /are off .*test user/)
-    })
-    it('reports the chance per kind in the status', async () => {
-      const sent = collect(state.robot)
-      await say(`${state.robot.name} puns`)
-      assert.match(sent.at(-1)!, /knew-her 31%, knew-'em 31%, dad jokes 31%, attitude 31%, pun intended 31%, in-jokes 31%/)
-    })
+describe('Puns policy', () => {
+  const state = setupRobot(['Puns.ts', 'Policy.ts'], { envVars: ['OWNER_USER_ID'] })
+  let user: User
+
+  beforeEach(() => {
+    process.env.OWNER_USER_ID = 'test-user'
+    mock.method(Date, 'now', () => 1_000_000_000_000)
+    setRandomSource(() => 0)
+    user = brainUser(state.robot, 'test-user', 'test user')
+  })
+
+  const say = (text: string, room = 'test-room') => state.robot.adapter.say(user, text, room)
+
+  it('turns puns off and on per channel', async () => {
+    inGuild(state.robot, 'g1', ['test-room', 'other-room'], 'casual')
+    const sent = collect(state.robot)
+    await say(`${state.robot.name} puns off`)
+    assert.match(sent.at(-1)!, /^Puns: off for this channel\.$/)
+    await say('functor')
+    assert.strictEqual(sent.length, 1)
+    await say('functor', 'other-room')
+    assert.strictEqual(sent.length, 2)
+
+    await say(`${state.robot.name} puns on`)
+    assert.match(sent.at(-1)!, /^Puns: on for this channel\.$/)
+    await say('functor')
+    // bag doesn't repeat
+    assert.strictEqual(sent.at(-1), 'Functor? But I barely know her!')
+  })
+  it('reports status', async () => {
+    inGuild(state.robot, 'g1', ['test-room'], 'casual')
+    const sent = collect(state.robot)
+    await say(`${state.robot.name} puns`)
+    assert.match(sent.at(-1)!, /^Puns: on here/)
+    await say(`${state.robot.name} puns off`)
+    await say(`${state.robot.name} puns status`)
+    assert.match(sent.at(-1)!, /^Puns: off here/)
+  })
+  it('stays quiet in a professional server', async () => {
+    inGuild(state.robot, 'g2', ['test-room'])
+    const sent = collect(state.robot)
+    await say('functor')
+    assert.deepStrictEqual(sent, [])
   })
 })
 
@@ -301,7 +322,7 @@ describe('Puns reaction feedback', () => {
     client.emit(event, { partial: true, emoji: { name: emoji }, message: { id: messageId } }, { id: userId, bot })
   const status = async () => {
     const sent = collect(state.robot)
-    await say(`${state.robot.name} puns`)
+    await say(`${state.robot.name} puns chances`)
     return sent.at(-1)!
   }
 
@@ -312,6 +333,13 @@ describe('Puns reaction feedback', () => {
     const reply = await status()
     assert.match(reply, /knew-her 54%/)
     assert.match(reply, /knew-'em 31%/)
+  })
+  it('ignores reactions where puns are off', async () => {
+    await say('functor')
+    const before = await status()
+    inGuild(state.robot, 'g1', ['quiet'])
+    client.emit('messageReactionAdd', { partial: true, emoji: { name: '😂' }, message: { id: 'msg-1', channelId: 'quiet' } }, { id: 'a', bot: false })
+    assert.strictEqual(await status(), before)
   })
   it('dislikes lower it', async () => {
     await say('functor')

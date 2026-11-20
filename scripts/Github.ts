@@ -11,7 +11,8 @@
 //   hubot github nudge - Lists PRs here that have been waiting for a review.
 //   hubot github nudges [on|off] - Turns the weekday 10am review nudge on or off here. On by default.
 //
-// Also celebrates first merged PRs, merge milestones, releases and CI recoveries.
+// Notes:
+//   Also celebrates first merged PRs, merge milestones, releases and CI recoveries.
 //
 // Configuration:
 //   GITHUB_TOKEN - Token with no scopes; without it GitHub allows only 60 requests an hour.
@@ -31,13 +32,18 @@ import type { GithubResponse } from './lib/github.ts'
 import { userForGithubLogin } from './lib/githubUsers.ts'
 import { required } from './lib/match.ts'
 import { defineLines } from './lib/lines.ts'
-import { roomToggle } from './lib/roomToggle.ts'
+import { allowsRoomAsync } from './lib/policy.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { recordStreak } from './lib/streak.ts'
 import { DAY_MS, nextOccurrence } from './lib/time.ts'
 import type { Repeat } from './lib/time.ts'
 import { defaultTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { spaceOf } from './lib/spaces.ts'
+
+defineFeature({ id: 'github', label: 'GitHub', level: 'professional', help: ['hubot github'] })
+defineFeature({ id: 'github.nudges', label: 'Weekday review nudges', level: 'professional', help: ['hubot github nudges'] })
 
 export const CATEGORIES = ['issues', 'prs', 'pushes', 'ci', 'releases', 'comments'] as const
 export type Category = typeof CATEGORIES[number]
@@ -576,6 +582,7 @@ export default async (robot: Robot) => {
   }
 
   const deliver = async (room: string, text: string) => {
+    if (!await allowsRoomAsync(robot, room, 'github')) return
     const content = text.length > DISCORD_LIMIT ? `${text.slice(0, DISCORD_LIMIT - 1)}…` : text
     const channel = robot.adapter.client?.channels?.cache?.get(room)
     try {
@@ -771,9 +778,14 @@ export default async (robot: Robot) => {
       if (!text) continue
       // linked accounts, see GithubLink.ts
       const pusher = a.actor ? userForGithubLogin(robot, a.actor.login) : undefined
-      const milestone = pusher ? recordStreak(robot, 'commit', pusher, Date.parse(a.timestamp) || Date.now()) : undefined
-      if (milestone) text = `${text}\n${milestone}`
-      for (const room of roomsFor(rooms, 'pushes')) await deliver(room, text)
+      // one streak per space
+      const milestones = new Map<string, string | undefined>()
+      for (const room of roomsFor(rooms, 'pushes')) {
+        const space = spaceOf(robot, room)
+        if (pusher && !milestones.has(space)) milestones.set(space, recordStreak(robot, space, 'commit', pusher, Date.parse(a.timestamp) || Date.now()))
+        const milestone = milestones.get(space)
+        await deliver(room, milestone ? `${text}\n${milestone}` : text)
+      }
       sent++
     }
     return sent
@@ -904,7 +916,6 @@ export default async (robot: Robot) => {
 
   const nudgeDays = (): number => Math.max(1, Number(process.env.GITHUB_NUDGE_DAYS) || 2)
 
-  const nudgeToggle = roomToggle(robot, { command: 'github nudges', brainKey: 'github:nudges-off', label: 'Review nudges' })
 
   // open, non-draft, old enough, no reviews yet; oldest first
   const waitingPulls = async (name: string): Promise<Pull[]> => {
@@ -941,7 +952,10 @@ export default async (robot: Robot) => {
     const lines = new Map<string, string[]>()
     const now = Date.now()
     for (const key of Object.keys(subs).sort()) {
-      const rooms = roomsFor(subs[key] || {}, 'prs').filter(r => onlyRoom ? r === onlyRoom : !nudgeToggle.isDisabled(r))
+      // async for uncached dms
+      const candidates = roomsFor(subs[key] || {}, 'prs')
+      const allowed = await Promise.all(candidates.map(r => onlyRoom ? r === onlyRoom : allowsRoomAsync(robot, r, 'github.nudges')))
+      const rooms = candidates.filter((_, i) => allowed[i])
       if (rooms.length === 0 || now < rateBlockedUntil) continue
       const name = getCursor(key)?.name || key
       if (!cache.has(key)) cache.set(key, waitingPulls(name))
@@ -977,7 +991,7 @@ export default async (robot: Robot) => {
     nudgeJobs.add({ id: 'daily', at: nextOccurrence(NUDGE_REPEAT, tz, Date.now()), tz, repeat: NUDGE_REPEAT, data: null })
   })
 
-  robot.respond(/github nudge$/i, async res => {
+  robot.respond(/github nudge$/i, { id: 'github.nudge' }, async res => {
     const room = res.message.room
     const subs = getSubs()
     if (!Object.values(subs).some(rooms => rooms[room]?.events.includes('prs'))) {
@@ -993,13 +1007,13 @@ export default async (robot: Robot) => {
     else await res.send(nudgeClear({ days: count(nudgeDays(), 'day') }, { room, tz: defaultTz() }))
   })
 
-  robot.respond(/github digest(?: (week|month))?$/i, async res => {
+  robot.respond(/github digest(?: (week|month))?$/i, { id: 'github.digest' }, async res => {
     const period = (res.match[1] || 'week').toLowerCase()
     const entries = eventsSince<GithubLog>(robot, 'github', Date.now() - (DIGEST_SPANS[period] ?? 7 * DAY_MS), res.message.room)
     await deliver(res.message.room, formatDigest(entries, period))
   })
 
-  robot.respond(/github$/i, async res => {
+  robot.respond(/github$/i, { id: 'github.help' }, async res => {
     await res.send([
       `\`${robot.name} github subscribe owner/repo [${CATEGORIES.join('|')}|all] [every 5m]\``,
       `\`${robot.name} github unsubscribe owner/repo [categories]\``,
@@ -1011,7 +1025,7 @@ export default async (robot: Robot) => {
     ].join('\n'))
   })
 
-  robot.respond(/github subscribe\s+(\S+)(.*)$/i, async res => {
+  robot.respond(/github subscribe\s+(\S+)(.*)$/i, { id: 'github.subscribe' }, async res => {
     const room = res.message.room
     const repo = parseRepo(required(res.match, 1))
     if (!repo) {
@@ -1097,7 +1111,7 @@ export default async (robot: Robot) => {
     await res.send(`Following ${repoLink(name)} here: ${events.join(', ')} (checking every ${formatDuration(base * 1000)}). \`${robot.name} github poll\` checks right away.`)
   })
 
-  robot.respond(/github unsubscribe\s+(\S+)(.*)$/i, async res => {
+  robot.respond(/github unsubscribe\s+(\S+)(.*)$/i, { id: 'github.unsubscribe' }, async res => {
     const room = res.message.room
     const repo = parseRepo(required(res.match, 1))
     if (!repo) {
@@ -1148,7 +1162,7 @@ export default async (robot: Robot) => {
     }
   }
 
-  robot.respond(/github (?:subscriptions|subs|list|status)$/i, async res => {
+  robot.respond(/github (?:subscriptions|subs|list|status)$/i, { id: 'github.subs' }, async res => {
     const room = res.message.room
     const subs = getSubs()
     const now = Date.now()
@@ -1161,7 +1175,7 @@ export default async (robot: Robot) => {
       : `This channel doesn't follow any repos. Try \`${robot.name} github subscribe owner/repo\`.`)
   })
 
-  robot.respond(/github poll(?:\s+(\S+))?$/i, async res => {
+  robot.respond(/github poll(?:\s+(\S+))?$/i, { id: 'github.poll' }, async res => {
     const room = res.message.room
     const subs = getSubs()
     let keys = Object.keys(subs).filter(key => subs[key]?.[room])

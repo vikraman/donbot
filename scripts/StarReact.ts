@@ -8,6 +8,10 @@
 import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
 
 import { reactionGuard } from './lib/reactionGuard.ts'
+import { defineFeature } from './lib/features.ts'
+import { allowsRoom } from './lib/policy.ts'
+
+defineFeature({ id: 'starreact', label: 'Star announcements', level: 'casual', passive: true, stores: 'nothing, but announces who starred whose message' })
 
 const ANNOUNCE_COOLDOWN_MS = 60 * 1000
 
@@ -19,6 +23,7 @@ export default async (robot: Robot) => {
 
   client.on('messageReactionAdd', async (reaction: DiscordReaction, user: DiscordUser) => {
     if (user.bot) return
+    if (!allowsRoom(robot, reaction.message.channelId, 'starreact')) return
     if (reaction.partial) {
       try {
         await reaction.fetch()

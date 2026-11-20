@@ -21,6 +21,11 @@ import type { Robot, Response } from 'hubot'
 import { rawMessageOf } from './lib/discordMessage.ts'
 import { zulipClient } from './lib/zulip.ts'
 import type { ZulipClient, ZulipEvent, ZulipMessage } from './lib/zulip.ts'
+import { defineFeature } from './lib/features.ts'
+import { isOwner } from './lib/owner.ts'
+import { allowsRoom } from './lib/policy.ts'
+
+defineFeature({ id: 'relay', label: 'Zulip relay', level: 'professional', help: ['>> ', 'hubot relay'] })
 
 export interface Bridge {
   channel: string
@@ -93,7 +98,7 @@ export default async (robot: Robot) => {
   const streamIds = new Map<string, number>()
   const subCache = new Map<string, { ok: boolean, at: number }>()
 
-  robot.respond(/relay$/i, async res => {
+  robot.respond(/relay$/i, { id: 'relay.info' }, async res => {
     if (!configured) {
       await res.send("The Zulip relay isn't set up.")
       return
@@ -106,9 +111,8 @@ export default async (robot: Robot) => {
     await res.send(`This channel is bridged to Zulip #${bridge.stream} > ${topicLabel(bridge.topic)}. Start a message with >> to send it there; only those messages cross over.`)
   })
 
-  robot.respond(/relay status$/i, async res => {
-    const ownerId = process.env.OWNER_USER_ID
-    if (!ownerId || String(res.message.user.id) !== ownerId) {
+  robot.respond(/relay status$/i, { id: 'relay.status' }, async res => {
+    if (!isOwner(res)) {
       await res.send("That's need-to-know, and you don't need to know.")
       return
     }
@@ -132,7 +136,7 @@ export default async (robot: Robot) => {
     return msg
   }
 
-  robot.hear(/^>>\s*([\s\S]+)/, async res => {
+  robot.hear(/^>>\s*([\s\S]+)/, { id: 'relay.send' }, async res => {
     const bridge = byChannel.get(String(res.message.user.room))
     if (!bridge) return
     const raw = rawMessageOf(res)
@@ -192,6 +196,7 @@ export default async (robot: Robot) => {
       await zulip.sendDirect(msg.sender_id, `Sorry, you need to be subscribed to #**${dmBridge.stream}** to relay to Discord.`)
       return
     }
+    if (!allowsRoom(robot, dmBridge.channel, 'relay')) return
     try {
       await robot.messageRoom(dmBridge.channel, toDiscord(msg, text, 'zulip DM'))
       await zulip.react(msg.id, 'check')
@@ -209,6 +214,7 @@ export default async (robot: Robot) => {
     const text = msg.content.replace(PREFIX, '').trim()
     if (!text) return
     for (const bridge of targets) {
+      if (!allowsRoom(robot, bridge.channel, 'relay')) continue
       try {
         await robot.messageRoom(bridge.channel, toDiscord(msg, text, 'zulip'))
       } catch (err) {
