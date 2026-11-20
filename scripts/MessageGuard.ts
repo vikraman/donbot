@@ -2,10 +2,14 @@
 //   Guards every message in and out. Discord re-sends a message when it's edited or a link preview
 //   loads; repeats are dropped, except an edit to a message no command picked up (a fixed typo).
 //   Outgoing messages may only ping users, never @everyone, @here or roles. Discord only.
+//   Markdown escapes some clients add (\| for |, \_ for _) are dropped from incoming text, and long
+//   replies are split at line breaks.
 //   Also logs unhandled promise rejections instead of letting them crash the bot.
 //
 
 import type { Robot } from 'hubot'
+
+import { splitMessage } from './lib/markdown.ts'
 
 // message ids remembered for repeat detection
 export const SEEN_LIMIT = 5000
@@ -15,6 +19,9 @@ interface Seen {
   // a command (not a hear-everything listener) acted on it
   handled: boolean
 }
+
+// some clients send \| for |
+export const unescapeMarkdown = (text: string): string => text.replace(/\\([\\*_~`|<>[\]()#.+-])/g, '$1')
 
 // listeners that hear every message don't count as handling it
 const isCatchAll = (regex: unknown): boolean => regex instanceof RegExp && regex.test('')
@@ -37,10 +44,14 @@ export default async (robot: Robot) => {
     const options = (client as { options?: Record<string, unknown> }).options
     if (options) options.allowedMentions = { parse: ['users'], repliedUser: true }
   }
+  // adapter splits mid-line
+  const adapter = robot.adapter as unknown as { breakUpMessage?: (text: string) => string[] }
+  if (typeof adapter.breakUpMessage === 'function') adapter.breakUpMessage = text => splitMessage(text)
 
   const seen = new Map<string, Seen>()
 
   robot.receiveMiddleware(async ({ response }) => {
+    if (typeof response.message.text === 'string') response.message.text = unescapeMarkdown(response.message.text)
     const { id, text } = response.message
     if (id === undefined || id === null || typeof text !== 'string') return true
     const key = String(id)

@@ -125,10 +125,10 @@ describe('Github helpers', () => {
   })
 
   it('escapes link text so titles cannot break out', () => {
-    assert.strictEqual(Github.link('a](x) @everyone', 'https://github.com/o/r'), '[a\\]\\(x\\) @​everyone](<https://github.com/o/r>)')
-    assert.strictEqual(Github.esc('`code` *b*\nnext'), '\\`code\\` \\*b\\* next')
+    assert.strictEqual(Github.link('a](x) @everyone', 'https://github.com/o/r'), '[a\\](x) @​everyone](<https://github.com/o/r>)')
+    assert.strictEqual(Github.esc('`code` *b*\nnext'), '`code` \\*b\\* next')
     assert.strictEqual(Github.link('t', 'https://github.com/o/r/tree/a>b'), '[t](<https://github.com/o/r/tree/a%3Eb>)')
-    assert.strictEqual(Github.esc('see https://x.io/a and HTTP://y.io'), 'see https\\://x.io/a and HTTP\\://y.io')
+    assert.strictEqual(Github.esc('see https://x.io/a and HTTP://y.io'), 'see <https://x.io/a> and <HTTP://y.io>')
   })
 
   it('formats repo and api status', () => {
@@ -141,7 +141,7 @@ describe('Github helpers', () => {
     const fresh = Github.formatRepoStatus({ ...stats, every: 60, idleTicks: 0, lastPollAt: 0, nextPollAt: START - 1 }, START)
     assert.match(fresh, /\nPolling: every 1m\nLast poll: never, next now, last post never$/)
     const failed = Github.formatRepoStatus({ ...stats, lastError: 'events: GitHub said `502`', lastPostAt: START - 7_200_000 }, START)
-    assert.match(failed, /\nLast poll: 3m ago \(failed: events: GitHub said \\`502\\`\), next in 13m, last post 2h ago$/)
+    assert.match(failed, /\nLast poll: 3m ago \(failed: events: GitHub said `502`\), next in 13m, last post 2h ago$/)
     assertNoBareUrls(failed)
     assert.strictEqual(Github.formatApiStatus({ authed: false, pausedUntil: 0 }, START), 'GitHub API: no token')
     const rate = { remaining: 2, limit: 5000, reset: START + 3_600_000 }

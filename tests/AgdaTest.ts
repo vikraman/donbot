@@ -7,7 +7,7 @@ import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 const FIXTURES = 'tests/fixtures/agda-cubical.json,tests/fixtures/agda-stdlib.json'
 
 describe('Agda', () => {
-  const state = setupRobot('Agda.ts', { envVars: ['AGDA_INDEX_URLS', 'OWNER_USER_ID'], deferLoad: true })
+  const state = setupRobot(['MessageGuard.ts', 'Agda.ts'], { envVars: ['AGDA_INDEX_URLS', 'OWNER_USER_ID'], deferLoad: true })
 
   const loaded = new WeakSet<object>()
 

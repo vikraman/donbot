@@ -6,6 +6,8 @@ import type { DiscordClient } from 'hubot'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
+import { unescapeMarkdown } from '../scripts/MessageGuard.ts'
+
 describe('MessageGuard', () => {
   const state = setupRobot(['MessageGuard.ts', 'Wins.ts', 'Kudos.ts'], { deferLoad: true })
 
@@ -15,6 +17,23 @@ describe('MessageGuard', () => {
     await state.robot.receive(new TextMessage(user, text, id))
   }
 
+  it('drops markdown escapes clients add, so a \\| splits like a |', async () => {
+    await state.loadScript()
+    const sent = collect(state.robot)
+    await send('@Dumbotheelephant win fixed snake\\_case \\| and C:\\Users', 'm0')
+    await send('@Dumbotheelephant wins', 'm0b')
+    assert.match(sent.at(-1)!, /fixed snake_case \| and C:\\Users/)
+    assert.strictEqual(unescapeMarkdown('a \\* b \\\\ c \\d'), 'a * b \\ c \\d')
+  })
+  it("replaces the adapter's mid-line splitting", async () => {
+    const adapter = state.robot.adapter as unknown as { breakUpMessage?: (text: string) => string[] }
+    adapter.breakUpMessage = text => [text.slice(0, 2000), text.slice(1999)]
+    await state.loadScript()
+    const text = Array.from({ length: 200 }, (_, i) => `line ${i} of a long help reply`).join('\n')
+    const chunks = adapter.breakUpMessage(text)
+    assert.ok(chunks.length > 1 && chunks.every(c => c.length <= 2000))
+    assert.strictEqual(chunks.join('\n'), text)
+  })
   it('drops a repeat of the same message, as from a link preview loading', async () => {
     await state.loadScript()
     const sent = collect(state.robot)

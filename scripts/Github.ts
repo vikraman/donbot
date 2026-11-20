@@ -40,6 +40,7 @@ import { DAY_MS, nextOccurrence } from './lib/time.ts'
 import type { Repeat } from './lib/time.ts'
 import { defaultTz } from './lib/timezone.ts'
 import { defineFeature } from './lib/features.ts'
+import { link, plain as esc } from './lib/markdown.ts'
 import { spaceOf } from './lib/spaces.ts'
 
 defineFeature({ id: 'github', label: 'GitHub', level: 'professional', help: ['hubot github'] })
@@ -72,7 +73,6 @@ const MAX_CI_KEYS = 200
 const MAX_COMMITS = 3
 const DISCORD_LIMIT = 2000
 const SUPPRESS_EMBEDS = 1 << 2
-const ZWSP = '​'
 const ZERO_SHA = /^0+$/
 // branch_deletion is skipped
 const ACTIVITY_TYPES = ['push', 'force_push', 'branch_creation', 'pr_merge']
@@ -324,17 +324,7 @@ class RateLimited extends Error {
 
 const GH = 'https://github.com'
 
-// discord treats a backslash before any punctuation as a literal
-export const esc = (text: string): string =>
-  text.replace(/\s+/g, ' ').trim()
-    .replace(/[\\`*_~|[\]()<>]/g, '\\$&')
-    .replace(/@(everyone|here)/gi, `@${ZWSP}$1`)
-    // escaped colon stops discord autolinking (and previewing) urls in text
-    .replace(/\b(https?):\/\//gi, '$1\\://')
-
-// <> keeps discord from previewing the link
-export const link = (text: string, url: string): string =>
-  `[${esc(text)}](<${url.replace(/[<> ]/g, encodeURIComponent)}>)`
+export { esc, link }
 
 const truncate = (text: string, n: number): string => {
   const flat = text.replace(/<!--[\s\S]*?-->/g, '').replace(/\s+/g, ' ').trim()
