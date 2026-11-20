@@ -3,8 +3,8 @@
 //   so other commands can find people by name.
 //
 // Commands:
-//   hubot seen <user> - Shows when <user> was last seen.
-//   hubot who do you know - Lists everyone the bot has seen talk.
+//   hubot seen <user> - Shows when <user> was last seen in this server.
+//   hubot who do you know - Lists everyone the bot has seen talk in this server.
 //   hubot who is your owner - Shows who owns/runs the bot.
 //
 
@@ -12,40 +12,48 @@ import type { Robot } from 'hubot'
 
 import { required } from './lib/match.ts'
 
-import { mentionFor } from './lib/mention.ts'
+import { defineFeature } from './lib/features.ts'
+import { allows } from './lib/policy.ts'
+import { findPeople, learnMember, membersOf, spaceOfRes, type SpaceId } from './lib/spaces.ts'
 
-interface SeenEntry {
-  name: string
-  time: number
-}
+defineFeature({ id: 'directory', label: 'Known names', level: 'professional', infra: true })
+defineFeature({ id: 'seen', label: 'Last seen', level: 'professional', passive: true, stores: 'when each person last spoke', help: ['hubot seen', 'hubot who do you know'] })
+defineFeature({ id: 'about', label: 'About donbot', level: 'professional', help: ['hubot who is your owner'] })
 
-const seenKey = (userId: string): string => `seen:${userId}`
 const LAST_MESSAGE_KEY = 'seen:last'
 
+const isDmSpace = (space: SpaceId): boolean => space.startsWith('dm:')
+
 export default async (robot: Robot) => {
-  robot.hear(/.*/, async res => {
+  robot.hear(/.*/, { id: 'directory.learn' }, async res => {
     const user = res.message.user
     if (user && user.id != null) {
+      // names always, times only where seen is on
       const known = robot.brain.userForId(user.id, { name: user.name })
       known.name = user.name
       const now = Date.now()
-      robot.brain.set(seenKey(user.id), { name: user.name, time: now })
+      const space = spaceOfRes(robot, res)
+      if (!isDmSpace(space)) learnMember(robot, space, String(user.id), user.name, allows(robot, res, 'seen') ? now : undefined)
       robot.brain.set(LAST_MESSAGE_KEY, now)
     }
   })
 
-  robot.respond(/who do you know\??$/i, async res => {
-    const users = Object.values(robot.brain.data.users || {})
-    const names = [...new Set(users.map(u => u.name).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-
-    if (names.length === 0) {
-      await res.send("I don't know anyone yet.")
+  robot.respond(/who do you know\??$/i, { id: 'seen.who' }, async res => {
+    const space = spaceOfRes(robot, res)
+    if (isDmSpace(space)) {
+      await res.send('I only keep track of people in servers.')
       return
     }
-    await res.send(`I know ${names.length} ${names.length === 1 ? 'person' : 'people'}: ${names.join(', ')}`)
+    const names = Object.values(membersOf(robot, space)).filter(m => m.seen !== undefined).map(m => m.name)
+    const sorted = [...new Set(names)].sort((a, b) => a.localeCompare(b))
+    if (sorted.length === 0) {
+      await res.send("I don't know anyone here yet.")
+      return
+    }
+    await res.send(`I know ${sorted.length} ${sorted.length === 1 ? 'person' : 'people'}: ${sorted.join(', ')}`)
   })
 
-  robot.respond(/who(?:'s| is) your owner\??$|who (?:made|owns|runs) you\??$/i, async res => {
+  robot.respond(/who(?:'s| is) your owner\??$|who (?:made|owns|runs) you\??$/i, { id: 'about.owner' }, async res => {
     const ownerId = process.env.OWNER_USER_ID
     if (!ownerId) {
       await res.send("I don't have an owner configured.")
@@ -56,25 +64,28 @@ export default async (robot: Robot) => {
     await res.send(owner ? `${owner.name} owns me.` : "My owner hasn't said anything yet, so I don't know their name.")
   })
 
-  robot.respond(/(?:seen|have you seen|when (?:was|did you see)) ([\w .-]+?)\??\s*$/i, async res => {
+  robot.respond(/(?:seen|have you seen|when (?:was|did you see)) ([\w .-]+?)\??\s*$/i, { id: 'seen.query' }, async res => {
     const name = required(res.match, 1).trim()
-    const users = robot.brain.usersForFuzzyName(name)
+    const space = spaceOfRes(robot, res)
+    if (isDmSpace(space)) {
+      await res.send('I only keep track of people in servers.')
+      return
+    }
+    // seen here only
+    const members = membersOf(robot, space)
+    const seen = findPeople(robot, space, name).filter(p => members[p.id]?.seen !== undefined)
 
-    if (users.length === 0) {
-      await res.send(`I don't know anything about ${name}.`)
+    if (seen.length === 0) {
+      await res.send(`I haven't seen ${name} here.`)
       return
     }
-    if (users.length > 1) {
-      await res.send(`Be more specific, I know ${users.length} people named like that: ${users.map(u => u.name).join(', ')}`)
+    if (seen.length > 1) {
+      await res.send(`Be more specific, I know ${seen.length} people named like that: ${seen.map(p => p.name).join(', ')}`)
       return
     }
 
-    const user = users[0]
-    const entry = user && robot.brain.get<SeenEntry>(seenKey(user.id))
-    if (!entry) {
-      await res.send(`I haven't seen ${name} say anything.`)
-      return
-    }
-    await res.send(`${mentionFor({ id: user.id, name: entry.name })} was last seen ${new Date(entry.time).toISOString()}`)
+    // name, not a mention
+    const [person] = seen
+    await res.send(`${person!.name} was last seen ${new Date(members[person!.id]!.seen!).toISOString()}`)
   })
 }

@@ -1,6 +1,7 @@
 import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
+import { configureLines } from '../scripts/lib/lines.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
@@ -56,6 +57,15 @@ describe('Wins', () => {
     assert.equal(sent[2], '• <@u1>: two (just now)\n• <@u1>: one (just now)')
     await robot.adapter.say(alice, '@Dumbotheelephant wins for nobody', 'room')
     assert.equal(sent[3], "I don't know nobody.")
+  })
+  it('keeps busy-day lines plain in professional rooms', async () => {
+    const { robot } = state
+    setRandomSource(() => 0)
+    configureLines({ casual: () => false })
+    const user = brainUser(robot, 'u1', 'alice')
+    const sent = collect(robot)
+    for (let i = 0; i < 3; i++) await robot.adapter.say(user, `@Dumbotheelephant win thing ${i}`, 'room')
+    assert.match(sent[2]!, /\nThat's 3 wins today\.$/)
   })
   it('notices busy days and celebrates milestone wins', async () => {
     const { robot } = state

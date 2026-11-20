@@ -127,17 +127,17 @@ describe('Standup', () => {
     await robot.adapter.say(user, 'standup: next: planning', 'room')
     assert.equal(sent[1], '✅ Thanks <@u1>! No DONE? Re-post to add it.')
   })
-  it('lets only the owner change the schedule', async () => {
+  it('lets only channel managers change the schedule', async () => {
     const { robot } = state
     const alice = brainUser(robot, 'u1', 'alice')
     const bob = brainUser(robot, 'u2', 'bob')
     const sent = collect(robot)
     await robot.adapter.say(bob, '@Dumbotheelephant standup every monday at 10am', 'room')
-    assert.equal(sent[0], 'Only my owner can do that.')
+    assert.equal(sent[0], 'Only someone who can manage this channel can do that.')
     assert.equal(robot.brain.get('schedule:standup'), null)
     await robot.adapter.say(alice, '@Dumbotheelephant standup every monday at 10am', 'room')
     for (const cmd of ['standup skip', 'standup unskip', 'standup off']) await robot.adapter.say(bob, `@Dumbotheelephant ${cmd}`, 'room')
-    assert.deepEqual(sent.slice(2), Array(3).fill('Only my owner can do that.'))
+    assert.deepEqual(sent.slice(2), Array(3).fill('Only someone who can manage this channel can do that.'))
     assert.equal(robot.brain.get<unknown[]>('schedule:standup')!.length, 1)
     await robot.adapter.say(bob, '@Dumbotheelephant standup', 'room')
     assert.match(sent[5]!, /^Standup runs every Monday/)

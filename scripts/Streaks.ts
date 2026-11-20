@@ -13,15 +13,19 @@ import { entriesWithPrefix } from './lib/brainScan.ts'
 import { githubLoginOf } from './lib/githubUsers.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
-import { getStreak, STREAK_KINDS, streakLabel, streakPeriod } from './lib/streak.ts'
+import { getStreak, STREAK_KINDS, streakLabel, streakPeriod, streakPrefix } from './lib/streak.ts'
 import type { StreakKind } from './lib/streak.ts'
+import { defineFeature } from './lib/features.ts'
+import { findPeople, spaceOfRes, type SpaceId } from './lib/spaces.ts'
+
+defineFeature({ id: 'streaks', label: 'Streaks', level: 'professional', help: ['hubot streaks', 'hubot top streaks'] })
 
 const ICONS: Record<StreakKind, string> = { standup: '📋', focus: '🎯', win: '🏆', commit: '🐙' }
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
 
-const describe = (robot: Robot, kind: StreakKind, userId: string): string | undefined => {
-  const streak = getStreak(robot, kind, userId)
+const describe = (robot: Robot, space: SpaceId, kind: StreakKind, userId: string): string | undefined => {
+  const streak = getStreak(robot, space, kind, userId)
   if (!streak) return undefined
   const unit = streakPeriod(kind)
   const now = streak.current ? plural(streak.current, unit) : 'none right now'
@@ -29,8 +33,8 @@ const describe = (robot: Robot, kind: StreakKind, userId: string): string | unde
 }
 
 export default async (robot: Robot) => {
-  const show = async (userId: string, self: boolean, send: (text: string) => Promise<void>) => {
-    const lines = STREAK_KINDS.map(kind => describe(robot, kind, userId)).filter((l): l is string => Boolean(l))
+  const show = async (space: SpaceId, userId: string, self: boolean, send: (text: string) => Promise<void>) => {
+    const lines = STREAK_KINDS.map(kind => describe(robot, space, kind, userId)).filter((l): l is string => Boolean(l))
     if (lines.length === 0) {
       await send(self
         ? 'No streaks yet. Check in at standup, log a `win`, start a `focus` session, or link GitHub with `my github is <username>` to count commits.'
@@ -41,26 +45,27 @@ export default async (robot: Robot) => {
     await send(`🔥 ${self ? 'Your' : `${mentionFor({ id: userId })}'s`} streaks:\n${lines.join('\n')}${hint}`)
   }
 
-  robot.respond(/(?:my )?streaks?$/i, async res => {
-    await show(res.message.user.id, true, text => res.send(text))
+  robot.respond(/(?:my )?streaks?$/i, { id: 'streaks.mine' }, async res => {
+    await show(spaceOfRes(robot, res), res.message.user.id, true, text => res.send(text))
   })
 
-  robot.respond(/streaks? for @?(.+?)\s*$/i, async res => {
+  robot.respond(/streaks? for @?(.+?)\s*$/i, { id: 'streaks.for' }, async res => {
     const who = required(res.match, 1)
     const mention = who.match(/^<@!?(\d+)>$/)
-    const users = mention ? [{ id: mention[1]! }] : robot.brain.usersForFuzzyName(who)
+    const users = mention ? [{ id: mention[1]! }] : findPeople(robot, spaceOfRes(robot, res), who)
     if (users.length !== 1) {
       await res.send(users.length ? `Be more specific, that matches ${users.length} people.` : `I don't know ${who}.`)
       return
     }
-    await show(users[0]!.id, users[0]!.id === res.message.user.id, text => res.send(text))
+    await show(spaceOfRes(robot, res), users[0]!.id, users[0]!.id === res.message.user.id, text => res.send(text))
   })
 
-  robot.respond(/top streaks$/i, async res => {
+  robot.respond(/top streaks$/i, { id: 'streaks.top' }, async res => {
     const lines: string[] = []
     for (const kind of STREAK_KINDS) {
-      const best = entriesWithPrefix(robot, `streak:${kind}:`)
-        .map(([userId]) => ({ userId, current: getStreak(robot, kind, userId)?.current ?? 0 }))
+      const space = spaceOfRes(robot, res)
+      const best = entriesWithPrefix(robot, streakPrefix(space, kind))
+        .map(([userId]) => ({ userId, current: getStreak(robot, space, kind, userId)?.current ?? 0 }))
         .filter(s => s.current > 0)
         .sort((a, b) => b.current - a.current)
         .slice(0, 3)

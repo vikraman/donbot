@@ -28,6 +28,10 @@ import type { Job } from './lib/schedule.ts'
 import { getStreak, recordStreak } from './lib/streak.ts'
 import { DAY_MS, dayKey, MINUTE_MS, unitMs } from './lib/time.ts'
 import { userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { spaceOf, spaceOfRes } from './lib/spaces.ts'
+
+defineFeature({ id: 'focus', label: 'Focus sessions', level: 'professional', help: ['hubot focus', 'hubot pomodoro', 'hubot tock', 'hubot distraction', 'hubot skip break', 'hubot who\'s focusing'] })
 
 export const DEFAULT_MINUTES = 25
 export const MAX_MINUTES = 4 * 60
@@ -230,22 +234,23 @@ export default async (robot: Robot) => {
   // streak and milestone lines for a finished stretch of work
   const logWork = (session: Session, minutes: number): string | undefined => {
     const tz = userTz(robot, session.userId)
-    const mine = eventsSince<FocusEntry>(robot, 'focus', Date.now() - 7 * DAY_MS).filter(e => e.userId === session.userId)
+    const space = spaceOf(robot, session.room)
+    const mine = eventsSince<FocusEntry>(robot, 'focus', Date.now() - 7 * DAY_MS, { space }).filter(e => e.userId === session.userId)
     const today = dayKey(Date.now(), tz)
     const tocksToday = mine.filter(e => dayKey(e.ts, tz) === today).reduce((n, e) => n + (e.tocks ?? 0), 0)
     const weekMinutes = mine.reduce((n, e) => n + e.minutes, 0)
     const tocks = session.cycle?.tock ? Math.min(minutes / TOCK.work, 1) : undefined
-    logEvent(robot, 'focus', { room: session.room, userId: session.userId, minutes, task: session.task, tocks })
+    logEvent(robot, 'focus', { room: session.room, space, userId: session.userId, minutes, task: session.task, tocks })
     const extra: string[] = []
     const v = { ...vars(session), minutes }
     if (tocks && tocksToday < TOCK_DAY && tocksToday + tocks >= TOCK_DAY) extra.push(tockDayLine({ ...v, tocks: formatTocks(tocksToday + tocks) }, opts(session)))
     if (weekMinutes < BIG_WEEK_MINUTES && weekMinutes + minutes >= BIG_WEEK_MINUTES) extra.push(bigWeekLine(v, opts(session)))
-    const streak = recordStreak(robot, 'focus', session.userId)
+    const streak = recordStreak(robot, space, 'focus', session.userId)
     return [...extra, streak].filter(Boolean).join('\n') || undefined
   }
 
   const say = async (room: string, ...lines: (string | undefined)[]) => {
-    await postToRoom(robot, room, lines.filter(Boolean).join('\n'))
+    await postToRoom(robot, room, lines.filter(Boolean).join('\n'), 'focus')
   }
 
   const sessions = scheduler<Session>(robot, 'focus', async (job: Job<Session>) => { await advance(job.data) })
@@ -333,7 +338,7 @@ export default async (robot: Robot) => {
     await res.send(`🎯 Focusing for ${fmt(minutes)}${taskSuffix(session.task)}. ${startTail(vars(session), opts(session))}`)
   }
 
-  robot.respond(/tock(?: (\d+)(?: tocks?)?)?(?: on (.+))?$/i, async res => {
+  robot.respond(/tock(?: (\d+)(?: tocks?)?)?(?: on (.+))?$/i, { id: 'focus.tock' }, async res => {
     const userId = res.message.user.id
     const task = res.match[2]?.trim()
     const job = sessions.get(jobId(userId))
@@ -360,7 +365,7 @@ export default async (robot: Robot) => {
     await res.send(`🕰️ Tock on ${task}: 45m, then a 15m break, ${plan}. \`distraction <note>\` parks stray thoughts. ${goLine(vars(session), opts(session))}`)
   })
 
-  robot.respond(/distraction:? (.+)$/i, async res => {
+  robot.respond(/distraction:? (.+)$/i, { id: 'focus.distraction' }, async res => {
     const job = sessions.get(jobId(res.message.user.id))
     if (!job || job.data.phase !== 'work') {
       await res.send('Only while focusing. Write it down and get back to it later!')
@@ -371,10 +376,10 @@ export default async (robot: Robot) => {
     await res.send(parkedLine(vars(job.data), opts(job.data)))
   })
 
-  robot.respond(/tocks$/i, async res => {
+  robot.respond(/tocks$/i, { id: 'focus.tocks' }, async res => {
     const userId = res.message.user.id
     const tz = userTz(robot, userId)
-    const mine = eventsSince<FocusEntry>(robot, 'focus', Date.now() - 7 * DAY_MS).filter(e => e.userId === userId && e.tocks)
+    const mine = eventsSince<FocusEntry>(robot, 'focus', Date.now() - 7 * DAY_MS, { space: spaceOfRes(robot, res) }).filter(e => e.userId === userId && e.tocks)
     const today = dayKey(Date.now(), tz)
     const sum = (entries: FocusEntry[]) => entries.reduce((n, e) => n + (e.tocks ?? 0), 0)
     if (mine.length === 0) {
@@ -384,7 +389,7 @@ export default async (robot: Robot) => {
     await res.send(`${formatTocks(sum(mine.filter(e => dayKey(e.ts, tz) === today)))} today, ${formatTocks(sum(mine))} in the last 7 days.`)
   })
 
-  robot.respond(/pomodoro(?: (\d+)(?: rounds?)?)?(?: (\d+\/\d+(?:\/\d+)?))?(?: on (.+))?$/i, async res => {
+  robot.respond(/pomodoro(?: (\d+)(?: rounds?)?)?(?: (\d+\/\d+(?:\/\d+)?))?(?: on (.+))?$/i, { id: 'focus.pomodoro' }, async res => {
     const rounds = res.match[1] ? Number(res.match[1]) : 0
     const lengths = parseCycle(res.match[2])
     if (!lengths || rounds > MAX_ROUNDS) {
@@ -399,7 +404,7 @@ export default async (robot: Robot) => {
     await res.send(`🍅 Pomodoros${taskSuffix(task)}: ${cycle.work}m work, ${cycle.short}m breaks, ${cycle.long}m every ${cycle.longEvery}th, ${plan}. Round 1, go!`)
   })
 
-  robot.respond(/skip(?: the)? break$/i, async res => {
+  robot.respond(/skip(?: the)? break$/i, { id: 'focus.skip' }, async res => {
     const job = sessions.get(jobId(res.message.user.id))
     if (!job || job.data.phase !== 'break') {
       await res.send("You're not on a break.")
@@ -409,7 +414,7 @@ export default async (robot: Robot) => {
     await advance(job.data)
   })
 
-  robot.respond(/focus stop$|(?:stop|done) focusing$|(?:pomodoro|tock) stop$|stop (?:pomodoros?|tocks?)$/i, async res => {
+  robot.respond(/focus stop$|(?:stop|done) focusing$|(?:pomodoro|tock) stop$|stop (?:pomodoros?|tocks?)$/i, { id: 'focus.stop' }, async res => {
     const job = sessions.get(jobId(res.message.user.id))
     if (!job) {
       await res.send("You're not in a focus session.")
@@ -431,7 +436,7 @@ export default async (robot: Robot) => {
     await say(session.room, `${mentionFor({ id: session.userId })} stopped after ${fmt(counted)}${taskSuffix(session.task)}. Still counts.`, parked(session), streak)
   })
 
-  robot.respond(/who(?:'s| is) focusing\??$/i, async res => {
+  robot.respond(/who(?:'s| is) focusing\??$/i, { id: 'focus.who' }, async res => {
     const active = sessions.list()
     if (active.length === 0) {
       await res.send('Nobody is focusing right now.')
@@ -449,11 +454,12 @@ export default async (robot: Robot) => {
     await res.send(`🤫 Focusing now:\n${lines.join('\n')}`)
   })
 
-  robot.respond(/focus stats$/i, async res => {
+  robot.respond(/focus stats$/i, { id: 'focus.stats' }, async res => {
     const userId = res.message.user.id
-    const mine = eventsSince<FocusEntry>(robot, 'focus', Date.now() - 7 * DAY_MS).filter(e => e.userId === userId)
+    const space = spaceOfRes(robot, res)
+    const mine = eventsSince<FocusEntry>(robot, 'focus', Date.now() - 7 * DAY_MS, { space }).filter(e => e.userId === userId)
     const total = mine.reduce((sum, e) => sum + e.minutes, 0)
-    const streak = getStreak(robot, 'focus', userId)
+    const streak = getStreak(robot, space, 'focus', userId)
     const streakText = streak && streak.current > 0 ? ` You're on a ${streak.current}-day streak (best ${streak.best}).` : ''
     if (total === 0) {
       await res.send(`No focus sessions in the last 7 days.${streakText} \`focus\` starts one.`)
@@ -464,7 +470,7 @@ export default async (robot: Robot) => {
     await res.send(`${fmt(total)} of focus over ${mine.length} ${mine.length === 1 ? 'session' : 'sessions'}${tockText} in the last 7 days.${streakText}`)
   })
 
-  robot.respond(/focus(?: (\d+)\s*([a-z]+)?)?(?: on (.+))?$/i, async res => {
+  robot.respond(/focus(?: (\d+)\s*([a-z]+)?)?(?: on (.+))?$/i, { id: 'focus.start' }, async res => {
     await start(res, res.match[1], res.match[2], res.match[3])
   })
 }

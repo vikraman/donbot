@@ -3,12 +3,9 @@
 //
 // Commands:
 //   hubot recap - Posts the last 7 days' recap now.
-//   hubot recap on [every <day> at <time>] - (Owner only) Posts it automatically, Fridays at 4pm by default.
-//   hubot recap off - (Owner only) Stops the automatic recap.
+//   hubot recap on [every <day> at <time>] - (Manage Channels) Posts it automatically, Fridays at 4pm by default.
+//   hubot recap off - (Manage Channels) Stops the automatic recap.
 //   hubot recap status - Shows when the next recap is due.
-//
-// Configuration:
-//   OWNER_USER_ID - Discord user ID allowed to turn the recap on or off.
 //
 
 import type { Robot } from 'hubot'
@@ -19,12 +16,16 @@ import type { LogEntry } from './lib/eventLog.ts'
 import { defineLines } from './lib/lines.ts'
 import { userForGithubLogin } from './lib/githubUsers.ts'
 import { mentionFor } from './lib/mention.ts'
-import { isOwner, OWNER_ONLY } from './lib/owner.ts'
+import { canManage, MANAGE_ONLY } from './lib/permissions.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { getStreak, STREAK_KINDS, streakLabel, streakPeriod } from './lib/streak.ts'
 import { DAY_MS, describeRepeat, formatWhen, MINUTE_MS, parseWhen } from './lib/time.ts'
 import { defaultTz, tzNote, userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { spaceOf } from './lib/spaces.ts'
+
+defineFeature({ id: 'recap', label: 'Weekly recap', level: 'professional', help: ['hubot recap'] })
 
 const WEEK_MS = 7 * DAY_MS
 const DEFAULT_SCHEDULE = 'every friday at 4pm'
@@ -36,6 +37,7 @@ interface GithubEntry extends LogEntry { repo: string, kind: string, item?: stri
 interface HistoryEntry { ts: number, kind: string, authorId?: string }
 
 const closer = defineLines('recap.closer', {
+  professional: ['Great week, everyone. 👋', 'That\'s a wrap. See you next week. 👋', 'Nice work all round. 💚', 'Thanks, everyone. Have a good weekend.'],
   fallback: [
     'Great week, everyone. Rest up. 🌴',
     'Proud of this crew. Have a good weekend! 🍻',
@@ -62,6 +64,7 @@ const closer = defineLines('recap.closer', {
 })
 
 const quietWeek = defineLines('recap.quiet', {
+  professional: ['📰 Weekly recap: a quiet week here. Log a `win` or give some `kudos` next week!', '📰 Weekly recap: a quiet week here. A `focus` session or a `standup:` check-in would show up here.'],
   fallback: {
     open: [
       '📰 Weekly recap: a quiet week here.',
@@ -80,6 +83,7 @@ const quietWeek = defineLines('recap.quiet', {
 
 // earned highlights, posted above the closer
 const bigFocus = defineLines('recap.bigFocus', {
+  professional: ['🧠 Over {hours} hours of focus this week.'],
   fallback: [
     '🧠 Over {hours} hours of focus this week. Brains: fully deployed.',
     '🧠 {hours}+ hours of deep work. Somebody check the room for scorch marks.',
@@ -87,6 +91,7 @@ const bigFocus = defineLines('recap.bigFocus', {
   ]
 })
 const winStorm = defineLines('recap.winStorm', {
+  professional: ['🌪️ {wins} wins this week.'],
   fallback: [
     '🌪️ {wins} wins in one week. That\'s not a week, that\'s a highlight reel.',
     '🌪️ A storm of {wins} wins this week. Please wear protective gear.',
@@ -94,6 +99,7 @@ const winStorm = defineLines('recap.winStorm', {
   ]
 })
 const perfectStandup = defineLines('recap.perfectStandup', {
+  professional: ['💯 Perfect standup attendance: everyone checked in.'],
   fallback: [
     '💯 Perfect standup attendance: everyone checked in. Gold stars all round.',
     '💯 Every single person checked in to standup. I\'m not crying, you\'re crying.',
@@ -182,7 +188,7 @@ export const buildRecap = (robot: Robot, room: string, now = Date.now(), tz = de
     sections.push(`💬 ${plural(messages.length, 'message')}${chattiest ? `, most from ${mentionFor({ id: chattiest[0] })}` : ''}.`)
   }
 
-  // streaks are global, so only people seen in this room this week
+  // people active here this week
   const active = new Set<string>([
     ...kudos.flatMap(k => [k.userId, k.targetId]),
     ...wins.map(w => w.userId),
@@ -191,7 +197,7 @@ export const buildRecap = (robot: Robot, room: string, now = Date.now(), tz = de
     ...messages.map(m => m.authorId),
     ...github.map(g => g.actor && userForGithubLogin(robot, g.actor))
   ].filter((id): id is string => Boolean(id)))
-  const streaks = [...active].flatMap(userId => STREAK_KINDS.map(kind => ({ userId, kind, current: getStreak(robot, kind, userId, now)?.current ?? 0 })))
+  const streaks = [...active].flatMap(userId => STREAK_KINDS.map(kind => ({ userId, kind, current: getStreak(robot, spaceOf(robot, room), kind, userId, now)?.current ?? 0 })))
     .filter(s => s.current >= MIN_RECAP_STREAK)
     // weeks outrank days
     .sort((a, b) => b.current * (streakPeriod(b.kind) === 'week' ? 7 : 1) - a.current * (streakPeriod(a.kind) === 'week' ? 7 : 1))
@@ -208,14 +214,14 @@ interface RecapJob { room: string }
 
 export default async (robot: Robot) => {
   const recaps = scheduler<RecapJob>(robot, 'recap', async job => {
-    await postToRoom(robot, job.data.room, buildRecap(robot, job.data.room, Date.now(), job.tz))
+    await postToRoom(robot, job.data.room, buildRecap(robot, job.data.room, Date.now(), job.tz), 'recap')
   }, { missedGraceMs: DAY_MS })
 
   const jobId = (room: string): string => `recap:${room}`
 
-  robot.respond(/recap on(?: (every .+))?$/i, async res => {
-    if (!isOwner(res)) {
-      await res.send(OWNER_ONLY)
+  robot.respond(/recap on(?: (every .+))?$/i, { id: 'recap.on' }, async res => {
+    if (!canManage(res, 'channel')) {
+      await res.send(MANAGE_ONLY.channel)
       return
     }
     const room = res.message.room
@@ -229,23 +235,23 @@ export default async (robot: Robot) => {
     await res.send(`Weekly recap on, ${describeRepeat(when.repeat)}${tzNote(tz)}. First one ${formatWhen(when.at, tz)}.`)
   })
 
-  robot.respond(/recap off$/i, async res => {
-    if (!isOwner(res)) {
-      await res.send(OWNER_ONLY)
+  robot.respond(/recap off$/i, { id: 'recap.off' }, async res => {
+    if (!canManage(res, 'channel')) {
+      await res.send(MANAGE_ONLY.channel)
       return
     }
     const removed = recaps.remove(jobId(res.message.room))
     await res.send(removed ? 'Weekly recap off for this channel.' : 'This channel has no recap scheduled.')
   })
 
-  robot.respond(/recap status$/i, async res => {
+  robot.respond(/recap status$/i, { id: 'recap.status' }, async res => {
     const job = recaps.get(jobId(res.message.room))
     await res.send(job?.repeat
       ? `Recap runs ${describeRepeat(job.repeat)}${tzNote(job.tz)}, next ${formatWhen(job.at, job.tz)}.`
       : `No recap scheduled. \`${robot.name} recap on\` posts one every Friday at 4pm.`)
   })
 
-  robot.respond(/(?:weekly )?recap(?: week)?$/i, async res => {
+  robot.respond(/(?:weekly )?recap(?: week)?$/i, { id: 'recap.show' }, async res => {
     await res.send(buildRecap(robot, res.message.room, Date.now(), userTz(robot, res.message.user.id)))
   })
 }

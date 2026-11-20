@@ -1,6 +1,7 @@
 import { beforeEach, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
+import { configureLines } from '../scripts/lib/lines.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
 import { dayKey, weekKey } from '../scripts/lib/time.ts'
 import { defaultTz } from '../scripts/lib/timezone.ts'
@@ -19,6 +20,15 @@ describe('Recap', () => {
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
     assert.match(sent[0]!, /quiet week/)
+  })
+  it('keeps a quiet-week recap plain in professional rooms', async () => {
+    const { robot } = state
+    setRandomSource(() => 0.99)
+    configureLines({ casual: () => false })
+    const user = brainUser(robot, 'u1', 'alice')
+    const sent = collect(robot)
+    await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
+    assert.match(sent[0]!, /^📰 Weekly recap: a quiet week here\. A `focus` session or a `standup:` check-in would show up here\./)
   })
   it('summarizes the week from every log, for this room only', async () => {
     const { robot } = state
@@ -84,7 +94,7 @@ describe('Recap', () => {
     await robot.adapter.say(user, '@Dumbotheelephant recap off', 'room')
     assert.equal(sent[3], 'Weekly recap off for this channel.')
   })
-  it('lets only the owner turn the recap on or off', async () => {
+  it('lets only channel managers turn the recap on or off', async () => {
     const { robot } = state
     const alice = brainUser(robot, 'u1', 'alice')
     const bob = brainUser(robot, 'u2', 'bob')
@@ -92,8 +102,8 @@ describe('Recap', () => {
     await robot.adapter.say(bob, '@Dumbotheelephant recap on', 'room')
     await robot.adapter.say(alice, '@Dumbotheelephant recap on', 'room')
     await robot.adapter.say(bob, '@Dumbotheelephant recap off', 'room')
-    assert.equal(sent[0], 'Only my owner can do that.')
-    assert.equal(sent[2], 'Only my owner can do that.')
+    assert.equal(sent[0], 'Only someone who can manage this channel can do that.')
+    assert.equal(sent[2], 'Only someone who can manage this channel can do that.')
     assert.equal(robot.brain.get<unknown[]>('schedule:recap')!.length, 1)
   })
   it('posts on schedule', async () => {

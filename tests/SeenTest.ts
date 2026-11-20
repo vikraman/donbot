@@ -11,7 +11,7 @@ describe('Seen testing Hubot scripts', () => {
     const user = brainUser(robot, 'author-id', 'author')
     const sent = collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant seen nobody', 'test-room')
-    assert.strictEqual(sent[0], "I don't know anything about nobody.")
+    assert.strictEqual(sent[0], "I haven't seen nobody here.")
   })
   it('should report the last seen time for a user after they speak', async () => {
     const { robot } = state
@@ -20,7 +20,7 @@ describe('Seen testing Hubot scripts', () => {
     const sent = collect(robot)
     await robot.adapter.say(holman, 'hello there', 'test-room')
     await robot.adapter.say(author, '@Dumbotheelephant seen holman', 'test-room')
-    assert.match(sent[0]!, /^<@holman-id> was last seen /)
+    assert.match(sent[0]!, /^holman was last seen /)
   })
   it('should support "have you seen" as an alternate phrasing', async () => {
     const { robot } = state
@@ -29,7 +29,7 @@ describe('Seen testing Hubot scripts', () => {
     const sent = collect(robot)
     await robot.adapter.say(holman, 'hello there', 'test-room')
     await robot.adapter.say(author, '@Dumbotheelephant have you seen holman', 'test-room')
-    assert.match(sent[0]!, /^<@holman-id> was last seen /)
+    assert.match(sent[0]!, /^holman was last seen /)
   })
   it('should register a speaker in the brain just from them talking, with no prior registration', async () => {
     const { robot } = state

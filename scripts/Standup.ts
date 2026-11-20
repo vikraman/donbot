@@ -5,18 +5,16 @@
 //   Shortly before the summary, it pings last round's people who haven't checked in yet.
 //
 // Commands:
-//   hubot standup every <days> at <time> [, summary after <N> <unit>] - (Owner only) Schedules this channel's standup, e.g. "every monday at 10am" or "every friday at 2pm, summary after 3 hours".
-//   hubot standup skip - (Owner only) Skips the next standup (holidays, offsites); streaks are paused, not broken.
-//   hubot standup unskip - (Owner only) Undoes a skip.
-//   hubot standup off - (Owner only) Stops this channel's standup.
+//   hubot standup every <days> at <time> [, summary after <N> <unit>] - (Manage Channels) Schedules this channel's standup, e.g. "every monday at 10am" or "every friday at 2pm, summary after 3 hours".
+//   hubot standup skip - (Manage Channels) Skips the next standup (holidays, offsites); streaks are paused, not broken.
+//   hubot standup unskip - (Manage Channels) Undoes a skip.
+//   hubot standup off - (Manage Channels) Stops this channel's standup.
 //   hubot standup - Shows the schedule and who has checked in this round.
 //   hubot standup summary - Shows this round's summary now.
 //   standup: DONE: <..> NEXT: <..> BLOCKERS: <..> DISCUSS: <..> - Checks in, one section per line or inline. Re-posting replaces your check-in.
 //
-// The schedule uses the timezone of whoever set it (see `my timezone is`). Streaks count weeks.
-//
-// Configuration:
-//   OWNER_USER_ID - Discord user ID allowed to change the schedule.
+// Notes:
+//   The schedule uses the timezone of whoever set it (see `my timezone is`). Streaks count weeks.
 //
 
 import type { Robot, Response } from 'hubot'
@@ -26,12 +24,16 @@ import { logEvent } from './lib/eventLog.ts'
 import { defineLines } from './lib/lines.ts'
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
-import { isOwner, OWNER_ONLY } from './lib/owner.ts'
+import { canManage, MANAGE_ONLY } from './lib/permissions.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { freezeStreak, recordStreak } from './lib/streak.ts'
 import { DAY_MS, describeRepeat, formatWhen, HOUR_MS, MINUTE_MS, parseWhen, unitMs } from './lib/time.ts'
 import { tzNote, userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { spaceOf, spaceOfRes } from './lib/spaces.ts'
+
+defineFeature({ id: 'standup', label: 'Standups', level: 'professional', help: ['hubot standup', 'standup:'] })
 
 export const SUMMARY_DELAY_MS = DAY_MS
 const MIN_SUMMARY_DELAY_MS = 15 * MINUTE_MS
@@ -121,6 +123,7 @@ const reminder = defineLines('standup.reminder', {
 })
 
 const emptyRound = defineLines('standup.empty', {
+  professional: ['📋 Standup summary: nobody checked in this round.'],
   fallback: [
     '📋 Standup summary: nobody checked in this round.',
     '📋 Standup summary: crickets this round. 🦗',
@@ -171,7 +174,7 @@ export default async (robot: Robot) => {
     return typeof stored === 'object' && stored !== null && Array.isArray((stored as Round).checkIns) ? stored as Round : undefined
   }
 
-  robot.brain.on('loaded', () => {
+  robot.brain.on('connected', () => {
     for (const key of Object.keys(robot.brain.data._private || {})) {
       if (key.startsWith(LEGACY_DAY_PREFIX)) robot.brain.remove(key)
     }
@@ -198,7 +201,7 @@ export default async (robot: Robot) => {
     const round = readRound(room)
     if (!round || round.summarized) return
     robot.brain.set(roundKey(room), { ...round, summarized: true })
-    await postToRoom(robot, room, summaryText(round, room))
+    await postToRoom(robot, room, summaryText(round, room), 'standup')
   }
 
   const summaries = scheduler<StandupJob>(robot, 'standup-summary', async job => { await summarize(job.data.room) })
@@ -213,7 +216,7 @@ export default async (robot: Robot) => {
     const summary = summaries.get(`summary:${room}`)
     const when = summary ? ` in ${formatDuration(summary.at - Date.now(), { round: Math.ceil })}` : ' soon'
     const nag = reminder({ when, missing: missing.map(id => mentionFor({ id })).join(', ') }, { room, tz: job.tz })
-    await postToRoom(robot, room, `${nag}: \`standup: DONE: … NEXT: …\``)
+    await postToRoom(robot, room, `${nag}: \`standup: DONE: … NEXT: …\``, 'standup')
   })
 
   const prompts = scheduler<StandupJob>(robot, 'standup', async job => {
@@ -226,8 +229,8 @@ export default async (robot: Robot) => {
       const next = prompts.get(job.id)
       if (next) prompts.add({ ...next, data: { ...next.data, skip: false } })
       const people = previous ? [...new Set(previous.checkIns.map(c => c.userId))] : []
-      for (const userId of people) freezeStreak(robot, 'standup', userId)
-      await postToRoom(robot, room, '🏖️ No standup this week. Streaks are paused, not broken.')
+      for (const userId of people) freezeStreak(robot, spaceOf(robot, room), 'standup', userId)
+      await postToRoom(robot, room, '🏖️ No standup this week. Streaks are paused, not broken.', 'standup')
       return
     }
     const expected = previous ? [...new Set(previous.checkIns.map(c => c.userId))] : []
@@ -238,7 +241,7 @@ export default async (robot: Robot) => {
     if (expected.length) {
       reminders.add({ id: `reminder:${room}`, at: now + delay - Math.min(REMINDER_LEAD_MS, delay / 2), tz: job.tz, data: { room } })
     }
-    await postToRoom(robot, room, `${prompt({}, { room, tz: job.tz })} Check in any time, summary ${formatWhen(now + delay, job.tz)}. Reply with:\n${TEMPLATE}`)
+    await postToRoom(robot, room, `${prompt({}, { room, tz: job.tz })} Check in any time, summary ${formatWhen(now + delay, job.tz)}. Reply with:\n${TEMPLATE}`, 'standup')
   }, {
     // a prompt missed during downtime still goes out, late, within a day
     missedGraceMs: DAY_MS,
@@ -246,16 +249,16 @@ export default async (robot: Robot) => {
     onMissed: job => {
       if (!job.data.skip) return job
       const previous = readRound(job.data.room)
-      for (const userId of new Set(previous?.checkIns.map(c => c.userId))) freezeStreak(robot, 'standup', userId)
+      for (const userId of new Set(previous?.checkIns.map(c => c.userId))) freezeStreak(robot, spaceOf(robot, job.data.room), 'standup', userId)
       return { ...job, data: { ...job.data, skip: false } }
     }
   })
 
   const promptId = (room: string): string => `standup:${room}`
 
-  robot.respond(/standup (every .+?)(?:,? (?:and )?summary (?:after|in) (\d+) ?([a-z]+))?$/i, async res => {
-    if (!isOwner(res)) {
-      await res.send(OWNER_ONLY)
+  robot.respond(/standup (every .+?)(?:,? (?:and )?summary (?:after|in) (\d+) ?([a-z]+))?$/i, { id: 'standup.every' }, async res => {
+    if (!canManage(res, 'channel')) {
+      await res.send(MANAGE_ONLY.channel)
       return
     }
     const room = res.message.room
@@ -277,9 +280,9 @@ export default async (robot: Robot) => {
     await res.send(`Standup set for ${describeRepeat(when.repeat)}${tzNote(tz)}, summary ${formatDuration(summaryMs)} later. First one is ${formatWhen(when.at, tz)}.`)
   })
 
-  robot.respond(/standup (skip|unskip)(?: (?:next|this week|next week))?$/i, async res => {
-    if (!isOwner(res)) {
-      await res.send(OWNER_ONLY)
+  robot.respond(/standup (skip|unskip)(?: (?:next|this week|next week))?$/i, { id: 'standup.skip' }, async res => {
+    if (!canManage(res, 'channel')) {
+      await res.send(MANAGE_ONLY.channel)
       return
     }
     const room = res.message.room
@@ -295,9 +298,9 @@ export default async (robot: Robot) => {
       : `The standup on ${formatWhen(job.at, job.tz)} is back on.`)
   })
 
-  robot.respond(/standup off$/i, async res => {
-    if (!isOwner(res)) {
-      await res.send(OWNER_ONLY)
+  robot.respond(/standup off$/i, { id: 'standup.off' }, async res => {
+    if (!canManage(res, 'channel')) {
+      await res.send(MANAGE_ONLY.channel)
       return
     }
     const room = res.message.room
@@ -307,7 +310,7 @@ export default async (robot: Robot) => {
     await res.send(removed ? 'Standup stopped for this channel.' : 'This channel has no standup scheduled.')
   })
 
-  robot.respond(/standup$/i, async res => {
+  robot.respond(/standup$/i, { id: 'standup.show' }, async res => {
     const room = res.message.room
     const job = prompts.get(promptId(room))
     const round = readRound(room)
@@ -321,7 +324,7 @@ export default async (robot: Robot) => {
     await res.send(`${schedule}${so}${due}`)
   })
 
-  robot.respond(/standup summary$/i, async res => {
+  robot.respond(/standup summary$/i, { id: 'standup.summary' }, async res => {
     const round = readRound(res.message.room)
     if (!round) {
       await res.send('No standup has run here yet.')
@@ -349,9 +352,10 @@ export default async (robot: Robot) => {
       await res.send(`Updated your check-in.${late}`)
       return
     }
-    logEvent(robot, 'standup', { room, userId })
+    const space = spaceOfRes(robot, res)
+    logEvent(robot, 'standup', { room, space, userId })
     // by the round's week, so a round that spans two calendar weeks doesn't break streaks
-    const streak = recordStreak(robot, 'standup', userId, round.startedAt)
+    const streak = recordStreak(robot, space, 'standup', userId, round.startedAt)
     const missing = (['done', 'next'] as const).filter(s => !report[s]).map(s => s.toUpperCase())
     const notes = [
       report.blockers && 'Sorry about the blocker, it\'ll be in the summary.',
@@ -362,12 +366,12 @@ export default async (robot: Robot) => {
     await res.send(`${thank}${notes ? ` ${notes}` : ''}${late}${streak ? `\n${streak}` : ''}`)
   }
 
-  robot.hear(/^\s*standup:\s*([\s\S]+)$/i, async res => {
+  robot.hear(/^\s*standup:\s*([\s\S]+)$/i, { id: 'standup.checkin' }, async res => {
     await checkIn(res, required(res.match, 1).trim())
   })
 
   // addressed form; the hear above only matches unaddressed text
-  robot.respond(/standup:\s*([\s\S]+)$/i, async res => {
+  robot.respond(/standup:\s*([\s\S]+)$/i, { id: 'standup.checkin' }, async res => {
     await checkIn(res, required(res.match, 1).trim())
   })
 }

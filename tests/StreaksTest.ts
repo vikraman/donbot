@@ -20,8 +20,8 @@ describe('Streaks', () => {
     const { robot } = state
     const user = brainUser(robot, 'u1', 'alice')
     const start = Date.now()
-    for (let d = 0; d < 3; d++) recordStreak(robot, 'focus', 'u1', start - (2 - d) * DAY)
-    recordStreak(robot, 'standup', 'u1', start)
+    for (let d = 0; d < 3; d++) recordStreak(robot, '', 'focus', 'u1', start - (2 - d) * DAY)
+    recordStreak(robot, '', 'standup', 'u1', start)
     // broken a while ago
     robot.brain.set('streak:win:u1', { current: 4, best: 6, lastDay: '2020-01-01' })
     const sent = collect(robot)
@@ -40,8 +40,8 @@ describe('Streaks', () => {
     brainUser(robot, 'u2', 'bob')
     robot.brain.set('github:login:u2', 'bob')
     const start = Date.now()
-    for (let d = 0; d < 5; d++) recordStreak(robot, 'commit', 'u2', start - (4 - d) * DAY)
-    for (let d = 0; d < 2; d++) recordStreak(robot, 'commit', 'u1', start - (1 - d) * DAY)
+    for (let d = 0; d < 5; d++) recordStreak(robot, '', 'commit', 'u2', start - (4 - d) * DAY)
+    for (let d = 0; d < 2; d++) recordStreak(robot, '', 'commit', 'u1', start - (1 - d) * DAY)
     const sent = collect(robot)
     await robot.adapter.say(alice, '@Dumbotheelephant streaks for bob', 'room')
     assert.equal(sent[0], "🔥 <@u2>'s streaks:\n🐙 commit: 5 days (best 5 days)")
@@ -51,9 +51,9 @@ describe('Streaks', () => {
   it('pauses a streak over a skipped period', () => {
     const { robot } = state
     const start = Date.now()
-    recordStreak(robot, 'standup', 'u1', start)
-    assert.equal(freezeStreak(robot, 'standup', 'u1', start + 7 * DAY), true)
-    assert.equal(recordStreak(robot, 'standup', 'u1', start + 14 * DAY), undefined)
+    recordStreak(robot, '', 'standup', 'u1', start)
+    assert.equal(freezeStreak(robot, '', 'standup', 'u1', start + 7 * DAY), true)
+    assert.equal(recordStreak(robot, '', 'standup', 'u1', start + 14 * DAY), undefined)
     assert.equal(robot.brain.get<{ current: number }>('streak:standup:u1')!.current, 2)
     mock.reset()
   })
@@ -61,17 +61,17 @@ describe('Streaks', () => {
     const { robot } = state
     robot.brain.set('tz:user:u1', 'Europe/London')
     // london clocks go forward on 29 march 2026
-    recordStreak(robot, 'win', 'u1', Date.UTC(2026, 2, 28, 12))
-    recordStreak(robot, 'win', 'u1', Date.UTC(2026, 2, 29, 12))
+    recordStreak(robot, '', 'win', 'u1', Date.UTC(2026, 2, 28, 12))
+    recordStreak(robot, '', 'win', 'u1', Date.UTC(2026, 2, 29, 12))
     // 00:30 bst on the 30th
-    recordStreak(robot, 'win', 'u1', Date.UTC(2026, 2, 29, 23, 30))
+    recordStreak(robot, '', 'win', 'u1', Date.UTC(2026, 2, 29, 23, 30))
     assert.equal(robot.brain.get<{ current: number }>('streak:win:u1')!.current, 3)
   })
   it('ignores activity that arrives late for an earlier day', () => {
     const { robot } = state
-    for (const day of [14, 15]) recordStreak(robot, 'commit', 'u1', Date.UTC(2026, 10, day, 12))
-    recordStreak(robot, 'commit', 'u1', Date.UTC(2026, 10, 16, 0, 5))
-    recordStreak(robot, 'commit', 'u1', Date.UTC(2026, 10, 15, 23, 55))
+    for (const day of [14, 15]) recordStreak(robot, '', 'commit', 'u1', Date.UTC(2026, 10, day, 12))
+    recordStreak(robot, '', 'commit', 'u1', Date.UTC(2026, 10, 16, 0, 5))
+    recordStreak(robot, '', 'commit', 'u1', Date.UTC(2026, 10, 15, 23, 55))
     assert.deepEqual(robot.brain.get('streak:commit:u1'), { current: 3, best: 3, lastDay: '2026-11-16' })
   })
 })
