@@ -14,14 +14,15 @@
 //   hubot leaderboard things - Shows the top 10 things.
 //   hubot leaderboard week - Shows who gained the most points in the last 7 days.
 //
-// Each user can change a score once every 5 minutes, and at most 5 scores a minute;
-// votes past either limit are ignored. Things are 1-3 words with ++/-- attached ("c++" isn't
-// a vote for c); a thing back at 0 with no reasons is forgotten, and at most 500 are tracked.
+// Notes:
+//   Each user can change a score once every 5 minutes, and at most 5 scores a minute;
+//   votes past either limit are ignored. Things are 1-3 words with ++/-- attached ("c++" isn't
+//   a vote for c); a thing back at 0 with no reasons is forgotten, and at most 500 are tracked.
 //
 
 import type { Robot, Response } from 'hubot'
 
-import { entriesWithPrefix, isScore, scoreAt } from './lib/brainScan.ts'
+import { isScore } from './lib/brainScan.ts'
 import { burst, cooldown } from './lib/cooldown.ts'
 import { formatAgo } from './lib/duration.ts'
 import { eventsSince, logEvent } from './lib/eventLog.ts'
@@ -32,6 +33,12 @@ import { mentionFor } from './lib/mention.ts'
 import { chance } from './lib/random.ts'
 import { DAY_MS } from './lib/time.ts'
 import { userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { allows } from './lib/policy.ts'
+import { findPeople, personNamed, storeOf, type SpaceStore } from './lib/spaces.ts'
+
+defineFeature({ id: 'kudos', label: 'Kudos', level: 'professional', help: ['<thing>++', '@<user>++', 'hubot kudos', 'hubot reasons for', 'hubot score for', 'hubot leaderboard'] })
+defineFeature({ id: 'kudos.downvote', label: 'Taking points away', level: 'casual', help: ['<thing>--'] })
 
 const PREFIX = 'plusplus:'
 const USER_PREFIX = 'user:'
@@ -106,6 +113,7 @@ const kudosPlain = defineLines('kudos.plain', {
 
 // a person's score just hit a round number
 const kudosMilestone = defineLines('kudos.milestone', {
+  professional: ['🎊 That makes {score} points for {who}. A milestone!', '🎊 {who} just reached {score} points.'],
   fallback: [
     '🎊 That makes {score} points for {who}. A milestone!',
     '🎊 {who} just hit {score}. Somebody get the confetti cannon.',
@@ -117,6 +125,7 @@ const kudosMilestone = defineLines('kudos.milestone', {
 export const KUDOS_MILESTONES = [10, 25, 50, 100, 250, 500, 1000] as const
 
 const selfKudos = defineLines('kudos.self', {
+  professional: ['Points have to come from someone else.', 'You can\'t give yourself points, but someone else can.'],
   fallback: [
     "Nice try, but you can't give yourself points.",
     'Self-five noted. No points, though.',
@@ -140,6 +149,7 @@ const selfKudos = defineLines('kudos.self', {
 })
 
 const topComment = defineLines('kudos.top', {
+  professional: ['{who} leads the board.', '{who} is in first place.', 'Top of the board: {who}.'],
   fallback: [
     '{who} is untouchable right now.',
     'All hail {who}.',
@@ -172,6 +182,7 @@ const bottomComment = defineLines('kudos.bottom', {
     'A point for {who}, anyone? Anyone?',
     '{who} is keeping things humble down here.'
   ],
+  professional: ['{who} rounds out the board.', 'Also on the board: {who}.', '{who} is on the board too.'],
   rare: ['{who} is not last, {who} is just first from the bottom.']
 })
 
@@ -203,26 +214,31 @@ const personTarget = (id: string): Target => ({ key: `${USER_PREFIX}${id}`, disp
 
 const thingTarget = (thing: string): Target => ({ key: thing.toLowerCase(), display: thing })
 
-// <@id>, @name (fuzzy) or an exact known name -> person; else a thing
-const resolveTarget = (robot: Robot, raw: string): Target | undefined => {
+// mention or known name, else a thing
+const resolveTarget = (robot: Robot, store: SpaceStore, raw: string): Target | undefined => {
   const text = raw.trim()
   const mention = text.match(/^<@!?(\d+)>$/)
   if (mention) return personTarget(required(mention, 1))
   if (text.startsWith('@')) {
-    const users = robot.brain.usersForFuzzyName(text.slice(1))
+    const users = findPeople(robot, store.space, text.slice(1))
     const sole = users.length === 1 ? users[0] : undefined
     return sole ? personTarget(sole.id) : undefined
   }
-  const exact = Object.values(robot.brain.data.users || {}).filter(u => u.name && u.name.toLowerCase() === text.toLowerCase())
+  const exact = personNamed(robot, store.space, text)
   const sole = exact.length === 1 ? exact[0] : undefined
   return sole ? personTarget(sole.id) : thingTarget(text)
+}
+
+const scoreIn = (store: SpaceStore, key: string): number => {
+  const stored = store.get(PREFIX + key)
+  return isScore(stored) ? stored : 0
 }
 
 const displayFor = (key: string): string =>
   key.startsWith(USER_PREFIX) ? mentionFor({ id: key.slice(USER_PREFIX.length) }) : key
 
-const readReasons = (robot: Robot, key: string): Reason[] => {
-  const stored = robot.brain.get(REASONS_PREFIX + key)
+const readReasons = (store: SpaceStore, key: string): Reason[] => {
+  const stored = store.get(REASONS_PREFIX + key)
   return Array.isArray(stored) ? stored.filter(isReason) : []
 }
 
@@ -253,41 +269,43 @@ export default async (robot: Robot) => {
   // new score, or why nothing changed; replies to self-votes only
   const vote = async (res: Response, target: Target, delta: number, reason?: string): Promise<number | 'limited' | 'self'> => {
     const voter = res.message.user.id
+    const store = storeOf(robot, res)
     if (target.userId === voter && delta > 0) {
       await res.send(selfKudos({}, { room: res.message.room, tz: userTz(robot, voter) }))
       return 'self'
     }
-    const isNewThing = !target.userId && robot.brain.get(PREFIX + target.key) === null
-    if (isNewThing && entriesWithPrefix(robot, PREFIX, isScore).filter(([key]) => !key.startsWith(USER_PREFIX)).length >= MAX_THINGS) return 'limited'
+    const isNewThing = !target.userId && store.get(PREFIX + target.key) === null
+    if (isNewThing && store.entries(PREFIX, isScore).filter(([key]) => !key.startsWith(USER_PREFIX)).length >= MAX_THINGS) return 'limited'
     const voteKey = `${voter}:${target.key}`
     if (!voteCooldown.ready(voteKey) || !voteBurst.take(voter)) return 'limited'
     voteCooldown.mark(voteKey)
 
-    const score = scoreAt(robot, PREFIX + target.key) + delta
+    const score = scoreIn(store, target.key) + delta
     if (reason) {
-      const reasons = [...readReasons(robot, target.key), { reason: reason.slice(0, MAX_REASON_LENGTH), by: voter, ts: Date.now(), delta }]
-      robot.brain.set(REASONS_PREFIX + target.key, reasons.slice(-MAX_REASONS))
+      const reasons = [...readReasons(store, target.key), { reason: reason.slice(0, MAX_REASON_LENGTH), by: voter, ts: Date.now(), delta }]
+      store.set(REASONS_PREFIX + target.key, reasons.slice(-MAX_REASONS))
     }
     // a thing back at zero with nothing to say for it is forgotten
-    if (score === 0 && !target.userId && readReasons(robot, target.key).length === 0) robot.brain.remove(PREFIX + target.key)
-    else robot.brain.set(PREFIX + target.key, score)
-    logEvent(robot, 'kudos', { room: res.message.room, userId: voter, target: target.display, targetId: target.userId, reason, delta })
+    if (score === 0 && !target.userId && readReasons(store, target.key).length === 0) store.remove(PREFIX + target.key)
+    else store.set(PREFIX + target.key, score)
+    logEvent(robot, 'kudos', { room: res.message.room, space: store.space, userId: voter, target: target.display, targetId: target.userId, reason, delta })
     return score
   }
 
-  robot.hear(VOTE, async res => {
-    const target = resolveTarget(robot, res.match[1] ?? required(res.match, 2))
+  robot.hear(VOTE, { id: 'kudos.vote' }, async res => {
+    const target = resolveTarget(robot, storeOf(robot, res), res.match[1] ?? required(res.match, 2))
     if (!target || (!target.userId && !plausibleThing(target.display))) return
     const delta = required(res.match, 3) === '++' ? 1 : -1
+    if (delta < 0 && !allows(robot, res, 'kudos.downvote')) return
     const reason = res.match[4]?.trim()
     const score = await vote(res, target, delta, reason)
     if (typeof score !== 'number') return
     await res.send(`${target.display}: ${score}${reason ? ` (for ${reason})` : ''}`)
   })
 
-  robot.respond(/kudos (?!for )(.+?)(?: for (.+?))?\s*$/i, async res => {
+  robot.respond(/kudos (?!for )(.+?)(?: for (.+?))?\s*$/i, { id: 'kudos.give' }, async res => {
     const who = required(res.match, 1).trim()
-    const target = resolveTarget(robot, who)
+    const target = resolveTarget(robot, storeOf(robot, res), who)
     if (!target || !target.userId) {
       await res.send(`I don't know who ${who} is. Try mentioning them.`)
       return
@@ -305,14 +323,15 @@ export default async (robot: Robot) => {
     await res.send(`${ack} (score: ${score})${milestone}`)
   })
 
-  robot.respond(new RegExp(String.raw`(?:kudos|reasons) for ${TARGET}\??\s*$`, 'i'), async res => {
+  robot.respond(new RegExp(String.raw`(?:kudos|reasons) for ${TARGET}\??\s*$`, 'i'), { id: 'kudos.reasons' }, async res => {
     const raw = required(res.match, 1)
-    const target = resolveTarget(robot, raw)
+    const store = storeOf(robot, res)
+    const target = resolveTarget(robot, store, raw)
     if (!target) {
       await res.send(`I don't know who ${raw.trim()} is.`)
       return
     }
-    const reasons = readReasons(robot, target.key).slice(-SHOWN_REASONS).reverse()
+    const reasons = readReasons(store, target.key).slice(-SHOWN_REASONS).reverse()
     if (reasons.length === 0) {
       await res.send(`No reasons recorded for ${target.display} yet.`)
       return
@@ -321,22 +340,24 @@ export default async (robot: Robot) => {
     await res.send([`Why ${target.display} has points:`, ...lines].join('\n'))
   })
 
-  robot.respond(new RegExp(String.raw`(?:score for|points for|how many points does) ${TARGET} ?(?:have)?\??\s*$`, 'i'), async res => {
+  robot.respond(new RegExp(String.raw`(?:score for|points for|how many points does) ${TARGET} ?(?:have)?\??\s*$`, 'i'), { id: 'kudos.score' }, async res => {
     const raw = required(res.match, 1)
-    const target = resolveTarget(robot, raw)
+    const store = storeOf(robot, res)
+    const target = resolveTarget(robot, store, raw)
     if (!target) {
       await res.send(`I don't know who ${raw.trim()} is.`)
       return
     }
-    await res.send(`${target.display}: ${scoreAt(robot, PREFIX + target.key)}`)
+    await res.send(`${target.display}: ${scoreIn(store, target.key)}`)
   })
 
-  robot.respond(/(?:leaderboard|top scores|high scores|rankings)(?: (people|things|week))?$/i, async res => {
+  robot.respond(/(?:leaderboard|top scores|high scores|rankings)(?: (people|things|week))?$/i, { id: 'kudos.board' }, async res => {
     const scope = res.match[1]?.toLowerCase()
+    const store = storeOf(robot, res)
 
     if (scope === 'week') {
       const gains = new Map<string, { who: string, score: number }>()
-      for (const e of eventsSince<KudosLog>(robot, 'kudos', Date.now() - 7 * DAY_MS)) {
+      for (const e of eventsSince<KudosLog>(robot, 'kudos', Date.now() - 7 * DAY_MS, { space: store.space })) {
         if (typeof e.delta !== 'number' || typeof e.target !== 'string') continue
         const key = e.targetId ? `${USER_PREFIX}${e.targetId}` : e.target.toLowerCase()
         const row = gains.get(key) ?? { who: e.targetId ? mentionFor({ id: e.targetId }) : e.target, score: 0 }
@@ -348,7 +369,7 @@ export default async (robot: Robot) => {
       return
     }
 
-    const rows = entriesWithPrefix(robot, PREFIX, isScore)
+    const rows = store.entries(PREFIX, isScore)
       .filter(([key]) => scope === 'people' ? key.startsWith(USER_PREFIX) : scope === 'things' ? !key.startsWith(USER_PREFIX) : true)
       .map(([key, score]) => ({ who: displayFor(key), score }))
       .sort((a, b) => b.score - a.score)

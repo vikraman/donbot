@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events'
 
 import type { DiscordClient } from 'hubot'
 
-import { setupRobot, collect, brainUser, sendReturnsIds } from './helpers/setup.ts'
+import { setupRobot, collect, brainUser, sendReturnsIds, inGuild } from './helpers/setup.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
 import { ENTHUSIASTIC_LINES } from '../scripts/Praise.ts'
@@ -222,6 +222,14 @@ describe('Praise reaction spam', () => {
     }
     return { robot, sent, react }
   }
+
+  it('neither counts nor replies in professional servers', async () => {
+    const { robot, sent, react } = await setupClient()
+    inGuild(robot, 'g1', ['pro-room'])
+    await react('👍', 'bob', 'msg-1', 'pro-room')
+    assert.deepStrictEqual(sent, [])
+    assert.strictEqual(robot.brain.get('praise:count'), null)
+  })
 
   it('should count and reply once when the same user re-reacts to a message', async () => {
     const { robot, sent, react } = await setupClient()

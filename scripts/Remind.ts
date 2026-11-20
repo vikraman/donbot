@@ -23,6 +23,11 @@ import type { Job } from './lib/schedule.ts'
 import { describeRepeat, formatWhen, HOUR_MS, parseWhen } from './lib/time.ts'
 import type { When } from './lib/time.ts'
 import { tzNote, userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { peopleFor } from './lib/spaces.ts'
+import { isOwner } from './lib/owner.ts'
+
+defineFeature({ id: 'remind', label: 'Reminders', level: 'professional', help: ['hubot remind', 'hubot list reminders', 'hubot my reminders', 'hubot cancel reminder'] })
 
 const LEGACY_KEY = 'reminders'
 
@@ -58,7 +63,7 @@ interface Target {
   name: string
 }
 
-// "me" is the sender; else look up in brain
+// me, or someone known here
 const resolveTarget = (robot: Robot, res: Response, who: string): Target => {
   const trimmed = who.trim()
   if (!trimmed || trimmed.toLowerCase() === 'me') {
@@ -73,7 +78,7 @@ const resolveTarget = (robot: Robot, res: Response, who: string): Target => {
   }
 
   const name = trimmed.replace(/^@/, '')
-  const users = robot.brain.usersForFuzzyName(name)
+  const users = peopleFor(robot, res, name)
   const sole = users.length === 1 ? users[0] : undefined
   return sole ? { id: sole.id, name: sole.name } : { name }
 }
@@ -125,7 +130,7 @@ const listLine = (job: Job<Reminder>, n: number): string => {
 
 export default async (robot: Robot) => {
   const reminders = scheduler<Reminder>(robot, 'remind', async job => {
-    await postToRoom(robot, job.data.room, `${mentionOf(job.data)} reminder: ${job.data.message}`)
+    await postToRoom(robot, job.data.room, `${mentionOf(job.data)} reminder: ${job.data.message}`, 'remind')
   })
 
   // pre-scheduler reminders
@@ -152,11 +157,11 @@ export default async (robot: Robot) => {
     await res.send(lines.join('\n'))
   }
 
-  robot.respond(/(?:list reminders|reminders)$/i, async res => { await handleList(res, false) })
+  robot.respond(/(?:list reminders|reminders)$/i, { id: 'remind.list' }, async res => { await handleList(res, false) })
 
-  robot.respond(/my reminders$/i, async res => { await handleList(res, true) })
+  robot.respond(/my reminders$/i, { id: 'remind.mine' }, async res => { await handleList(res, true) })
 
-  robot.respond(/(?:cancel|forget|delete|remove) reminder #?(\d+)$/i, async res => {
+  robot.respond(/(?:cancel|forget|delete|remove) reminder #?(\d+)$/i, { id: 'remind.cancel' }, async res => {
     const n = Number(required(res.match, 1))
     const job = roomJobs(reminders.list(), res.message.room)[n - 1]
     if (!job) {
@@ -164,7 +169,7 @@ export default async (robot: Robot) => {
       return
     }
     const userId = res.message.user.id
-    const allowed = [job.data.byId, job.data.targetId, process.env.OWNER_USER_ID].includes(userId)
+    const allowed = [job.data.byId, job.data.targetId].includes(userId) || isOwner(res)
     if (!allowed) {
       await res.send('Only the person who set that reminder, or the person it is for, can cancel it.')
       return
@@ -173,7 +178,7 @@ export default async (robot: Robot) => {
     await res.send(`Cancelled reminder for ${mentionOf(job.data)}: ${job.data.message}`)
   })
 
-  robot.respond(/remind (\S+) (.+)$/i, async res => {
+  robot.respond(/remind (\S+) (.+)$/i, { id: 'remind.add' }, async res => {
     const tz = userTz(robot, res.message.user.id)
     const parsed = parseRequest(required(res.match, 2), tz)
     if (!parsed) {
@@ -183,7 +188,7 @@ export default async (robot: Robot) => {
 
     const target = resolveTarget(robot, res, required(res.match, 1))
     const byId = res.message.user.id
-    if (byId !== process.env.OWNER_USER_ID) {
+    if (!isOwner(res)) {
       const all = reminders.list()
       if (all.filter(j => j.data.byId === byId).length >= MAX_PER_PERSON) {
         await res.send(`You already have ${MAX_PER_PERSON} reminders set. Cancel some first (\`${robot.name} list reminders\`).`)

@@ -16,6 +16,10 @@ import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
 import { canonicalTz, formatClock, zonedParts } from './lib/time.ts'
 import { setUserTz, tzNote, userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { peopleFor } from './lib/spaces.ts'
+
+defineFeature({ id: 'timezone', label: 'Timezones', level: 'professional', help: ['hubot my timezone', 'hubot time for'] })
 
 const localTime = (tz: string, now = Date.now()): string => {
   const p = zonedParts(now, tz)
@@ -24,7 +28,7 @@ const localTime = (tz: string, now = Date.now()): string => {
 }
 
 export default async (robot: Robot) => {
-  robot.respond(/my (?:timezone|time zone|tz) is (\S+)$/i, async res => {
+  robot.respond(/my (?:timezone|time zone|tz) is (\S+)$/i, { id: 'timezone.set' }, async res => {
     const input = required(res.match, 1)
     const tz = canonicalTz(input)
     if (!tz) {
@@ -35,19 +39,19 @@ export default async (robot: Robot) => {
     await res.send(`Got it, your timezone is ${tz}. It's ${localTime(tz)} for you.`)
   })
 
-  robot.respond(/(?:what(?:'s| is) )?my (?:timezone|time zone|tz)\??$/i, async res => {
+  robot.respond(/(?:what(?:'s| is) )?my (?:timezone|time zone|tz)\??$/i, { id: 'timezone.show' }, async res => {
     const tz = userTz(robot, res.message.user.id)
     await res.send(`Your timezone is ${tz}. It's ${localTime(tz)} for you.`)
   })
 
-  robot.respond(/(?:what time is it for|(?:local )?time for) @?(.+?)\??$/i, async res => {
+  robot.respond(/(?:what time is it for|(?:local )?time for) @?(.+?)\??$/i, { id: 'timezone.for' }, async res => {
     const who = required(res.match, 1).trim()
-    let user: User | undefined
+    let user: { id: string, name?: string } | undefined
     const mention = who.match(/^<@!?(\d+)>$/)
     if (who.toLowerCase() === 'me') user = res.message.user
-    else if (mention) user = robot.brain.data.users[required(mention, 1)]
+    else if (mention) user = { id: required(mention, 1), name: robot.brain.data.users[required(mention, 1)]?.name }
     else {
-      const users = robot.brain.usersForFuzzyName(who)
+      const users = peopleFor(robot, res, who)
       if (users.length > 1) {
         await res.send(`Be more specific, I know ${users.length} people named like that: ${users.map(u => u.name).join(', ')}`)
         return

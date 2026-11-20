@@ -20,12 +20,16 @@ import { GITHUB_LOGIN, githubLoginOf, setGithubLogin, userForGithubLogin } from 
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'
 import { isOwner } from './lib/owner.ts'
+import { defineFeature } from './lib/features.ts'
+import { peopleFor } from './lib/spaces.ts'
 
-// <@id>, or a name the brain knows
-const resolveUser = (robot: Robot, who: string): string | undefined => {
+defineFeature({ id: 'githublink', label: 'GitHub accounts', level: 'professional', help: ['hubot my github', 'hubot forget my github', 'hubot github link', 'hubot github unlink'] })
+
+// <@id> or a name known here
+const resolveUser = (robot: Robot, res: Response, who: string): string | undefined => {
   const mention = who.match(/^<@!?(\d+)>$/)
   if (mention) return mention[1]
-  const users = robot.brain.usersForFuzzyName(who.replace(/^@/, ''))
+  const users = peopleFor(robot, res, who.replace(/^@/, ''))
   return users.length === 1 ? users[0]!.id : undefined
 }
 
@@ -33,7 +37,7 @@ const resolveUser = (robot: Robot, who: string): string | undefined => {
 const cleanLogin = (text: string): string => text.replace(/^<|>$/g, '').replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '').replace(/^@/, '').replace(/\/$/, '')
 
 export default async (robot: Robot) => {
-  robot.respond(/my github(?: is|=| =) ?(\S+)$/i, async res => {
+  robot.respond(/my github(?: is|=| =) ?(\S+)$/i, { id: 'githublink.set' }, async res => {
     const userId = res.message.user.id
     const login = cleanLogin(required(res.match, 1))
     if (!GITHUB_LOGIN.test(login)) {
@@ -51,24 +55,24 @@ export default async (robot: Robot) => {
     await res.send(`🔗 ${mentionFor({ id: userId, name: res.message.user.name })} linked GitHub ${login}${switched}. Pushes to repos I follow now count toward their commit streak.`)
   })
 
-  robot.respond(/(?:what(?:'s| is) )?my github\??$/i, async res => {
+  robot.respond(/(?:what(?:'s| is) )?my github\??$/i, { id: 'githublink.show' }, async res => {
     const login = githubLoginOf(robot, res.message.user.id)
     await res.send(login ? `You're linked to GitHub ${login}.` : `No GitHub account linked. \`${robot.name} my github is <username>\` links one.`)
   })
 
-  robot.respond(/forget my github$/i, async res => {
+  robot.respond(/forget my github$/i, { id: 'githublink.forget' }, async res => {
     const userId = res.message.user.id
     const login = githubLoginOf(robot, userId)
     setGithubLogin(robot, userId, undefined)
     await res.send(login ? `Unlinked GitHub ${login}.` : 'No GitHub account was linked.')
   })
 
-  robot.respond(/github link (\S+) (\S+)$/i, async res => {
+  robot.respond(/github link (\S+) (\S+)$/i, { id: 'githublink.link' }, async res => {
     if (!isOwner(res)) {
       await res.send('Only my owner can link accounts for other people.')
       return
     }
-    const userId = resolveUser(robot, required(res.match, 1))
+    const userId = resolveUser(robot, res, required(res.match, 1))
     const login = cleanLogin(required(res.match, 2))
     if (!userId || !GITHUB_LOGIN.test(login)) {
       await res.send('Usage: `github link <@user> <github username>`.')
@@ -81,12 +85,12 @@ export default async (robot: Robot) => {
     await res.send(`🔗 Linked ${mentionFor({ id: userId })} to GitHub ${login}${moved}.`)
   })
 
-  robot.respond(/github unlink (\S+)$/i, async res => {
+  robot.respond(/github unlink (\S+)$/i, { id: 'githublink.unlink' }, async res => {
     if (!isOwner(res)) {
       await res.send('Only my owner can unlink accounts for other people.')
       return
     }
-    const userId = resolveUser(robot, required(res.match, 1))
+    const userId = resolveUser(robot, res, required(res.match, 1))
     const login = userId ? githubLoginOf(robot, userId) : undefined
     if (!userId || !login) {
       await res.send("That person doesn't have a GitHub account linked.")

@@ -13,7 +13,8 @@
 //   hubot bee unsubscribe [goal ...] - Stops some or all of your alerts here.
 //   hubot bee subscriptions - Lists whose Beeminder alerts post here.
 //
-// Also answers to "beeminder" in place of "bee".
+// Notes:
+//   Also answers to "beeminder" in place of "bee".
 //
 // Configuration:
 //   BEEMINDER_TOKEN_KEY - Key that encrypts stored tokens, 32 bytes as base64 (openssl rand -base64 32). Linking is off without it.
@@ -38,6 +39,10 @@ import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { canonicalTz, DAY_MS, HOUR_MS, MINUTE_MS } from './lib/time.ts'
 import { defaultTz, tzNote } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { peopleFor } from './lib/spaces.ts'
+
+defineFeature({ id: 'beeminder', label: 'Beeminder', level: 'professional', help: ['hubot bee'] })
 
 const TOKEN_PREFIX = 'bee:token:'
 const USER_PREFIX = 'bee:user:'
@@ -132,10 +137,10 @@ const isDm = (res: Response): boolean => {
   return Boolean(raw) && !raw?.guildId
 }
 
-const resolveUser = (robot: Robot, who: string): string | undefined => {
+const resolveUser = (robot: Robot, res: Response, who: string): string | undefined => {
   const mention = who.match(/^<@!?(\d+)>$/)
   if (mention) return mention[1]
-  const users = robot.brain.usersForFuzzyName(who.replace(/^@/, ''))
+  const users = peopleFor(robot, res, who.replace(/^@/, ''))
   return users.length === 1 ? users[0]!.id : undefined
 }
 
@@ -205,7 +210,7 @@ export default async (robot: Robot) => {
     if (res.status === 401) {
       const dm = robot.brain.get(`${DM_PREFIX}${userId}`)
       forget(userId)
-      if (typeof dm === 'string') await postToRoom(robot, dm, '🐝 Beeminder stopped accepting your token, so I unlinked you. DM me `bee link <token>` with a fresh one to start again.')
+      if (typeof dm === 'string') await postToRoom(robot, dm, '🐝 Beeminder stopped accepting your token, so I unlinked you. DM me `bee link <token>` with a fresh one to start again.', 'beeminder')
       return
     }
     if (!res.body) {
@@ -271,7 +276,7 @@ export default async (robot: Robot) => {
       } else if (step >= 0 && (prev.zenoFor !== lose || step > (prev.zenoStep ?? -1))) {
         text = (lose - now <= 30 * MINUTE_MS ? zenoLast : zeno)(vars, opts)
       }
-      if (text) for (const room of rooms) await postToRoom(robot, room, `🐝 ${text}`)
+      if (text) for (const room of rooms) await postToRoom(robot, room, `🐝 ${text}`, 'beeminder')
     }
     robot.brain.set(`${SNAP_PREFIX}${userId}`, snaps)
     const next = nextPollAt(watched, now, tz, { maxMs: maxMs(), zenoStartMs: zenoStartMs() })
@@ -433,7 +438,7 @@ export default async (robot: Robot) => {
     await res.send(lines.length === 0 ? '🐝 No Beeminder alerts post here. `bee subscribe` adds yours.' : `🐝 Beeminder alerts here:\n${lines.join('\n')}`)
   }
 
-  robot.respond(/(?:beeminder|bee)\b[ \t]*(.*)$/i, async res => {
+  robot.respond(/(?:beeminder|bee)\b[ \t]*(.*)$/i, { id: 'beeminder.command' }, async res => {
     const args = required(res.match, 1).trim()
     const [cmd = '', ...rest] = args.split(/\s+/).filter(Boolean)
     const word = cmd.toLowerCase()
@@ -445,7 +450,7 @@ export default async (robot: Robot) => {
       forget(res.message.user.id)
       await res.send(had ? `🐝 Unlinked ${had}. Your token, alerts and subscriptions are gone.` : '🐝 No Beeminder account was linked.')
     } else if (word === 'goals' && rest[0]?.toLowerCase() === 'for' && rest.length > 1) {
-      const target = resolveUser(robot, rest.slice(1).join(' '))
+      const target = resolveUser(robot, res, rest.slice(1).join(' '))
       if (!target) {
         await res.send(`🐝 I don't know who ${rest.slice(1).join(' ')} is.`)
         return

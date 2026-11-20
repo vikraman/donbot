@@ -10,13 +10,30 @@
 //   hubot holman is an ego surfer
 //   hubot holman is not an ego surfer
 
-import type { Robot, User } from 'hubot'
+import type { Robot } from 'hubot'
 
 import { required } from './lib/match.ts'
 import { defineLines } from './lib/lines.ts'
 import { userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { findPeople, storeOf, type Person, type SpaceStore } from './lib/spaces.ts'
 
-const getAmbiguousUserText = (users: User[]): string =>
+defineFeature({ id: 'roles', label: 'Roles', level: 'professional', help: ['hubot <user> is', 'hubot who is <user>'] })
+
+// user id -> roles
+const ROLES_KEY = 'roles'
+
+const rolesIn = (store: SpaceStore): Record<string, string[]> => {
+  const stored = store.get(ROLES_KEY)
+  return typeof stored === 'object' && stored !== null && !Array.isArray(stored) ? stored as Record<string, string[]> : {}
+}
+
+const setRoles = (store: SpaceStore, id: string, roles: string[]) => {
+  const { [id]: _, ...rest } = rolesIn(store)
+  store.set(ROLES_KEY, roles.length > 0 ? { ...rest, [id]: roles } : rest)
+}
+
+const getAmbiguousUserText = (users: Person[]): string =>
   `Be more specific, I know ${users.length} people named like that: ${users.map(u => u.name).join(', ')}`
 
 const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
@@ -47,6 +64,7 @@ const nothingToMe = defineLines('roles.nothing', {
     '{name} is a person of many roles. Zero, specifically.',
     '{name}: no titles, no nicknames, no rap sheet.'
   ],
+  professional: ['No roles for {name} yet.', "I don't have any roles for {name}."],
   rare: [
     '{name} is a riddle wrapped in a mystery inside a Discord account.',
     "🕵️ I've run {name} through every database I have. Both of them. Nothing.",
@@ -69,6 +87,7 @@ const neverHeard = defineLines('roles.never-heard', {
     'No {name} in my little black book.',
     "Can't place {name}. Have 'em say hi sometime."
   ],
+  professional: ["I don't know anyone called {name}.", "I don't recognise {name}."],
   rare: [
     "{name}? I've never met them, but I've heard the songs.",
     '📇 I checked the rolodex. Twice. {name} remains a rumour.'
@@ -90,6 +109,7 @@ const unknownUser = defineLines('roles.unknown', {
     "Who? {name}? You're gonna have to point 'em out.",
     "I only keep tabs on people who've spoken up. {name} hasn't."
   ],
+  professional: ["I don't know anything about {name} yet.", "{name} hasn't said anything I've seen yet."],
   rare: [
     '{name} is either brand new or a ghost. 👻',
     "Ain't nobody by the name of {name} on my payroll."
@@ -98,7 +118,7 @@ const unknownUser = defineLines('roles.unknown', {
 
 
 export default async (robot: Robot) => {
-  robot.respond(/who is @?([\w .-]+)\?*$/i, async res => {
+  robot.respond(/who is @?([\w .-]+)\?*$/i, { id: 'roles.who' }, async res => {
     const joiner = ', '
     const name = required(res.match, 1).trim()
     if (RESERVED.test(name)) return
@@ -108,13 +128,14 @@ export default async (robot: Robot) => {
     } else if (name === robot.name) {
       await res.send('The best.')
     } else {
-      const users = robot.brain.usersForFuzzyName(name)
+      const store = storeOf(robot, res)
+      const users = findPeople(robot, store.space, name)
       const user = users.length === 1 ? users[0] : undefined
       if (user) {
-        user.roles = user.roles || []
-        if (user.roles.length > 0) {
-          const j = user.roles.join('').includes(',') ? '; ' : joiner
-          await res.send(`${name} is ${user.roles.join(j)}.`)
+        const roles = rolesIn(store)[user.id] ?? []
+        if (roles.length > 0) {
+          const j = roles.join('').includes(',') ? '; ' : joiner
+          await res.send(`${name} is ${roles.join(j)}.`)
         } else {
           await res.send(nothingToMe({ name }, { room: res.message.room, tz: userTz(robot, res.message.user.id) }))
         }
@@ -126,7 +147,7 @@ export default async (robot: Robot) => {
     }
   })
 
-  robot.respond(/@?([\w .\-_]+) is (["'\w: -_]+)[.!]*$/i, async res => {
+  robot.respond(/@?([\w .\-_]+) is (["'\w: -_]+)[.!]*$/i, { id: 'roles.add' }, async res => {
     const name = required(res.match, 1).trim()
     const newRole = required(res.match, 2).trim()
 
@@ -134,15 +155,16 @@ export default async (robot: Robot) => {
       return
     }
 
-    const users = robot.brain.usersForFuzzyName(name)
+    const store = storeOf(robot, res)
+    const users = findPeople(robot, store.space, name)
     const user = users.length === 1 ? users[0] : undefined
     if (user) {
-      user.roles = user.roles || []
+      const roles = rolesIn(store)[user.id] ?? []
 
-      if (user.roles.includes(newRole)) {
+      if (roles.includes(newRole)) {
         await res.send('I know')
       } else {
-        user.roles.push(newRole)
+        setRoles(store, user.id, [...roles, newRole])
         if (name.toLowerCase() === robot.name.toLowerCase()) {
           await res.send(`Ok, I am ${newRole}.`)
         } else {
@@ -156,7 +178,7 @@ export default async (robot: Robot) => {
     }
   })
 
-  robot.respond(/@?([\w .\-_]+) is not (["'\w: -_]+)[.!]*$/i, async res => {
+  robot.respond(/@?([\w .\-_]+) is not (["'\w: -_]+)[.!]*$/i, { id: 'roles.remove' }, async res => {
     const name = required(res.match, 1).trim()
     const newRole = required(res.match, 2).trim()
 
@@ -164,15 +186,16 @@ export default async (robot: Robot) => {
       return
     }
 
-    const users = robot.brain.usersForFuzzyName(name)
+    const store = storeOf(robot, res)
+    const users = findPeople(robot, store.space, name)
     const user = users.length === 1 ? users[0] : undefined
     if (user) {
-      user.roles = user.roles || []
+      const roles = rolesIn(store)[user.id] ?? []
 
-      if (!user.roles.includes(newRole)) {
+      if (!roles.includes(newRole)) {
         await res.send('I know.')
       } else {
-        user.roles = user.roles.filter(role => role !== newRole)
+        setRoles(store, user.id, roles.filter(role => role !== newRole))
         await res.send(`Ok, ${name} is no longer ${newRole}.`)
       }
     } else if (users.length > 1) {

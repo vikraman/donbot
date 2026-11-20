@@ -5,6 +5,7 @@ import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
 import { VOTE_COOLDOWN_MS, MAX_THINGS, MAX_VOTES_PER_WINDOW, VOTE_WINDOW_MS } from '../scripts/Kudos.ts'
 import { eventsSince } from '../scripts/lib/eventLog.ts'
+import { configureLines } from '../scripts/lib/lines.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
 
 // rolls high: no leaderboard commentary, first pick
@@ -335,6 +336,16 @@ describe('Kudos testing Hubot scripts', () => {
       const sent = collect(robot)
       await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
       assert.match(sent[0]!, /pizza is untouchable right now\./)
+    })
+    it('keeps top-scorer commentary plain in professional rooms', async () => {
+      const { robot } = state
+      setRandomSource(() => 0)
+      configureLines({ casual: () => false })
+      robot.brain.set('plusplus:pizza', 10)
+      const user = brainUser(robot, 'test-user', 'test user')
+      const sent = collect(robot)
+      await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
+      assert.match(sent[0]!, /pizza leads the board\./)
     })
     it('should rank net gains over the last week', async () => {
       const { robot } = state

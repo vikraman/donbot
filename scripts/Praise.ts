@@ -9,21 +9,27 @@
 //   hubot praise count - Shows how many times the bot has been praised.
 //   hubot who praised you - Lists who has praised the bot and how often.
 //
-// Also reacts to positive-affirmation emoji reactions on the bot's own messages. Discord only.
-// (⭐ excluded — StarReact.mjs owns it.) Each user counts once per message; replies are
-// limited to one per channel per minute, and praise of its own acknowledgements is
-// counted without a reply.
+// Notes:
+//   Also reacts to positive-affirmation emoji reactions on the bot's own messages. Discord only.
+//   (⭐ excluded — StarReact.mjs owns it.) Each user counts once per message; replies are
+//   limited to one per channel per minute, and praise of its own acknowledgements is
+//   counted without a reply.
 //
 
 import type { Robot, DiscordReaction, DiscordUser } from 'hubot'
 
-import { entriesWithPrefix, isScore, scoreAt } from './lib/brainScan.ts'
+import { isScore } from './lib/brainScan.ts'
 import { mentionFor } from './lib/mention.ts'
 import { defineLines } from './lib/lines.ts'
 import { reactionGuard } from './lib/reactionGuard.ts'
 import { isApproval } from './lib/reactions.ts'
 import { scoreTone } from './lib/sentiment.ts'
 import { defaultTz, userTz } from './lib/timezone.ts'
+import { defineFeature } from './lib/features.ts'
+import { spaceOf, storeFor, storeOf, type SpaceStore } from './lib/spaces.ts'
+import { allowsRoom } from './lib/policy.ts'
+
+defineFeature({ id: 'praise', label: 'Praise replies', level: 'casual', help: ['hubot cookie', 'hubot good', 'hubot praise count', 'hubot who praised you'] })
 
 const PRAISE_COUNT_KEY = 'praise:count'
 const PRAISE_BY_USER_PREFIX = 'praise:user:'
@@ -77,13 +83,18 @@ const REACTION_REPLY_COOLDOWN_MS = 60 * 1000
 // only enthusiastic text narrows the pool
 const linesFor = (text?: string) => text && scoreTone(text).tone === 'positive' ? enthusiastic : reply
 
-const recordPraise = (robot: Robot, userId?: string): number => {
-  const count = scoreAt(robot, PRAISE_COUNT_KEY) + 1
-  robot.brain.set(PRAISE_COUNT_KEY, count)
+const scoreIn = (store: SpaceStore, key: string): number => {
+  const stored = store.get(key)
+  return isScore(stored) ? stored : 0
+}
+
+const recordPraise = (store: SpaceStore, userId?: string): number => {
+  const count = scoreIn(store, PRAISE_COUNT_KEY) + 1
+  store.set(PRAISE_COUNT_KEY, count)
 
   if (userId != null) {
     const key = `${PRAISE_BY_USER_PREFIX}${userId}`
-    robot.brain.set(key, scoreAt(robot, key) + 1)
+    store.set(key, scoreIn(store, key) + 1)
   }
 
   return count
@@ -92,19 +103,19 @@ const recordPraise = (robot: Robot, userId?: string): number => {
 export default async (robot: Robot) => {
   const guard = reactionGuard(REACTION_REPLY_COOLDOWN_MS)
 
-  robot.respond(/(?:cookie|good (?:bot|job)|good boy(?: donbot)?|thanks?(?: you)?)[.!]*$/i, async res => {
-    recordPraise(robot, res.message.user.id)
+  robot.respond(/(?:cookie|good (?:bot|job)|good boy(?: donbot)?|thanks?(?: you)?)[.!]*$/i, { id: 'praise.thanks', hint: false }, async res => {
+    recordPraise(storeOf(robot, res), res.message.user.id)
     const line = linesFor(res.message.text)({}, { room: res.message.room, tz: userTz(robot, res.message.user.id) })
     guard.remember(await res.send(line))
   })
 
-  robot.respond(/praise count$/i, async res => {
-    const count = scoreAt(robot, PRAISE_COUNT_KEY)
+  robot.respond(/praise count$/i, { id: 'praise.count' }, async res => {
+    const count = scoreIn(storeOf(robot, res), PRAISE_COUNT_KEY)
     await res.send(count === 1 ? "I've been praised once." : `I've been praised ${count} times.`)
   })
 
-  robot.respond(/who praised you\??$/i, async res => {
-    const praisers = entriesWithPrefix(robot, PRAISE_BY_USER_PREFIX, isScore)
+  robot.respond(/who praised you\??$/i, { id: 'praise.who' }, async res => {
+    const praisers = storeOf(robot, res).entries(PRAISE_BY_USER_PREFIX, isScore)
       .map(([userId, count]) => ({ userId, count }))
       .sort((a, b) => b.count - a.count)
 
@@ -127,6 +138,7 @@ export default async (robot: Robot) => {
   client.on('messageReactionAdd', async (reaction: DiscordReaction, user: DiscordUser) => {
     if (user.bot) return
     if (!isApproval(reaction.emoji.name)) return
+    if (!allowsRoom(robot, reaction.message.channelId, 'praise')) return
     if (reaction.partial) {
       try {
         await reaction.fetch()
@@ -141,7 +153,7 @@ export default async (robot: Robot) => {
     // once per user per message, across emoji and re-adds
     if (!guard.first(message.id, user.id)) return
 
-    recordPraise(robot, user.id)
+    recordPraise(storeFor(robot, spaceOf(robot, message.channelId)), user.id)
     if (!guard.mayReply(message.id, message.channelId)) return
     try {
       guard.remember(await robot.messageRoom(message.channelId, reply({}, { room: message.channelId, tz: defaultTz() })))
