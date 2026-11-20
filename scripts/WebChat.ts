@@ -35,6 +35,8 @@ const dir = new URL('../public/chat/', import.meta.url)
 const assets = Object.fromEntries(Object.entries(STATIC).map(([name, type]) => [name, { type, body: readFileSync(new URL(name, dir), 'utf8') }]))
 // cache buster
 const version = createHash('sha256').update(Object.values(assets).map(a => a.body).join('')).digest('hex').slice(0, 10)
+// app.js's own import needs the version too
+assets['app.js']!.body = assets['app.js']!.body.replace("from './lib.js'", `from './lib.js?v=${version}'`)
 
 export interface WebCommand {
   cmd: string

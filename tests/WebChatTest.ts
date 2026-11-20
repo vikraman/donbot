@@ -231,6 +231,8 @@ describe('WebChat testing Hubot scripts', () => {
     assert.strictEqual(js.status, 200)
     assert.match(js.headers.get('content-type')!, /^text\/javascript/)
     assert.match(js.headers.get('cache-control')!, /immutable/)
+    // imports carry the version too, or lib.js would stay cached across deploys
+    assert.match(await js.text(), /from '\.\/lib\.js\?v=\w+'/)
     const css = await realFetch(`http://127.0.0.1:${port}/chat/static/chat.css`)
     assert.match(css.headers.get('content-type')!, /^text\/css/)
     for (const file of ['index.html', '__proto__', '..%2FWebChat.ts']) {
