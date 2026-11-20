@@ -5,7 +5,7 @@ import { isWebRoom } from './web.ts'
 
 // who may change settings
 
-export type ManageScope = 'guild' | 'channel'
+export type ManageScope = 'guild' | 'channel' | 'roles'
 
 interface PermissionsLike {
   has: (flag: string) => boolean
@@ -21,7 +21,7 @@ interface RawMessage {
   channel?: { permissionsFor?: (member: RawMember) => PermissionsLike | null }
 }
 
-const FLAG: Record<ManageScope, string> = { guild: 'ManageGuild', channel: 'ManageChannels' }
+const FLAG: Record<ManageScope, string> = { guild: 'ManageGuild', channel: 'ManageChannels', roles: 'ManageRoles' }
 
 export const canManage = (res: Response, scope: ManageScope): boolean => {
   if (isOwner(res)) return true
@@ -34,6 +34,7 @@ export const canManage = (res: Response, scope: ManageScope): boolean => {
   if (!member) return false
   try {
     if (member.permissions?.has(FLAG.guild)) return true
+    if (scope === 'roles') return Boolean(member.permissions?.has(FLAG.roles))
     // channel overwrites
     return scope === 'channel' && Boolean(raw.channel?.permissionsFor?.(member)?.has(FLAG.channel))
   } catch {
@@ -43,5 +44,6 @@ export const canManage = (res: Response, scope: ManageScope): boolean => {
 
 export const MANAGE_ONLY: Record<ManageScope, string> = {
   guild: 'Only someone who can manage this server can do that.',
-  channel: 'Only someone who can manage this channel can do that.'
+  channel: 'Only someone who can manage this channel can do that.',
+  roles: 'In professional servers, only someone who can manage roles can do that.'
 }

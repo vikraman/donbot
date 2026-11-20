@@ -2,21 +2,23 @@
 //   Assign roles to people you're chatting with
 //
 // Commands:
-//   hubot <user> is a badass guitarist - assign a role to a user
-//   hubot <user> is not a badass guitarist - remove a role from a user
+//   hubot <user> is a badass guitarist - assign a role to a user (Manage Roles in professional servers)
+//   hubot <user> is not a badass guitarist - remove a role from a user (Manage Roles in professional servers)
 //   hubot who is <user> - see what roles a user has
 //
 // Examples:
 //   hubot holman is an ego surfer
 //   hubot holman is not an ego surfer
 
-import type { Robot } from 'hubot'
+import type { Response, Robot } from 'hubot'
 
 import { required } from './lib/match.ts'
 import { defineLines } from './lib/lines.ts'
 import { userTz } from './lib/timezone.ts'
 import { defineFeature } from './lib/features.ts'
 import { findPeople, storeOf, type Person, type SpaceStore } from './lib/spaces.ts'
+import { canManage, MANAGE_ONLY } from './lib/permissions.ts'
+import { policyFor, type RawLike } from './lib/policy.ts'
 
 defineFeature({ id: 'roles', label: 'Roles', level: 'professional', help: ['hubot <user> is', 'hubot who is <user>'] })
 
@@ -40,7 +42,7 @@ const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
 // owned by other scripts
 const RESERVED = /^(?:focusing|your owner|my (?:timezone|time zone|tz|github)|what time|what's my (?:timezone|time zone|tz|github))$/i
 // other scripts' commands, so "win the deploy is done" isn't read as a role
-const COMMAND_WORDS = new Set(['remind', 'win', 'wins', 'focus', 'tock', 'pomodoro', 'distraction', 'kudos', 'pep', 'standup', 'recap', 'poll', 'ask', 'tell', 'streaks', 'github', 'my', 'skip', 'cancel', 'forget', 'define', 'choose', 'weather', 'quote', 'joke', 'score', 'reasons', 'top', 'last', 'most', 'least', 'whimsy', 'ai'])
+const COMMAND_WORDS = new Set(['remind', 'win', 'wins', 'focus', 'tock', 'pomodoro', 'distraction', 'kudos', 'pep', 'standup', 'recap', 'poll', 'ask', 'tell', 'streaks', 'github', 'my', 'skip', 'cancel', 'forget', 'define', 'choose', 'weather', 'quote', 'joke', 'score', 'reasons', 'top', 'last', 'most', 'least', 'whimsy', 'ai', 'faq', 'deadline', 'preset'])
 // people's names are short; anything longer is a sentence
 const MAX_NAME_WORDS = 3
 
@@ -118,6 +120,13 @@ const unknownUser = defineLines('roles.unknown', {
 
 
 export default async (robot: Robot) => {
+  // anyone in casual rooms; manage roles in professional ones
+  const mayEdit = async (res: Response): Promise<boolean> => {
+    if (policyFor(robot).modeOf(res.message.room, res.message.user?.message as RawLike | undefined) === 'casual' || canManage(res, 'roles')) return true
+    await res.send(MANAGE_ONLY.roles)
+    return false
+  }
+
   robot.respond(/who is @?([\w .-]+)\?*$/i, { id: 'roles.who' }, async res => {
     const joiner = ', '
     const name = required(res.match, 1).trim()
@@ -154,6 +163,7 @@ export default async (robot: Robot) => {
     if (skipNames.includes(name.toLowerCase()) || notAName(name) || newRole.match(/^not\s+/i)) {
       return
     }
+    if (!await mayEdit(res)) return
 
     const store = storeOf(robot, res)
     const users = findPeople(robot, store.space, name)
@@ -185,6 +195,7 @@ export default async (robot: Robot) => {
     if (skipNames.includes(name.toLowerCase()) || notAName(name)) {
       return
     }
+    if (!await mayEdit(res)) return
 
     const store = storeOf(robot, res)
     const users = findPeople(robot, store.space, name)

@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
+import { policyFor } from '../scripts/lib/policy.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
+import { learnMember } from '../scripts/lib/spaces.ts'
 
 describe('Roles testing Hubot scripts', () => {
   const state = setupRobot('Roles.ts')
@@ -73,5 +75,32 @@ describe('Roles testing Hubot scripts', () => {
     const sent = collect(robot)
     for (let i = 0; i < 20; i++) await robot.adapter.say(author, '@Dumbotheelephant nobody is a mystery', 'test-room')
     sent.forEach((line, i) => { if (i) assert.notStrictEqual(line, sent[i - 1]) })
+  })
+})
+
+describe('Roles in professional servers', () => {
+  const state = setupRobot('Roles.ts')
+
+  // a message in guild g1, with or without Manage Roles
+  const say = async (id: string, text: string, manageRoles = false) => {
+    const user = brainUser(state.robot, id, id === 'u1' ? 'alice' : 'bob')
+    const perms = { has: (flag: string) => manageRoles && flag === 'ManageRoles' }
+    ;(user as unknown as { message: unknown }).message = { guildId: 'g1', author: { id }, member: { permissions: perms }, channel: { id: 'room', isThread: () => false } }
+    await state.robot.adapter.say(user, text, 'room')
+  }
+
+  it('needs Manage Roles to set roles, but not to ask', async () => {
+    const { robot } = state
+    learnMember(robot, 'g:g1', 'u2', 'bob')
+    const sent = collect(robot)
+    await say('u1', '@Dumbotheelephant bob is a TA')
+    assert.strictEqual(sent.at(-1), 'In professional servers, only someone who can manage roles can do that.')
+    await say('u1', '@Dumbotheelephant bob is a TA', true)
+    assert.strictEqual(sent.at(-1), 'Ok, bob is a TA.')
+    await say('u1', '@Dumbotheelephant who is bob')
+    assert.strictEqual(sent.at(-1), 'bob is a TA.')
+    policyFor(robot).update(d => { d.guilds.g1 = { mode: 'casual', on: [], off: [] } })
+    await say('u1', '@Dumbotheelephant bob is not a TA')
+    assert.strictEqual(sent.at(-1), 'Ok, bob is no longer a TA.')
   })
 })
