@@ -1,48 +1,31 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
+import type { AddressInfo } from 'node:net'
 
-import type { Envelope } from 'hubot'
+import { setupRobot, chat, collect, collectRooms } from './helpers/setup.ts'
 
-import { setupRobot, brainUser } from './helpers/setup.ts'
+const HELO = "HELO World! I'm Dumbotheelephant."
 
-// robot.server is the http server hubot creates when httpd is on; not in the ambient types
-interface WithServer { server: { address(): { port: number } } }
-
-// Mocks Aren't Stubs
-// https://www.martinfowler.com/articles/mocksArentStubs.html
-
-describe('Xample testing Hubot scripts', () => {
+describe('Xample', () => {
   const state = setupRobot('Xample.ts')
 
-  it('should handle /helo request', async () => {
-    const { robot } = state
-    const expected = "HELO World! I'm Dumbotheelephant."
-    const url = 'http://localhost:' + (robot as unknown as WithServer).server.address().port + '/helo'
-    const response = await fetch(url)
-    const actual = await response.text()
-    assert.strictEqual(actual, expected)
-  })
-  it('should reply with expected message', async () => {
-    const { robot } = state
-    const expected = "HELO World! I'm Dumbotheelephant."
-    const user = brainUser(robot, 'test-user', 'test user')
-    let actual = ''
-    robot.on('reply', (_envelope: Envelope, ...strings: string[]) => {
-      actual = strings.join('')
-    })
-    await robot.adapter.say(user, '@Dumbotheelephant helo', 'test-room')
-    assert.strictEqual(actual, expected)
+  it('serves /helo', async () => {
+    const { port } = state.robot.server!.address() as AddressInfo
+    const response = await fetch(`http://localhost:${port}/helo`)
+    assert.strictEqual(await response.text(), HELO)
   })
 
-  it('should send message to the #general room', async () => {
-    const { robot } = state
-    const expected = 'general'
-    const user = brainUser(robot, 'test-user', 'test user')
-    let actual = ''
-    robot.on('send', (envelope: Envelope, ..._strings: string[]) => {
-      actual = envelope.room!
-    })
-    await robot.adapter.say(user, '@Dumbotheelephant helo room', 'general')
-    assert.strictEqual(actual, expected)
+  it('replies to helo', async () => {
+    const { robot, ask } = chat(state)
+    const replies = collect(robot, 'reply')
+    await ask('helo')
+    assert.deepStrictEqual(replies, [HELO])
+  })
+
+  it('sends to the room it was asked in', async () => {
+    const { robot, ask } = chat(state, { room: 'general' })
+    const sent = collectRooms(robot)
+    await ask('helo room')
+    assert.strictEqual(sent[0]?.room, 'general')
   })
 })

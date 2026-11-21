@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 
-import type { DiscordClient, DiscordMessage } from 'hubot'
+import type { DiscordMessage } from 'hubot'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 
@@ -15,7 +15,7 @@ const raw = (roles: Record<string, string | undefined>): DiscordMessage => ({
 describe('BotRoleMention', () => {
   const state = setupRobot('BotRoleMention.ts')
   beforeEach(() => {
-    state.robot.adapter.client = { user: { id: BOT_ID } } as DiscordClient
+    state.robot.adapter.client = { user: { id: BOT_ID } }
     state.robot.respond(/ping (\S+)$/i, async res => { await res.send(`pong ${res.match[1]}`) })
   })
 
@@ -43,7 +43,7 @@ describe('BotRoleMention', () => {
 
   it('leaves normal mentions alone', async () => {
     const sent = collect(state.robot)
-    await say('@Dumbotheelephant ping y', {})
+    await say(`@${state.robot.name} ping y`, {})
     assert.deepStrictEqual(sent, ['pong y'])
   })
 })

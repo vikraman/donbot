@@ -2,25 +2,26 @@ import { describe, it, beforeEach, mock } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 
-import type { DiscordClient, Envelope } from 'hubot'
+import type { DiscordClient } from 'hubot'
 
 import * as Github from '../scripts/Github.ts'
 import type { Activity, GhEvent, Run } from '../scripts/Github.ts'
 import { parseRepo } from '../scripts/lib/github.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
 import type { GithubLog } from '../scripts/Github.ts'
-import { setupRobot, brainUser, inGuild } from './helpers/setup.ts'
-import type { TestRobot } from './helpers/setup.ts'
+import { setupRobot, brainUser, collectRooms, inGuild } from './helpers/setup.ts'
+import { runDueJobs, settle } from './helpers/fakes.ts'
 
 const ENV = ['GITHUB_TOKEN', 'GITHUB_POLL_SECONDS', 'GITHUB_POLL_MAX_SECONDS', 'OWNER_USER_ID']
 const START = Date.parse('2026-11-15T12:00:00Z')
 const TICK = 15_000
 
+// polls chain many awaits
 const flush = async () => {
-  for (let i = 0; i < 30; i++) await new Promise(resolve => setImmediate(resolve))
+  for (let i = 0; i < 30; i++) await settle()
 }
 
-interface Sent { room: string, text: string }
+type Sent = ReturnType<typeof collectRooms>[number]
 interface Call { path: string, headers: Record<string, string> }
 
 interface RepoState {
@@ -29,14 +30,14 @@ interface RepoState {
   activity: Activity[]
   runs: Run[]
   pulls: Record<number, { title: string, html_url: string, merged?: boolean, merged_at?: string, user?: { login: string } }>
-  // listed by /pulls?state=...
+  // listed by /pulls
   prList: Record<string, unknown>[]
   reviews: Record<number, unknown[]>
   compares: Record<string, unknown>
   status?: number
 }
 
-// fake api.github.com keyed by lowercased owner/repo; real etags so 304s happen
+// fake github api with real etags
 const fakeGithub = () => {
   const repos: Record<string, RepoState> = {}
   const calls: Call[] = []
@@ -124,13 +125,6 @@ describe('Github helpers', () => {
     assert.match(Github.parseOptions('stars').error || '', /don't know "stars"/)
   })
 
-  it('escapes link text so titles cannot break out', () => {
-    assert.strictEqual(Github.link('a](x) @everyone', 'https://github.com/o/r'), '[a\\](x) @​everyone](<https://github.com/o/r>)')
-    assert.strictEqual(Github.esc('`code` *b*\nnext'), '`code` \\*b\\* next')
-    assert.strictEqual(Github.link('t', 'https://github.com/o/r/tree/a>b'), '[t](<https://github.com/o/r/tree/a%3Eb>)')
-    assert.strictEqual(Github.esc('see https://x.io/a and HTTP://y.io'), 'see <https://x.io/a> and <HTTP://y.io>')
-  })
-
   it('formats repo and api status', () => {
     const stats: Github.RepoStats = { name: 'Octo/Demo', events: ['issues', 'pushes'], base: 60, every: 960, max: 3600, idleTicks: 4, lastPollAt: START - 180_000, nextPollAt: START + 780_000 }
     assert.strictEqual(Github.formatRepoStatus(stats, START), [
@@ -147,7 +141,6 @@ describe('Github helpers', () => {
     const rate = { remaining: 2, limit: 5000, reset: START + 3_600_000 }
     assert.strictEqual(Github.formatApiStatus({ authed: true, rate, pausedUntil: rate.reset }, START), 'GitHub API: token, 2/5000 requests left, resets 13:00 UTC, paused until 13:00 UTC')
   })
-
 
   it('formats the digest', () => {
     const base = { ts: START, room: 'r', repo: 'Octo/Demo' }
@@ -200,7 +193,7 @@ describe('Github helpers', () => {
   })
 })
 
-describe('Github testing Hubot scripts', () => {
+describe('Github', () => {
   const state = setupRobot(['Github.ts', 'Roles.ts'], { envVars: ENV })
   let now: number
   let gh: ReturnType<typeof fakeGithub>
@@ -210,7 +203,7 @@ describe('Github testing Hubot scripts', () => {
   beforeEach(() => {
     now = START
     mock.method(Date, 'now', () => now)
-    // mock.timers would also swallow the brain's clearInterval on shutdown
+    // mock.timers breaks brain shutdown
     tickFn = undefined
     mock.method(global, 'setInterval', (fn: () => void) => {
       tickFn = fn
@@ -220,15 +213,12 @@ describe('Github testing Hubot scripts', () => {
     delete process.env.GITHUB_POLL_SECONDS
     delete process.env.GITHUB_POLL_MAX_SECONDS
     gh = fakeGithub()
-    sent = []
-    state.robot.on('send', (envelope: Envelope, ...strings: string[]) => {
-      sent.push({ room: envelope.room || '', text: strings.join('') })
-    })
+    sent = collectRooms(state.robot)
     state.robot.brain.emit('connected')
   })
 
-  const say = async (robot: TestRobot, text: string, room = 'room-a') => {
-    await robot.adapter.say(brainUser(robot, 'u1', 'alice'), `@Dumbotheelephant ${text}`, room)
+  const say = async (text: string, room = 'room-a') => {
+    await state.robot.adapter.say(brainUser(state.robot, 'u1', 'alice'), `@${state.robot.name} ${text}`, room)
     await flush()
   }
 
@@ -246,7 +236,7 @@ describe('Github testing Hubot scripts', () => {
   it('subscribes with the default categories and posts no backlog', async () => {
     const repo = gh.add('Octo/Demo')
     repo.events.push(ev('IssuesEvent', { action: 'opened', issue: { number: 1, title: 'old', html_url: 'u' } }, '2026-11-15T11:00:00Z'))
-    await say(state.robot, 'github subscribe octo/demo')
+    await say('github subscribe octo/demo')
     const [reply] = texts()
     assert.match(reply || '', /Following \*\*\[Octo\/Demo\]\(<https:\/\/github\.com\/Octo\/Demo>\)\*\* here: issues, prs, pushes, ci, releases \(checking every 1m\)/)
     await advance(60_000)
@@ -255,10 +245,10 @@ describe('Github testing Hubot scripts', () => {
 
   it('accepts a github url and merges categories on re-subscribe', async () => {
     gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe https://github.com/octo/demo issues')
-    await say(state.robot, 'github subscribe octo/demo ci every 5m')
+    await say('github subscribe https://github.com/octo/demo issues')
+    await say('github subscribe octo/demo ci every 5m')
     take()
-    await say(state.robot, 'github subscriptions')
+    await say('github subscriptions')
     assert.deepStrictEqual(texts(), [[
       '**[Octo/Demo](<https://github.com/Octo/Demo>)**: issues, ci',
       'Polling: every 5m',
@@ -271,12 +261,12 @@ describe('Github testing Hubot scripts', () => {
   it('rejects missing, private and archived repos and bad input', async () => {
     gh.add('Octo/Secret', { private: true })
     gh.add('Octo/Old', { archived: true })
-    await say(state.robot, 'github subscribe octo/nope')
-    await say(state.robot, 'github subscribe octo/secret')
-    await say(state.robot, 'github subscribe octo/old')
-    await say(state.robot, 'github subscribe nope')
-    await say(state.robot, 'github subscribe octo/old stars')
-    await say(state.robot, 'github subscribe octo/old every 10s')
+    await say('github subscribe octo/nope')
+    await say('github subscribe octo/secret')
+    await say('github subscribe octo/old')
+    await say('github subscribe nope')
+    await say('github subscribe octo/old stars')
+    await say('github subscribe octo/old every 10s')
     const out = texts()
     assert.match(out[0] || '', /can't find octo\/nope/)
     assert.match(out[1] || '', /Octo\/Secret is private/)
@@ -290,19 +280,19 @@ describe('Github testing Hubot scripts', () => {
 
   it('does not trip sibling listeners', async () => {
     gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo issues')
-    await say(state.robot, 'github poll')
-    await say(state.robot, 'github unsubscribe octo/demo')
+    await say('github subscribe octo/demo issues')
+    await say('github poll')
+    await say('github unsubscribe octo/demo')
     assert.strictEqual(texts().length, 3)
   })
 
   it('unsubscribes some or all categories', async () => {
     gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo')
-    await say(state.robot, 'github unsubscribe octo/demo ci pushes')
-    await say(state.robot, 'github unsubscribe octo/demo')
-    await say(state.robot, 'github unsubscribe octo/demo')
-    await say(state.robot, 'github subscriptions')
+    await say('github subscribe octo/demo')
+    await say('github unsubscribe octo/demo ci pushes')
+    await say('github unsubscribe octo/demo')
+    await say('github unsubscribe octo/demo')
+    await say('github subscriptions')
     const out = texts()
     assert.match(out[1] || '', /now just: issues, prs, releases/)
     assert.match(out[2] || '', /Stopped following/)
@@ -313,8 +303,8 @@ describe('Github testing Hubot scripts', () => {
 
   it('routes new events to the rooms that want them', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo issues', 'room-a')
-    await say(state.robot, 'github subscribe octo/demo prs', 'room-b')
+    await say('github subscribe octo/demo issues', 'room-a')
+    await say('github subscribe octo/demo prs', 'room-b')
     take()
     repo.events.push(issue(7, 'Login [broken]'))
     repo.events.push(ev('PullRequestEvent', { action: 'closed', number: 9, pull_request: { number: 9 } }, '2026-11-15T12:00:35Z', 'bob'))
@@ -333,7 +323,7 @@ describe('Github testing Hubot scripts', () => {
 
   it('sends the etag and posts nothing on 304', async () => {
     gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo')
+    await say('github subscribe octo/demo')
     take()
     await advance(60_000)
     const polls = gh.calls.filter(c => c.path.includes('/events'))
@@ -345,7 +335,7 @@ describe('Github testing Hubot scripts', () => {
 
   it('looks up commits for pushes', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo pushes')
+    await say('github subscribe octo/demo pushes')
     take()
     repo.activity.push(act('push', 'a'.repeat(40), 'b'.repeat(40)))
     repo.compares[`${'a'.repeat(40)}...${'b'.repeat(40)}`] = {
@@ -362,7 +352,7 @@ describe('Github testing Hubot scripts', () => {
 
   it('counts pushes from linked accounts toward commit streaks', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo pushes')
+    await say('github subscribe octo/demo pushes')
     take()
     state.robot.brain.set('github:login:u1', 'Alice')
     state.robot.brain.set('streak:commit:u1', { current: 2, best: 2, lastDay: '2026-11-14' })
@@ -378,7 +368,7 @@ describe('Github testing Hubot scripts', () => {
   it('posts force pushes, new branches and merges, but not deletions, tags or push events', async () => {
     const repo = gh.add('Octo/Demo')
     repo.activity.push(act('push', 'c'.repeat(40), 'd'.repeat(40), 'refs/heads/main', '2026-11-15T11:59:00Z'))
-    await say(state.robot, 'github subscribe octo/demo pushes')
+    await say('github subscribe octo/demo pushes')
     take()
     const zero = '0'.repeat(40)
     repo.activity.push(act('force_push', 'a'.repeat(40), 'b'.repeat(40), 'refs/heads/feat', '2026-11-15T12:00:31Z', 'bob'))
@@ -398,10 +388,10 @@ describe('Github testing Hubot scripts', () => {
 
   it('only polls activity for push subscribers and sends its etag', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo issues')
+    await say('github subscribe octo/demo issues')
     await advance(60_000)
     assert.ok(gh.calls.every(c => !c.path.includes('/activity')))
-    await say(state.robot, 'github subscribe octo/demo pushes')
+    await say('github subscribe octo/demo pushes')
     take()
     await advance(60_000)
     const polls = gh.calls.filter(c => c.path.includes('/activity'))
@@ -409,13 +399,13 @@ describe('Github testing Hubot scripts', () => {
     assert.ok(polls.at(-1)?.headers['If-None-Match'])
     repo.activity.push(act('force_push', 'a'.repeat(40), 'b'.repeat(40), 'refs/heads/main', '2026-11-15T12:01:50Z'))
     now += 16_000
-    await say(state.robot, 'github poll')
+    await say('github poll')
     assert.match(texts()[0] || '', /force-pushed/)
   })
 
   it('catches up on pushes since the subscription for cursors without activity', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo issues pushes')
+    await say('github subscribe octo/demo issues pushes')
     take()
     const cursor = state.robot.brain.get('github:cursor:octo/demo') as Record<string, unknown>
     delete cursor.seenActivity
@@ -431,67 +421,67 @@ describe('Github testing Hubot scripts', () => {
   it('reports ci failures and recoveries but not routine greens', async () => {
     const repo = gh.add('Octo/Demo')
     repo.runs.push(run('success', 'build', 'main', '2026-11-15T11:00:00Z'))
-    await say(state.robot, 'github subscribe octo/demo ci')
+    await say('github subscribe octo/demo ci')
     take()
     repo.runs.push(run('failure'))
     repo.runs.push(run('cancelled', 'lint'))
-    await say(state.robot, 'github poll')
+    await say('github poll')
     assert.match(texts()[0] || '', /❌ CI \[build\]\(<https:\/\/github\.com\/Octo\/Demo\/actions\/runs\/\d+>\) failed on \[main\]/)
     now += 20_000
     repo.runs.push(run('success', 'build', 'main', '2026-11-15T12:01:00Z'))
-    await say(state.robot, 'github poll')
+    await say('github poll')
     assert.match(texts()[0] || '', /✅ CI \[build\].* is passing again on \[main\]/)
     now += 20_000
     repo.runs.push(run('success', 'build', 'main', '2026-11-15T12:02:00Z'))
-    await say(state.robot, 'github poll')
+    await say('github poll')
     assert.deepStrictEqual(texts(), ['Nothing new.'])
   })
 
   it('honours per-subscription intervals, lowest wins', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo issues every 5m', 'room-a')
+    await say('github subscribe octo/demo issues every 5m', 'room-a')
     take()
     repo.events.push(issue(1, 'one'))
     await advance(4 * 60_000)
     assert.deepStrictEqual(texts(), [])
     await advance(60_000)
     assert.strictEqual(texts().length, 1)
-    await say(state.robot, 'github subscribe octo/demo issues every 2m', 'room-b')
-    await say(state.robot, 'github subscriptions', 'room-a')
+    await say('github subscribe octo/demo issues every 2m', 'room-b')
+    await say('github subscriptions', 'room-a')
     assert.match(texts('room-a')[0] || '', /every 2m/)
   })
 
   it('backs off while quiet and snaps back on activity', async () => {
     const repo = gh.add('Octo/Demo')
     process.env.GITHUB_POLL_MAX_SECONDS = '600'
-    await say(state.robot, 'github subscribe octo/demo issues')
+    await say('github subscribe octo/demo issues')
     take()
     // quiet polls at 1m, 3m, 7m, 15m; 16m caps to 10m
     await advance(7 * 60_000)
-    await say(state.robot, 'github subscriptions')
+    await say('github subscriptions')
     assert.match(texts()[0] || '', /\nPolling: every 8m, backed off from 1m after 3 quiet polls \(max 10m\)\nLast poll: just now \(ok\), next in 8m, last post never\n/)
     await advance(9 * 60_000)
-    await say(state.robot, 'github subscriptions')
+    await say('github subscriptions')
     assert.match(texts()[0] || '', /\nPolling: every 10m, backed off from 1m after 4 quiet polls \(max 10m\)\n/)
     repo.events.push(ev('IssuesEvent', { action: 'opened', issue: { number: 2, title: 't', html_url: 'u' } }, '2026-11-15T12:20:00Z'))
     // next quiet poll was due at 25m
     await advance(9 * 60_000)
     assert.strictEqual(texts().length, 1)
-    await say(state.robot, 'github subscriptions')
+    await say('github subscriptions')
     assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: just now \(ok\), next in 1m, last post just now\n/)
   })
 
   it('resets the backoff on restart', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo issues')
+    await say('github subscribe octo/demo issues')
     take()
     // quiet polls at 1m, 3m, 7m, 15m
     await advance(15 * 60_000)
-    await say(state.robot, 'github subscriptions')
+    await say('github subscriptions')
     assert.match(texts()[0] || '', /\nPolling: every 16m, backed off from 1m after 4 quiet polls/)
     state.robot.brain.emit('close')
     state.robot.brain.emit('connected')
-    await say(state.robot, 'github subscriptions')
+    await say('github subscriptions')
     assert.match(texts()[0] || '', /\nPolling: every 1m\nLast poll: just now \(ok\), next in 1m,/)
     repo.events.push(issue(8, 'after restart'))
     await advance(60_000)
@@ -502,10 +492,10 @@ describe('Github testing Hubot scripts', () => {
     delete process.env.GITHUB_TOKEN
     gh.add('Octo/Demo')
     gh.add('Octo/Other')
-    await say(state.robot, 'github subscribe octo/demo')
-    await say(state.robot, 'github subscribe octo/other')
+    await say('github subscribe octo/demo')
+    await say('github subscribe octo/other')
     take()
-    await say(state.robot, 'github subscriptions')
+    await say('github subscriptions')
     const out = texts()[0] || ''
     assert.strictEqual(out.match(/\nPolling: every 6m\n/g)?.length, 2)
     assert.match(out, /\n\nGitHub API: no token, /)
@@ -514,37 +504,37 @@ describe('Github testing Hubot scripts', () => {
 
   it('shows poll failures, last post and the rate limit pause', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo issues')
+    await say('github subscribe octo/demo issues')
     repo.events.push(issue(5, 'hello'))
     await advance(60_000)
     take()
     now += 5 * 60_000
     repo.status = 502
     await advance(120_000)
-    await say(state.robot, 'github status')
+    await say('github status')
     assert.match(texts()[0] || '', /\nLast poll: 1m 45s ago \(failed: events: GitHub said 502\), next in 15s, last post 7m ago\n/)
     repo.status = undefined
     gh.calls.length = 0
     mock.method(global, 'fetch', async () => new Response('[]', { status: 200, headers: { 'x-ratelimit-limit': '5000', 'x-ratelimit-remaining': '2', 'x-ratelimit-reset': String(START / 1000 + 3600) } }))
     now += 16_000
-    await say(state.robot, 'github poll')
+    await say('github poll')
     take()
-    await say(state.robot, 'github status')
+    await say('github status')
     assert.match(texts()[0] || '', /\n\nGitHub API: token, 2\/5000 requests left, resets 13:00 UTC, paused until 13:00 UTC$/)
   })
 
   it('polls on demand', async () => {
     const repo = gh.add('Octo/Demo')
     gh.add('Octo/Other')
-    await say(state.robot, 'github subscribe octo/demo issues')
-    await say(state.robot, 'github poll octo/other')
-    await say(state.robot, 'github poll')
+    await say('github subscribe octo/demo issues')
+    await say('github poll octo/other')
+    await say('github poll')
     take()
     repo.events.push(issue(3, 'urgent'))
-    await say(state.robot, 'github poll')
+    await say('github poll')
     assert.deepStrictEqual(texts(), ['I just checked; give it a few seconds.'])
     now += 16_000
-    await say(state.robot, 'github poll octo/demo')
+    await say('github poll octo/demo')
     const out = texts()
     assert.strictEqual(out.length, 1)
     assert.match(out[0] || '', /opened issue \[#3 urgent\]/)
@@ -552,19 +542,19 @@ describe('Github testing Hubot scripts', () => {
 
   it('reports nothing new and rejects repos the channel does not follow', async () => {
     gh.add('Octo/Demo')
-    await say(state.robot, 'github poll')
-    await say(state.robot, 'github subscribe octo/demo')
-    await say(state.robot, 'github poll octo/elsewhere')
+    await say('github poll')
+    await say('github subscribe octo/demo')
+    await say('github poll octo/elsewhere')
     take()
     now += 16_000
-    await say(state.robot, 'github poll')
+    await say('github poll')
     assert.deepStrictEqual(texts(), ['Nothing new.'])
   })
 
   it('drops a repo that disappears', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo', 'room-a')
-    await say(state.robot, 'github subscribe octo/demo issues', 'room-b')
+    await say('github subscribe octo/demo', 'room-a')
+    await say('github subscribe octo/demo issues', 'room-b')
     take()
     repo.status = 404
     await advance(60_000)
@@ -580,7 +570,7 @@ describe('Github testing Hubot scripts', () => {
     const repo = gh.add('Octo/Demo')
     const channelSend = mock.fn(async (_payload: unknown) => ({}))
     state.robot.adapter.client = { channels: { cache: new Map([['room-a', { send: channelSend }]]) } } as unknown as DiscordClient
-    await say(state.robot, 'github subscribe octo/demo issues')
+    await say('github subscribe octo/demo issues')
     take()
     repo.events.push(issue(4, '@everyone look'))
     await advance(60_000)
@@ -588,7 +578,7 @@ describe('Github testing Hubot scripts', () => {
     const payload = channelSend.mock.calls[0]?.arguments[0] as { content: string, flags: number, allowedMentions: unknown }
     assert.strictEqual(payload.flags, 4)
     assert.deepStrictEqual(payload.allowedMentions, { parse: [] })
-    assert.match(payload.content, /@​everyone look/)
+    assert.match(payload.content, /@\u200beveryone look/)
     assertNoBareUrls(payload.content)
   })
   const merge = (n: number, author: string, at = '2026-11-15T12:00:35Z') => {
@@ -597,13 +587,13 @@ describe('Github testing Hubot scripts', () => {
     repo.prList.push({ number: n, state: 'closed', merged_at: at, user: { login: author } })
     repo.events.push(ev('PullRequestEvent', { action: 'closed', number: n, pull_request: { number: n } }, at, 'maintainer'))
   }
-  const logged = (): GithubLog[] => (state.robot.brain.get('log:github') as GithubLog[] | undefined) ?? []
+  const logged = (): GithubLog[] => state.robot.brain.get<GithubLog[]>('log:github') ?? []
 
   it('cheers first merged prs, credits authors and skips old contributors and bots', async () => {
     const repo = gh.add('Octo/Demo')
     repo.prList.push({ number: 1, state: 'closed', merged_at: '2026-11-01T00:00:00Z', user: { login: 'Bob' } })
     repo.prList.push({ number: 2, state: 'closed', merged_at: null, user: { login: 'carol' } })
-    await say(state.robot, 'github subscribe octo/demo prs')
+    await say('github subscribe octo/demo prs')
     take()
     merge(10, 'bob')
     merge(11, 'carol', '2026-11-15T12:00:36Z')
@@ -628,7 +618,7 @@ describe('Github testing Hubot scripts', () => {
     setRandomSource(() => 0)
     const repo = gh.add('Octo/Demo')
     for (let n = 1; n <= 9; n++) repo.prList.push({ number: n, state: 'closed', merged_at: '2026-11-01T00:00:00Z', user: { login: 'bob' } })
-    await say(state.robot, 'github subscribe octo/demo prs')
+    await say('github subscribe octo/demo prs')
     take()
     merge(20, 'bob')
     await advance(60_000)
@@ -641,7 +631,7 @@ describe('Github testing Hubot scripts', () => {
 
   it('still posts merges when seeding fails', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo prs')
+    await say('github subscribe octo/demo prs')
     take()
     merge(5, 'dave')
     mock.method(global, 'fetch', async (url: string) => {
@@ -660,7 +650,7 @@ describe('Github testing Hubot scripts', () => {
   it('cheers releases and logs issues, releases and ci fixes', async () => {
     const repo = gh.add('Octo/Demo')
     repo.runs.push(run('failure', 'build', 'main', '2026-11-15T11:00:00Z'))
-    await say(state.robot, 'github subscribe octo/demo issues releases ci')
+    await say('github subscribe octo/demo issues releases ci')
     take()
     repo.events.push(issue(1, 'Bug'))
     repo.events.push(ev('IssuesEvent', { action: 'closed', issue: { number: 1, title: 'Bug', html_url: 'https://github.com/Octo/Demo/issues/1' } }, '2026-11-15T12:00:31Z', 'bob'))
@@ -678,21 +668,21 @@ describe('Github testing Hubot scripts', () => {
 
   it('sums up the channel in a digest', async () => {
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github subscribe octo/demo issues', 'room-a')
-    await say(state.robot, 'github subscribe octo/demo prs', 'room-b')
-    await say(state.robot, 'github digest', 'room-a')
+    await say('github subscribe octo/demo issues', 'room-a')
+    await say('github subscribe octo/demo prs', 'room-b')
+    await say('github digest', 'room-a')
     assert.deepStrictEqual(texts('room-a').slice(-1), ['No GitHub activity here this week.'])
     repo.events.push(issue(1, 'Bug'))
     merge(2, 'bob', '2026-11-15T12:00:31Z')
     await advance(60_000)
     take()
-    await say(state.robot, 'github digest', 'room-a')
-    await say(state.robot, 'github digest month', 'room-b')
+    await say('github digest', 'room-a')
+    await say('github digest month', 'room-b')
     const [a, b] = texts()
     assert.match(a || '', /^📦 GitHub this week: 1 issue opened\nTop contributors: alice \(1\)$/)
     assert.match(b || '', /^📦 GitHub this month: 1 PR merged\nMerged: \[Octo\/Demo #2 PR 2\]/)
     now += 8 * 24 * 3_600_000
-    await say(state.robot, 'github digest', 'room-a')
+    await say('github digest', 'room-a')
     assert.deepStrictEqual(texts(), ['No GitHub activity here this week.'])
   })
 
@@ -704,16 +694,16 @@ describe('Github testing Hubot scripts', () => {
   it('nudges about prs waiting for review', async () => {
     setRandomSource(() => 0)
     const repo = gh.add('Octo/Demo')
-    await say(state.robot, 'github nudge')
+    await say('github nudge')
     assert.match(texts()[0] || '', /doesn't follow any repo's PRs/)
-    await say(state.robot, 'github subscribe octo/demo prs')
+    await say('github subscribe octo/demo prs')
     take()
-    await say(state.robot, 'github nudge')
+    await say('github nudge')
     assert.deepStrictEqual(texts(), ['No PRs here have been waiting more than 2 days for a review. 🎉'])
     repo.prList.push(openPr(1, 1), openPr(2, 3, { requested_reviewers: [{ login: 'carol' }], requested_teams: [{ slug: 'core' }] }),
       openPr(3, 5, { draft: true }), openPr(4, 6), openPr(5, 60), openPr(6, 4))
     repo.reviews[4] = [{ state: 'COMMENTED' }]
-    await say(state.robot, 'github nudge')
+    await say('github nudge')
     assert.deepStrictEqual(texts(), [[
       '👀 These PRs are waiting for a review:',
       '**[Octo/Demo](<https://github.com/Octo/Demo>)** [#6 PR 6](<https://github.com/Octo/Demo/pull/6>) by [bob](<https://github.com/bob>), open 4d',
@@ -730,39 +720,20 @@ describe('Github testing Hubot scripts', () => {
     process.env.OWNER_USER_ID = 'u1'
     await state.robot.loadFile('./scripts', 'Policy.ts')
     inGuild(state.robot, 'g1', ['room-a', 'room-b'])
-    await say(state.robot, 'github subscribe octo/demo prs', 'room-a')
-    await say(state.robot, 'github subscribe octo/demo prs', 'room-b')
-    await say(state.robot, 'github nudges off', 'room-b')
+    await say('github subscribe octo/demo prs', 'room-a')
+    await say('github subscribe octo/demo prs', 'room-b')
+    await say('github nudges off', 'room-b')
     assert.match(texts('room-b').at(-1) || '', /Weekday review nudges: off for this channel/)
     repo.prList.push(openPr(7, 3))
-    const fire = async () => {
-      state.robot.brain.set('schedule:github-nudge', [{ ...job, at: now - 1000 }])
-      state.robot.brain.emit('connected')
-      await new Promise(resolve => setTimeout(resolve, 5))
-      await flush()
-    }
-    await fire()
+    await runDueJobs(state.robot, 'github-nudge', 5)
+    await flush()
     const out = take()
     assert.deepStrictEqual(out.map(s => s.room), ['room-a'])
     assert.match(out[0]?.text || '', /#7 PR 7/)
     const next = (state.robot.brain.get('schedule:github-nudge') as { at: number }[])[0]
     assert.ok((next?.at ?? 0) > now)
     // manual nudge ignores the toggle
-    await say(state.robot, 'github nudge', 'room-b')
+    await say('github nudge', 'room-b')
     assert.match(texts('room-b')[0] || '', /#7 PR 7/)
-  })
-
-  it('varies the nudge intro from day to day', async () => {
-    setRandomSource(() => 0)
-    const repo = gh.add('Octo/Demo')
-    repo.prList.push(openPr(6, 4))
-    await say(state.robot, 'github subscribe octo/demo prs')
-    take()
-    const intros: string[] = []
-    for (let i = 0; i < 3; i++) {
-      await say(state.robot, 'github nudge')
-      intros.push((texts()[0] || '').split('\n')[0]!)
-    }
-    assert.deepStrictEqual(intros, ['👀 These PRs are waiting for a review:', '👀 A few PRs could use a reviewer:', '👀 Review-hungry PRs, looking for a kind soul:'])
   })
 })

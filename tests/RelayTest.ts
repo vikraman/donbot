@@ -3,16 +3,18 @@ import assert from 'node:assert/strict'
 
 import type { DiscordMessage } from 'hubot'
 
-import { parseBridges } from '../scripts/Relay.ts'
+import { neutraliseDiscordPings, parseBridges, silenceZulipMentions } from '../scripts/Relay.ts'
 import type { ZulipMessage } from '../scripts/lib/zulip.ts'
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, chat, collect, collectRooms, brainUser } from './helpers/setup.ts'
+import { tick, withMessage } from './helpers/fakes.ts'
+import { fc } from './helpers/arb.ts'
 
 const ENV = ['ZULIP_SITE', 'ZULIP_BOT_EMAIL', 'ZULIP_API_KEY', 'RELAY_BRIDGES', 'ZULIP_DM_CHANNEL', 'OWNER_USER_ID']
 const BOT = 'donbot-bot@chat.example.org'
 
 interface Call { method: string, path: string, params: Record<string, string> }
 
-// fake zulip server; /events blocks until events are pushed or the request aborts
+// fake zulip, long-polled events
 const fakeZulip = () => {
   const calls: Call[] = []
   const pending: ZulipMessage[][] = []
@@ -28,7 +30,7 @@ const fakeZulip = () => {
     const u = new URL(url)
     const path = u.pathname.replace('/api/v1', '')
     const method = init.method || 'GET'
-    const params = Object.fromEntries(method === 'GET' ? u.searchParams : new URLSearchParams(String(init.body)))
+    const params = Object.fromEntries(method === 'GET' ? u.searchParams : new URLSearchParams(init.body as string))
     calls.push({ method, path, params })
     if (path === '/register') return ok({ queue_id: `q${++registers}`, last_event_id: -1 })
     if (path === '/events') {
@@ -64,17 +66,17 @@ const fakeZulip = () => {
         id: 1, type: 'stream', content: '', subject: '', sender_id: 5,
         sender_email: 'alice@chat.example.org', sender_full_name: 'Alice Z',
         display_recipient: 'general', ...message
-      } as ZulipMessage])
+      }])
       wake?.()
     }
   }
 }
 
 const waitFor = async (cond: () => boolean) => {
-  for (let i = 0; i < 200 && !cond(); i++) await new Promise(resolve => setTimeout(resolve, 1))
+  for (let i = 0; i < 200 && !cond(); i++) await tick(1)
 }
 
-const settle = () => new Promise(resolve => setTimeout(resolve, 20))
+const idle = () => tick(20)
 
 const configure = (bridges: string, extra: Record<string, string> = {}) => {
   process.env.ZULIP_SITE = 'https://chat.example.org'
@@ -99,8 +101,23 @@ const rawMessage = (id: string, extra: Record<string, unknown> = {}) => {
   return { raw: raw as unknown as DiscordMessage, reactions }
 }
 
-describe('Relay parseBridges', () => {
-  it('should parse topics, general chat and skip junk', () => {
+describe('relay ping properties', () => {
+  const text = fc.array(fc.constantFrom('@', '<', '*', '_', 'everyone', 'HERE', 'x', ' ', '**bob**'), { maxLength: 20 }).map(p => p.join(''))
+
+  it('leaves no live pings, idempotently', () => {
+    fc.assert(fc.property(text, t => {
+      const d = neutraliseDiscordPings(t)
+      assert.doesNotMatch(d, /@(everyone|here)|<@/i)
+      assert.strictEqual(neutraliseDiscordPings(d), d)
+      const z = silenceZulipMentions(t)
+      assert.doesNotMatch(z, /@\*/)
+      assert.strictEqual(silenceZulipMentions(z), z)
+    }))
+  })
+})
+
+describe('Relay bridges', () => {
+  it('parses topics, general chat and skip junk', () => {
     assert.deepStrictEqual(parseBridges('1=general/donbot chat, 2=social ,bad, =x, 3=a/b/c'), [
       { channel: '1', stream: 'general', topic: 'donbot chat' },
       { channel: '2', stream: 'social', topic: '' },
@@ -110,29 +127,36 @@ describe('Relay parseBridges', () => {
   })
 })
 
-describe('Relay testing Hubot scripts', () => {
+describe('Relay', () => {
   const state = setupRobot('Relay.ts', { envVars: ENV, deferLoad: true })
 
-  it('should do nothing and make no requests without config', async () => {
+  // configure, fake zulip, load
+  const start = async (bridges: string, extra: Record<string, string> = {}, opts: Partial<ReturnType<typeof fakeZulip>['opts']> = {}) => {
+    configure(bridges, extra)
+    const z = fakeZulip()
+    Object.assign(z.opts, opts)
+    await state.loadScript()
+    return z
+  }
+  const bob = () => chat(state, { id: 'u1', name: 'bob', room: 'chan-1' })
+
+  it('does nothing and make no requests without config', async () => {
     for (const name of ENV) delete process.env[name]
     const fetchMock = mock.method(global, 'fetch', async () => { throw new Error('no fetch') })
     await state.loadScript()
-    const user = brainUser(state.robot, 'u1', 'bob')
-    const sent = collect(state.robot)
-    await state.robot.adapter.say(user, '>> hello', 'chan-1')
-    await state.robot.adapter.say(user, '@Dumbotheelephant relay', 'chan-1')
+    const { sent, say, ask } = bob()
+    await say('>> hello')
+    await ask('relay')
     assert.strictEqual(fetchMock.mock.callCount(), 0)
     assert.deepStrictEqual(sent, ["The Zulip relay isn't set up."])
   })
 
-  it('should relay a prefixed discord message to the bridged topic', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
-    const user = brainUser(state.robot, 'u1', 'bob')
+  it('relays a prefixed discord message to the bridged topic', async () => {
+    const z = await start('chan-1=general/donbot')
+    const { user, say } = bob()
     const { raw, reactions } = rawMessage('m1')
-    user.message = raw
-    await state.robot.adapter.say(user, '>>  hi zulip', 'chan-1')
+    withMessage(user, raw)
+    await say('>>  hi zulip')
     await waitFor(() => reactions.length > 0)
     assert.deepStrictEqual(z.sent().map(c => c.params), [
       { type: 'stream', to: 'general', topic: 'donbot', content: '**Bob D** (discord): hi zulip' }
@@ -140,85 +164,69 @@ describe('Relay testing Hubot scripts', () => {
     assert.deepStrictEqual(reactions, ['✅'])
   })
 
-  it('should not relay unprefixed messages or unbridged rooms', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
-    const user = brainUser(state.robot, 'u1', 'bob')
-    await state.robot.adapter.say(user, 'hi zulip', 'chan-1')
-    await state.robot.adapter.say(user, 'not >> this', 'chan-1')
-    await state.robot.adapter.say(user, '>> hi zulip', 'chan-2')
-    await settle()
+  it('does not relay unprefixed messages or unbridged rooms', async () => {
+    const z = await start('chan-1=general/donbot')
+    const { say } = bob()
+    await say('hi zulip')
+    await say('not >> this')
+    await say('>> hi zulip', { room: 'chan-2' })
+    await idle()
     assert.strictEqual(z.sent().length, 0)
   })
 
-  it('should rewrite discord markup and silence zulip mentions', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
+  it('rewrites discord markup and silence zulip mentions', async () => {
+    const z = await start('chan-1=general/donbot')
     state.robot.adapter.client = { channels: { cache: new Map([['42', { name: 'memes' }]]) } }
-    const user = brainUser(state.robot, 'u1', 'bob')
+    const { user, say } = bob()
     brainUser(state.robot, '222', 'carol')
     const { raw } = rawMessage('m2', {
       mentions: { users: new Map([['111', { username: 'dave', globalName: 'Dave' }]]) },
       attachments: new Map([['a', { url: 'https://cdn.example/cat.png' }]])
     })
-    user.message = raw
-    await state.robot.adapter.say(user, '>> <@111> <@!222> <@333> <@&9> <#42> <:party:123> @**all** @*admins*', 'chan-1')
+    withMessage(user, raw)
+    await say('>> <@111> <@!222> <@333> <@&9> <#42> <:party:123> @**all** @*admins*')
     await waitFor(() => z.sent().length > 0)
     assert.strictEqual(z.sent()[0]?.params.content,
       '**Bob D** (discord): @Dave @carol @someone @role #memes :party: @_**all** @_*admins*\nhttps://cdn.example/cat.png')
   })
 
-  it('should relay an edited message only once', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
-    const user = brainUser(state.robot, 'u1', 'bob')
-    user.message = rawMessage('m3').raw
-    await state.robot.adapter.say(user, '>> hi', 'chan-1')
-    await state.robot.adapter.say(user, '>> hi (edited)', 'chan-1')
-    await settle()
+  it('relays an edited message only once', async () => {
+    const z = await start('chan-1=general/donbot')
+    const { user, say } = bob()
+    withMessage(user, rawMessage('m3').raw)
+    await say('>> hi')
+    await say('>> hi (edited)')
+    await idle()
     assert.strictEqual(z.sent().length, 1)
   })
 
-  it('should react with a cross when zulip refuses the message', async () => {
-    configure('chan-1=general')
-    const z = fakeZulip()
-    z.opts.sendError = 'Topics are required in this organization.'
-    await state.loadScript()
-    const user = brainUser(state.robot, 'u1', 'bob')
+  it('reacts with a cross when zulip refuses the message', async () => {
+    await start('chan-1=general', {}, { sendError: 'Topics are required in this organization.' })
+    const { user, say } = bob()
     const { raw, reactions } = rawMessage('m4')
-    user.message = raw
-    await state.robot.adapter.say(user, '>> hi', 'chan-1')
+    withMessage(user, raw)
+    await say('>> hi')
     await waitFor(() => reactions.length > 0)
     assert.deepStrictEqual(reactions, ['❌'])
   })
 
-  it('should send to general chat when the bridge has no topic', async () => {
-    configure('chan-1=general')
-    const z = fakeZulip()
-    await state.loadScript()
-    const user = brainUser(state.robot, 'u1', 'bob')
-    await state.robot.adapter.say(user, '>> hi', 'chan-1')
+  it('sends to general chat when the bridge has no topic', async () => {
+    const z = await start('chan-1=general')
+    await bob().say('>> hi')
     await waitFor(() => z.sent().length > 0)
     assert.strictEqual(z.sent()[0]?.params.topic, '')
   })
 
-  it('should relay a prefixed zulip message to discord with pings neutralised', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
+  it('relays a prefixed zulip message to discord with pings neutralised', async () => {
+    const z = await start('chan-1=general/donbot')
     const sent = collect(state.robot)
     z.push({ content: '>> hey @everyone and @**Bob D|12** <@1>', subject: 'Donbot' })
     await waitFor(() => sent.length > 0)
     assert.deepStrictEqual(sent, ['**Alice Z** (zulip): hey @​everyone and @Bob D <​@1>'])
   })
 
-  it('should ignore zulip messages from itself, other topics or without the prefix', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
+  it('ignores zulip messages from itself, other topics or without the prefix', async () => {
+    const z = await start('chan-1=general/donbot')
     const sent = collect(state.robot)
     z.push({ content: '>> loop', subject: 'donbot', sender_email: BOT })
     z.push({ content: '>> elsewhere', subject: 'other' })
@@ -226,19 +234,17 @@ describe('Relay testing Hubot scripts', () => {
     z.push({ content: 'no prefix', subject: 'donbot' })
     z.push({ content: '>> marker', subject: 'donbot' })
     await waitFor(() => sent.length > 0)
-    await settle()
+    await idle()
     assert.deepStrictEqual(sent, ['**Alice Z** (zulip): marker'])
   })
 
-  it('should only take general chat for a topic-less bridge', async () => {
-    configure('chan-1=general')
-    const z = fakeZulip()
-    await state.loadScript()
+  it('only take general chat for a topic-less bridge', async () => {
+    const z = await start('chan-1=general')
     const sent = collect(state.robot)
     z.push({ content: '>> in a topic', subject: 'stuff' })
     z.push({ content: '>> general', subject: '' })
     await waitFor(() => sent.length > 0)
-    await settle()
+    await idle()
     assert.deepStrictEqual(sent, ['**Alice Z** (zulip): general'])
   })
 
@@ -253,10 +259,8 @@ describe('Relay testing Hubot scripts', () => {
     ]
   })
 
-  it('should relay a dm from a subscriber and react on zulip', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
+  it('relays a dm from a subscriber and react on zulip', async () => {
+    const z = await start('chan-1=general/donbot')
     const sent = collect(state.robot)
     z.push(dm('>> psst discord'))
     await waitFor(() => z.calls.some(c => c.path.endsWith('/reactions')))
@@ -265,11 +269,8 @@ describe('Relay testing Hubot scripts', () => {
     assert.deepStrictEqual(z.calls.find(c => c.path === '/messages/77/reactions')?.params, { emoji_name: 'check' })
   })
 
-  it('should refuse a dm from a non-subscriber', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    z.opts.subscribed = false
-    await state.loadScript()
+  it('refuses a dm from a non-subscriber', async () => {
+    const z = await start('chan-1=general/donbot', {}, { subscribed: false })
     const sent = collect(state.robot)
     z.push(dm('hello'))
     await waitFor(() => z.sent().length > 0)
@@ -279,79 +280,62 @@ describe('Relay testing Hubot scripts', () => {
     })
   })
 
-  it('should ignore group dms', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
+  it('ignores group dms', async () => {
+    const z = await start('chan-1=general/donbot')
     const sent = collect(state.robot)
     z.push(dm('hello all', 2))
     z.push({ content: '>> marker', subject: 'donbot' })
     await waitFor(() => sent.length > 0)
-    await settle()
+    await idle()
     assert.deepStrictEqual(sent, ['**Alice Z** (zulip): marker'])
     assert.strictEqual(z.sent().length, 0)
   })
 
-  it('should explain when dms have no target channel', async () => {
-    configure('chan-1=general/a,chan-2=general/b')
-    const z = fakeZulip()
-    await state.loadScript()
+  it('explains when dms have no target channel', async () => {
+    const z = await start('chan-1=general/a,chan-2=general/b')
     z.push(dm('hello'))
     await waitFor(() => z.sent().length > 0)
     assert.strictEqual(z.sent()[0]?.params.content, "Relaying from DMs isn't set up here.")
   })
 
-  it('should route dms to ZULIP_DM_CHANNEL when there are several bridges', async () => {
-    configure('chan-1=general/a,chan-2=social', { ZULIP_DM_CHANNEL: 'chan-2' })
-    const z = fakeZulip()
-    await state.loadScript()
-    const rooms: string[] = []
-    state.robot.on('send', (envelope: { room: string }) => { rooms.push(envelope.room) })
+  it('routes dms to ZULIP_DM_CHANNEL when there are several bridges', async () => {
+    const z = await start('chan-1=general/a,chan-2=social', { ZULIP_DM_CHANNEL: 'chan-2' })
+    const sent = collectRooms(state.robot)
     z.push(dm('hello'))
-    await waitFor(() => rooms.length > 0)
-    assert.deepStrictEqual(rooms, ['chan-2'])
+    await waitFor(() => sent.length > 0)
+    assert.deepStrictEqual(sent.map(m => m.room), ['chan-2'])
   })
 
-  it('should re-register when the event queue expires', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    z.opts.badQueueOnce = true
-    await state.loadScript()
+  it('re-register when the event queue expires', async () => {
+    const z = await start('chan-1=general/donbot', {}, { badQueueOnce: true })
     await waitFor(() => z.registers() >= 2)
     assert.strictEqual(z.registers(), 2)
   })
 
-  it('should stop polling when the brain closes', async () => {
-    configure('chan-1=general/donbot')
-    const z = fakeZulip()
-    await state.loadScript()
+  it('stops polling when the brain closes', async () => {
+    const z = await start('chan-1=general/donbot')
     await waitFor(() => z.signals.length > 0)
     state.robot.brain.emit('close')
     assert.ok(z.signals[0]?.aborted)
   })
 
-  it('should explain the bridge for the current channel', async () => {
-    configure('chan-1=general')
-    fakeZulip()
-    await state.loadScript()
-    const user = brainUser(state.robot, 'u1', 'bob')
-    const sent = collect(state.robot)
-    await state.robot.adapter.say(user, '@Dumbotheelephant relay', 'chan-1')
-    await state.robot.adapter.say(user, '@Dumbotheelephant relay', 'chan-9')
+  it('explains the bridge for the current channel', async () => {
+    await start('chan-1=general')
+    const { sent, ask } = bob()
+    await ask('relay')
+    await ask('relay', { room: 'chan-9' })
     assert.deepStrictEqual(sent, [
       'This channel is bridged to Zulip #general > general chat. Start a message with >> to send it there; only those messages cross over.',
       "This channel isn't bridged to Zulip."
     ])
   })
 
-  it('should gate relay status to the owner', async () => {
-    configure('chan-1=general/donbot', { OWNER_USER_ID: 'owner' })
-    const z = fakeZulip()
-    await state.loadScript()
+  it('gates relay status to the owner', async () => {
+    const z = await start('chan-1=general/donbot', { OWNER_USER_ID: 'owner' })
     await waitFor(() => z.registers() > 0)
-    const sent = collect(state.robot)
-    await state.robot.adapter.say(brainUser(state.robot, 'u1', 'bob'), '@Dumbotheelephant relay status', 'chan-1')
-    await state.robot.adapter.say(brainUser(state.robot, 'owner', 'boss'), '@Dumbotheelephant relay status', 'chan-1')
+    const { sent, ask } = bob()
+    await ask('relay status')
+    await ask('relay status', { user: brainUser(state.robot, 'owner', 'boss') })
     assert.deepStrictEqual(sent, [
       "That's need-to-know, and you don't need to know.",
       '<#chan-1> ↔ #general > donbot\nZulip DMs → <#chan-1>\nZulip: connected'
@@ -362,12 +346,11 @@ describe('Relay testing Hubot scripts', () => {
 describe('Relay listener collisions', () => {
   const state = setupRobot(['Relay.ts', 'Status.ts', 'Roles.ts', 'RateLimit.ts'], { envVars: ENV })
 
-  it('should answer relay status exactly once', async () => {
+  it('answers relay status exactly once', async () => {
     for (const name of ENV) delete process.env[name]
-    const user = brainUser(state.robot, 'u1', 'bob')
-    const sent = collect(state.robot)
-    await state.robot.adapter.say(user, '@Dumbotheelephant relay status', 'chan-1')
-    await state.robot.adapter.say(user, '@Dumbotheelephant relay', 'chan-1')
+    const { sent, ask } = chat(state, { id: 'u1', name: 'bob', room: 'chan-1' })
+    await ask('relay status')
+    await ask('relay')
     assert.strictEqual(sent.length, 2)
   })
 })

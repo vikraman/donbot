@@ -6,6 +6,7 @@ import { join } from 'node:path'
 
 import { closeStore, loadIndex, wipe } from '../scripts/lib/agda/store.ts'
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { tick } from './helpers/fakes.ts'
 import { noRedis, useTestRedis } from './helpers/redis.ts'
 
 const FIXTURES = 'tests/fixtures/agda-cubical.ndjson,tests/fixtures/agda-stdlib.ndjson'
@@ -20,7 +21,7 @@ const tempIndex = async (library: string, entries: object[]): Promise<string> =>
 }
 
 describe('Agda', { skip: noRedis }, () => {
-  const state = setupRobot(['MessageGuard.ts', 'Agda.ts'], { envVars: ['AGDA_INDEX_URLS', 'OWNER_USER_ID'], deferLoad: true })
+  const state = setupRobot(['MessageGuard.ts', 'Agda.ts'], { envVars: ['AGDA_INDEX_URLS'], owner: 'boss', deferLoad: true })
 
   before(async () => {
     useTestRedis('bot')
@@ -41,7 +42,7 @@ describe('Agda', { skip: noRedis }, () => {
       await state.loadScript()
     }
     const sent = collect(state.robot)
-    await state.robot.adapter.say(brainUser(state.robot, user, user), `@Dumbotheelephant ${text}`, 'test-room')
+    await state.robot.adapter.say(brainUser(state.robot, user, user), `@${state.robot.name} ${text}`, 'test-room')
     return sent
   }
 
@@ -52,33 +53,28 @@ describe('Agda', { skip: noRedis }, () => {
     assert.ok(sent[0]!.includes('```agda\nisProp→isSet : {A : Type ℓ} → isProp A → isSet A\n```'))
   })
 
-  it('takes pasted unicode names', async () => {
-    const sent = await ask('agda isProp→isSet')
-    assert.ok(sent[0]!.startsWith('`isProp→isSet`'))
-  })
+  // routes names, types, holes and parts to the right search
+  for (const [query, top] of [
+    ['isProp→isSet', 'isProp→isSet'],
+    ['Iso A B -> A = B', 'isoToPath'],
+    ['sym (p . q) = _ . _', 'symDistr'],
+    ['sym, "distr"', 'symDistr'],
+    ['isProp A\n  -> isSet A', 'isProp→isSet']
+  ]) {
+    it(`finds ${top} for ${JSON.stringify(query)}`, async () => {
+      const sent = await ask(`agda ${query}`)
+      assert.ok(sent[0]!.startsWith(`\`${top}\``), sent[0]!)
+    })
+  }
 
-  it('treats arrows and equations as type searches', async () => {
-    const sent = await ask('agda Iso A B -> A = B')
-    assert.ok(sent[0]!.startsWith('`isoToPath`'))
+  it('counts equation matches', async () => {
     const eq = await ask('agda a + b = b + a')
     assert.match(eq[0]!, /^2 matches for `a \+ b = b \+ a`:\n\*\*1\.\*\* `/)
-  })
-
-  it('treats patterns with holes as type searches', async () => {
-    const sent = await ask('agda sym (p . q) = _ . _')
-    assert.ok(sent[0]!.startsWith('`symDistr`'))
-    const parts = await ask('agda sym, "distr"')
-    assert.ok(parts[0]!.startsWith('`symDistr`'))
   })
 
   it('marks matches that needed a rewrite', async () => {
     const sent = await ask('agda A ~= B -> B = A')
     assert.match(sent[0]!, /^`ua` · \[Cubical\.Foundations\.Univalence\]\(<[^>]+>\) · up to symmetry\n/)
-  })
-
-  it('takes queries over several lines', async () => {
-    const sent = await ask('agda isProp A\n  -> isSet A')
-    assert.ok(sent[0]!.startsWith('`isProp→isSet`'))
   })
 
   it('drops markdown escapes from discord clients', async () => {
@@ -232,7 +228,7 @@ describe('Agda', { skip: noRedis }, () => {
 
   it('reports a failed load', async () => {
     // let loads settle
-    await new Promise(resolve => setTimeout(resolve, 50))
+    await tick(50)
     await wipe()
     const sent = await ask('agda isSet', 'tests/fixtures/missing.json')
     assert.match(sent[0]!, /^The Agda index failed to load: .*missing\.json/)
@@ -240,7 +236,6 @@ describe('Agda', { skip: noRedis }, () => {
 
   it('keeps serving the old index when a reload fails', async () => {
     await loadIndex(FIXTURES.split(','))
-    process.env.OWNER_USER_ID = 'boss'
     const sent = await ask('agda reindex', 'tests/fixtures/missing.json', 'boss')
     assert.match(sent[0]!, /^Reindex failed: .*missing\.json/)
     const still = await ask('agda isProp->isSet', 'tests/fixtures/missing.json')
@@ -250,13 +245,11 @@ describe('Agda', { skip: noRedis }, () => {
   it('lets only the owner reindex', async () => {
     const denied = await ask('agda reindex')
     assert.strictEqual(denied[0], 'Only my owner can do that.')
-    process.env.OWNER_USER_ID = 'boss'
     const ok = await ask('agda reindex', FIXTURES, 'boss')
     assert.strictEqual(ok[0], 'Reloaded 62 definitions.')
   })
 
   it('says which sources a reindex skipped', async () => {
-    process.env.OWNER_USER_ID = 'boss'
     const partial = await ask('agda reindex', `${FIXTURES},tests/fixtures/missing.ndjson`, 'boss')
     assert.match(partial[0]!, /^Reloaded 62 definitions\. Skipped `tests\/fixtures\/missing\.ndjson: [^`]+`\.$/)
   })

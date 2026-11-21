@@ -1,8 +1,9 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync } from 'node:fs'
 
 import { setupRobot } from './helpers/setup.ts'
+import { mockFetch, settle } from './helpers/fakes.ts'
 
 import { chainFor, EXTERNAL, features, listenerId } from '../scripts/lib/features.ts'
 import { featureOfHelp, helpPrefixes } from '../scripts/lib/help.ts'
@@ -20,12 +21,12 @@ describe('feature coverage', () => {
 
   const load = async () => {
     process.env.AGDA_INDEX_URLS = 'http://127.0.0.1:9/none.json.gz'
-    mock.method(globalThis, 'fetch', async () => new Response('', { status: 404 }))
+    mockFetch('', { ok: false, status: 404 })
     await state.loadScript()
     const before = state.robot.listeners!.length
     await state.robot.loadExternalScripts(['hubot-rules', 'hubot-diagnostics'])
     // loadFile isn't awaited
-    while (state.robot.listeners!.length < before + 5) await new Promise(resolve => setImmediate(resolve))
+    while (state.robot.listeners!.length < before + 5) await settle()
     return state.robot.listeners as unknown as ListenerLike[]
   }
 

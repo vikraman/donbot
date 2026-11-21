@@ -1,18 +1,15 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, chat } from './helpers/setup.ts'
 
-describe('DisableBuiltinHelp testing Hubot scripts', () => {
+describe('DisableBuiltinHelp', () => {
   const state = setupRobot(['DisableBuiltinHelp.ts', 'Policy.ts', 'Count.ts'])
 
-  it('should show comment-scraped commands instead of the built-in scaffolding', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant help', 'test-room')
+  it('shows comment-scraped commands instead of the built-in scaffolding', async () => {
+    const { sent, ask } = chat(state)
+    await ask('help')
     assert.match(sent[0]!, /\*\*Counter\*\*: `count`/)
-    assert.doesNotMatch(sent[0]!, /No commands registered/)
-    assert.doesNotMatch(sent[0]!, /Show commands with prefix/)
+    assert.doesNotMatch(sent[0]!, /No commands registered|Show commands with prefix/)
   })
 })

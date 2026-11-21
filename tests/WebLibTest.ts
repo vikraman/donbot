@@ -34,7 +34,7 @@ describe('web chat rendering', () => {
     ])
   })
   it('never makes links from anything but http(s), and keeps markup as text', () => {
-    const nodes = inline('[x](javascript:alert(1)) <script>alert(1)</script>')
+    const nodes = inline('[x](javascript:alert(1)) <script>alert(1)</script>') as unknown[]
     assert.ok(nodes.every((n: unknown) => typeof n === 'string'))
     assert.strictEqual(nodes.join(''), '[x](javascript:alert(1)) <script>alert(1)</script>')
   })
@@ -43,22 +43,25 @@ describe('web chat rendering', () => {
   })
 })
 
+const texts = (typed: string, commands: { cmd: string, desc: string }[], past?: string[]) =>
+  complete(typed, commands, past).map((c: { text: string }) => c.text)
+
 describe('web chat completion', () => {
   it('matches commands by what you type, expanding options and alternatives', () => {
-    assert.deepStrictEqual(complete('jo', COMMANDS).map((c: { text: string }) => c.text), ['joke', 'joke <category>'])
-    assert.deepStrictEqual(complete('he', COMMANDS).map((c: { text: string }) => c.text), ['help', 'help <query>'])
-    assert.deepStrictEqual(complete('ask', COMMANDS).map((c: { text: string }) => c.text), ['ask wiki <question>', 'ask ddg <question>'])
+    assert.deepStrictEqual(texts('jo', COMMANDS), ['joke', 'joke <category>'])
+    assert.deepStrictEqual(texts('he', COMMANDS), ['help', 'help <query>'])
+    assert.deepStrictEqual(texts('ask', COMMANDS), ['ask wiki <question>', 'ask ddg <question>'])
     const agda = [{ cmd: 'agda help [types|patterns|filters|examples]', desc: '' }, { cmd: 'focus [<N> <unit>]', desc: '' }]
-    assert.deepStrictEqual(complete('agda help', agda).map((c: { text: string }) => c.text), ['agda help types', 'agda help patterns', 'agda help filters', 'agda help examples'])
-    assert.deepStrictEqual(complete('agda help e', agda).map((c: { text: string }) => c.text), ['agda help examples'])
-    assert.deepStrictEqual(complete('focus', agda).map((c: { text: string }) => c.text), ['focus <N> <unit>'])
+    assert.deepStrictEqual(texts('agda help', agda), ['agda help types', 'agda help patterns', 'agda help filters', 'agda help examples'])
+    assert.deepStrictEqual(texts('agda help e', agda), ['agda help examples'])
+    assert.deepStrictEqual(texts('focus', agda), ['focus <N> <unit>'])
     assert.deepStrictEqual(complete('', COMMANDS), [])
     assert.deepStrictEqual(complete('zzz', COMMANDS), [])
   })
   it('puts past commands first, without repeats or what is already typed', () => {
     const picks = complete('jo', COMMANDS, ['xkcd', 'joke chuck', 'joke'])
     assert.deepStrictEqual(picks.map((c: { text: string, past: boolean }) => [c.text, c.past]), [['joke', true], ['joke chuck', true], ['joke <category>', false]])
-    assert.deepStrictEqual(complete('joke', COMMANDS, []).map((c: { text: string }) => c.text), ['joke <category>'])
+    assert.deepStrictEqual(texts('joke', COMMANDS, []), ['joke <category>'])
   })
   it('finds the placeholder to type over', () => {
     assert.deepStrictEqual(placeholder('joke <category>'), [5, 15])

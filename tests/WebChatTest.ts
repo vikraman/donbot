@@ -1,8 +1,9 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import type { AddressInfo } from 'node:net'
 
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, chat, collect } from './helpers/setup.ts'
+import { geminiBody, mockFetch, settle } from './helpers/fakes.ts'
 import type { TestRobot } from './helpers/setup.ts'
 
 import { MAX_TEXT } from '../scripts/WebChat.ts'
@@ -27,10 +28,7 @@ const post = async (robot: TestRobot, text: unknown, ip = '203.0.113.1'): Promis
   return { status: res.status, body: await res.json() as Reply['body'], headers: res.headers }
 }
 
-const mockFetchText = (text: string) =>
-  mock.method(globalThis, 'fetch', async () => new Response(text, { status: 200 }))
-
-describe('WebChat testing Hubot scripts', () => {
+describe('WebChat', () => {
   const state = setupRobot(['DisableBuiltinHelp.ts', 'Policy.ts', 'Eightball.ts', 'Fortune.ts', 'Garble.ts', 'Joke.ts', 'Killit.ts', 'Kudos.ts', 'Remind.ts', 'Ask.ts', 'RateLimit.ts', 'Zoidberg.ts', 'WebChat.ts'], {
     envVars: ['GEMINI_API_KEY', 'OWNER_USER_ID'],
     deferLoad: true
@@ -42,7 +40,7 @@ describe('WebChat testing Hubot scripts', () => {
     const before = state.robot.listeners!.length
     await state.robot.loadExternalScripts(['hubot-rules', 'hubot-diagnostics'])
     // loadFile isn't awaited
-    while (state.robot.listeners!.length < before + 5) await new Promise(resolve => setImmediate(resolve))
+    while (state.robot.listeners!.length < before + 5) await settle()
   }
 
   it('answers an allowed command without touching the adapter', async () => {
@@ -117,11 +115,9 @@ describe('WebChat testing Hubot scripts', () => {
 
   it('still serves chat rooms normally', async () => {
     await load()
-    const { robot } = state
     setRandomSource(() => 0)
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, 'kill the process', 'test-room')
+    const { sent, say } = chat(state)
+    await say('kill the process')
     assert.deepStrictEqual(sent, ['Kill it, kill it with fire!'])
   })
 
@@ -160,11 +156,7 @@ describe('WebChat testing Hubot scripts', () => {
   it('keeps gemini out of web asks', async () => {
     await load({ GEMINI_API_KEY: 'test-key' })
     const { robot } = state
-    const urls: string[] = []
-    mock.method(globalThis, 'fetch', async (url: string) => {
-      urls.push(String(url))
-      return new Response(JSON.stringify({ AbstractText: 'Answer.' }), { status: 200 })
-    })
+    const urls = mockFetch({ AbstractText: 'Answer.' })
     assert.deepStrictEqual((await post(robot, 'ask gg what')).body.replies, [])
     assert.deepStrictEqual((await post(robot, 'ask what is rust')).body.replies, ['Answer. [DuckDuckGo]'])
     assert.deepStrictEqual((await post(robot, 'tell me about rust')).body.replies, ['Answer. [DuckDuckGo]'])
@@ -175,24 +167,17 @@ describe('WebChat testing Hubot scripts', () => {
 
   it('still asks gemini in chat rooms', async () => {
     await load({ GEMINI_API_KEY: 'test-key' })
-    const { robot } = state
-    mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Gemini says.' }] } }] }), { status: 200 }))
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant ask what is rust', 'test-room')
+    mockFetch(geminiBody('Gemini says.'))
+    const { sent, ask } = chat(state)
+    await ask('ask what is rust')
     assert.deepStrictEqual(sent, ['Gemini says. [Gemini]'])
   })
 
   it('keeps jokes family friendly', async () => {
     await load()
     const { robot } = state
-    const urls: string[] = []
     const chuck = [{ value: 'An explicit one.', categories: ['explicit'] }, { value: 'A clean one.', categories: [] }]
-    mock.method(globalThis, 'fetch', async (url: string) => {
-      urls.push(String(url))
-      const body = String(url).includes('chucknorris') ? chuck.shift() : { error: false, type: 'single', joke: 'A safe one.' }
-      return new Response(JSON.stringify(body), { status: 200 })
-    })
+    const urls = mockFetch((url: string) => url.includes('chucknorris') ? chuck.shift() : { error: false, type: 'single', joke: 'A safe one.' })
     for (const text of ['joke dark', 'tell me a dark joke']) {
       const reply = (await post(robot, text)).body.replies![0]!
       assert.match(reply, /don't know the "dark" category/, text)
@@ -209,7 +194,7 @@ describe('WebChat testing Hubot scripts', () => {
 
   it('keeps visitors apart from the owner', async () => {
     await load({ OWNER_USER_ID: 'owner' })
-    mockFetchText('a fortune')
+    mockFetch('a fortune')
     const res = await post(state.robot, 'fortune')
     assert.deepStrictEqual(res.body.replies, ['a fortune'])
     assert.ok(Object.keys(state.robot.brain.data.users).every(id => !id.startsWith('web:')))
@@ -250,7 +235,7 @@ describe('WebChat testing Hubot scripts', () => {
     assert.strictEqual(js.status, 200)
     assert.match(js.headers.get('content-type')!, /^text\/javascript/)
     assert.match(js.headers.get('cache-control')!, /immutable/)
-    // imports carry the version too, or lib.js would stay cached across deploys
+    // versioned imports bust the cache
     assert.match(await js.text(), /from '\.\/lib\.js\?v=\w+'/)
     const css = await realFetch(`http://127.0.0.1:${port}/chat/static/chat.css`)
     assert.match(css.headers.get('content-type')!, /^text\/css/)
