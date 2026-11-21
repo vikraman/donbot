@@ -602,7 +602,7 @@ export default async (robot: Robot) => {
     return isObject(stored) && Array.isArray(stored.logins) ? stored as unknown as MergedState : undefined
   }
 
-  // seeded lazily from one page of closed prs merged before this one; later ones in the batch still count as new
+  // lazily seeded from earlier merged prs
   const seedMerged = async (name: string, pr: Pull & { number: number }): Promise<MergedState | undefined> => {
     const res = await call<Pull[]>(`/repos/${name}/pulls?state=closed&per_page=100`)
     if (res.status !== 200 || !Array.isArray(res.body)) return undefined
@@ -703,7 +703,7 @@ export default async (robot: Robot) => {
     }
     cursor.eventsEtag = res.etag
     if (res.pollInterval) cursor.pollInterval = res.pollInterval
-    // ids aren't chronological; remember the whole page instead of a high-water mark
+    // ids aren't chronological; keep the whole page
     const seen = new Set(cursor.seenEvents)
     cursor.seenEvents = res.body.map(e => e.id)
     const fresh = res.body
@@ -855,7 +855,7 @@ export default async (robot: Robot) => {
     return sent
   }
 
-  // one poll per repo at a time; a forced poll joins a running one
+  // one poll per repo; forced polls join
   const runPoll = (key: string, force = false): Promise<number> => {
     const running = inflight.get(key)
     if (running) return running
@@ -935,7 +935,7 @@ export default async (robot: Robot) => {
     return `${repoLink(name)} ${ticket(p.number ?? 0, p.title, p.html_url)}${by}, open ${age}${asked.length ? ` (asked: ${esc(asked.join(', '))})` : ''}`
   }
 
-  // room -> message; room limits to one channel and ignores its toggle
+  // room -> message; one room skips its toggle
   const collectNudges = async (onlyRoom?: string): Promise<Map<string, string>> => {
     const subs = getSubs()
     const cache = new Map<string, Promise<Pull[]>>()

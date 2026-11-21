@@ -3,8 +3,7 @@ import type { Response, Robot } from 'hubot'
 import { entriesWithPrefix } from './brainScan.ts'
 import { policyFor, type RawLike, type Scope } from './policy.ts'
 
-// data partitions: g:<guild>, dm:<user>, web, room:<room>, '' legacy global
-// room-keyed data needs no space
+// partitions: g:<guild>, dm:<user>, web, room:<room>, '' legacy
 
 export type SpaceId = string
 

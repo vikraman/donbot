@@ -4,7 +4,7 @@ import type { Robot } from 'hubot'
 
 export const secureRandomInt = (min: number, max: number): number => crypto.randomInt(min, max + 1)
 
-// 30 bits: the most random.org allows per value (range cap is 2e9)
+// random.org max per value
 const POOL_VALUE_CEILING = 2 ** 30
 const POOL_KEY = 'random:pool'
 const POOL_SIZE = 256
@@ -22,7 +22,7 @@ const isPool = (value: unknown): value is Pool =>
   Array.isArray((value as Pool).values) &&
   typeof (value as Pool).failedAt === 'number'
 
-// the robot the pool draws against; set once at startup, absent in unit tests
+// pool owner, unset in unit tests
 let poolRobot: Robot | null = null
 let refilling = false
 
@@ -42,7 +42,7 @@ const refillPool = (pool: Pool) => {
   if (!apiKey || refilling || !poolRobot) return
   if (Date.now() - pool.failedAt < POOL_RETRY_AFTER_FAILURE_MS) return
   const wanted = POOL_SIZE - pool.values.length
-  // random.org rejects n < 1; a full pool at startup would ask for 0
+  // random.org rejects n < 1
   if (wanted < 1) return
 
   refilling = true
@@ -52,7 +52,7 @@ const refillPool = (pool: Pool) => {
       writePool({ values: [...current.values, ...numbers], failedAt: 0 })
     })
     .catch((error: unknown) => {
-      // logged, not swallowed: the fallback is silent and would hide an outage
+      // log, the fallback would hide outages
       poolRobot?.logger.warn(`random.org refill failed: ${String(error)}`)
       writePool({ ...readPool(), failedAt: Date.now() })
     })
@@ -64,7 +64,7 @@ let source: ((ceiling: number) => number) | null = null
 
 export const setRandomSource = (fn: ((ceiling: number) => number) | null) => { source = fn }
 
-// one uniform value in [0, ceiling); true-random while the pool has stock
+// uniform in [0, ceiling), pooled when stocked
 const drawBelow = (ceiling: number): number => {
   if (source) return source(ceiling)
 

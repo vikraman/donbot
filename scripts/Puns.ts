@@ -29,9 +29,9 @@ defineFeature({ id: 'puns', label: 'Puns', level: 'casual', passive: true, store
 export const PUN_CHANCE = 0.314
 export const MIN_CHANCE = 0.07
 export const MAX_CHANCE = 0.6
-// chance multiplier at fully positive feedback; inverse at fully negative
+// chance multiplier at full positive feedback
 const FEEDBACK_SPREAD = 5
-// feedback weight of an imaginary neutral pun history, so one vote can't swing it
+// neutral prior weight
 const FEEDBACK_PRIOR = 2
 export const FEEDBACK_HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000
 const FEEDBACK_MAX_AGE_MS = 8 * FEEDBACK_HALF_LIFE_MS
@@ -111,7 +111,6 @@ const knewEmLine = defineLines('puns.knew-em', {
   ]
 })
 
-// the last line is test-pinned
 const dadLine = defineLines('puns.dad', {
   fallback: [
     "Hi {name}, I'm {bot}!",
@@ -261,11 +260,11 @@ const readRecords = (robot: Robot): PunRecord[] => {
   return Array.isArray(stored) ? stored.filter(isRecord) : []
 }
 
-// one pun's verdict in [-1, 1]; two net votes is a full verdict
+// verdict in [-1, 1], two net votes is full
 const verdict = (record: PunRecord): number =>
   clamp(Object.values(record.votes).reduce<number>((a, b) => a + b, 0), -2, 2) / 2
 
-// decayed average verdict for a room and kind, shrunk toward neutral
+// decayed verdict per room and kind
 export const feedbackFor = (records: readonly PunRecord[], room: string, kind: PunKind, now: number): number => {
   let total = 0
   let weights = 0
@@ -299,7 +298,7 @@ export default async (robot: Robot) => {
     robot.brain.set(SENT_KEY, [...fresh, ...added].slice(-MAX_RECORDS))
   }
 
-  // adding sets the user's vote; removing withdraws it if the sign matches
+  // add votes, remove withdraws a matching vote
   const vote = (messageId: string, userId: string, sign: 1 | -1, add: boolean) => {
     const records = readRecords(robot)
     const record = records.find(r => r.id === messageId)

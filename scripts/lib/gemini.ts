@@ -1,6 +1,6 @@
-// gemini generateContent with a model fallback chain; shared by ask and ai lines
+// gemini with model fallback
 
-// tried in order while the previous one is overloaded, rate-limited, slow or unknown
+// tried in order on overload, rate limit, timeout or 404
 export const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite'] as const
 
 // slow replies count as busy, so the next model gets a turn
@@ -9,7 +9,7 @@ export const GEMINI_TIMEOUT_MS = 30 * 1000
 // worth trying the next model
 const SKIPPABLE = new Set([404, 429, 503])
 
-// GEMINI_MODELS env overrides; GEMINI_LINE_MODELS is the older name
+// env override; GEMINI_LINE_MODELS is legacy
 export const geminiModels = (): string[] => {
   const configured = (process.env.GEMINI_MODELS || process.env.GEMINI_LINE_MODELS || '').split(',').map(m => m.trim()).filter(Boolean)
   return configured.length ? configured : [...GEMINI_MODELS]
@@ -34,12 +34,12 @@ interface GeminiResponse {
 }
 
 export interface GeminiOptions {
-  // called before each request; false stops the chain (e.g. a daily cap)
+  // before each request; false stops
   beforeCall?: () => boolean
   warn?: (message: string) => void
 }
 
-// text of the first candidate, or a GeminiError once every model has failed
+// first candidate's text, else GeminiError
 export const geminiText = async (request: GeminiRequest, { beforeCall, warn }: GeminiOptions = {}): Promise<string | undefined> => {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new GeminiError(0, 'no GEMINI_API_KEY')

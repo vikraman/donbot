@@ -38,7 +38,7 @@ defineFeature({ id: 'standup', label: 'Standups', level: 'professional', help: [
 export const SUMMARY_DELAY_MS = DAY_MS
 const MIN_SUMMARY_DELAY_MS = 15 * MINUTE_MS
 const MAX_SUMMARY_DELAY_MS = 6 * DAY_MS
-// ping for missing check-ins this long before the summary, or halfway for short rounds
+// nudge lead time, halved for short rounds
 export const REMINDER_LEAD_MS = 2 * HOUR_MS
 // rounds without a schedule start over after this
 export const ADHOC_ROUND_MS = 7 * DAY_MS
@@ -144,7 +144,7 @@ const ALIASES: Record<string, Section> = {
   discuss: 'discuss', discussion: 'discuss', question: 'discuss', questions: 'discuss', topics: 'discuss'
 }
 
-// labels need a colon, so "did x" or "blocked on y" mid-sentence isn't a section
+// labels need a colon
 const LABEL = new RegExp(`(?:^|(?<=[\\s/;|]))(${Object.keys(ALIASES).join('|')})\\s*:\\s*`, 'gi')
 
 // "none", "n/a", "-" mean nothing to report
@@ -221,11 +221,11 @@ export default async (robot: Robot) => {
 
   const prompts = scheduler<StandupJob>(robot, 'standup', async job => {
     const room = job.data.room
-    // a summary that never went out (bot down, or ad-hoc round) goes first
+    // unsent summary first
     const previous = readRound(room)
     if (previous && !previous.summarized && previous.checkIns.length > 0) await summarize(room)
     if (job.data.skip) {
-      // the scheduler already moved the job on; clear the flag on the next one
+      // job already moved on; clear the next one's flag
       const next = prompts.get(job.id)
       if (next) prompts.add({ ...next, data: { ...next.data, skip: false } })
       const people = previous ? [...new Set(previous.checkIns.map(c => c.userId))] : []
@@ -243,9 +243,9 @@ export default async (robot: Robot) => {
     }
     await postToRoom(robot, room, `${prompt({}, { room, tz: job.tz })} Check in any time, summary ${formatWhen(now + delay, job.tz)}. Reply with:\n${TEMPLATE}`, 'standup')
   }, {
-    // a prompt missed during downtime still goes out, late, within a day
+    // missed prompts go out late, within a day
     missedGraceMs: DAY_MS,
-    // a skip that passed while the bot was down is used up, not carried into next week
+    // skips missed while down are used up
     onMissed: job => {
       if (!job.data.skip) return job
       const previous = readRound(job.data.room)
@@ -354,7 +354,7 @@ export default async (robot: Robot) => {
     }
     const space = spaceOfRes(robot, res)
     logEvent(robot, 'standup', { room, space, userId })
-    // by the round's week, so a round that spans two calendar weeks doesn't break streaks
+    // by round week, so streaks survive week boundaries
     const streak = recordStreak(robot, space, 'standup', userId, round.startedAt)
     const missing = (['done', 'next'] as const).filter(s => !report[s]).map(s => s.toUpperCase())
     const notes = [

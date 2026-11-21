@@ -16,7 +16,7 @@ declare module 'hubot' {
     constructor (user: User, text: string, id?: string | number)
     user: User
     text: string
-    // assigned verbatim; the shell adapter passes Date.now(), doubles omit it
+    // verbatim, doubles omit it
     id?: string | number
     room: string
   }
@@ -49,7 +49,7 @@ declare module 'hubot' {
     use(robot: Robot): Adapter | Promise<Adapter>
   }
 
-  // optional groups are undefined at runtime; only group 0 always exists
+  // only group 0 always exists
   export type MatchArray = Omit<RegExpMatchArray, number> & {
     [index: number]: string | undefined
     0: string
@@ -74,7 +74,7 @@ declare module 'hubot' {
       _private: Record<string, unknown>
       [key: string]: unknown
     }
-    // T is unchecked; redis holds whatever an older build wrote
+    // unchecked, older builds wrote it
     get<T = unknown>(key: string): T | undefined
     set(key: string, value: unknown): void
     remove(key: string): void
@@ -150,7 +150,7 @@ declare module 'hubot' {
     post(path: string, handler: (req: never, res: never) => unknown): void
   }
 
-  // loose on purpose: scripts probe defensively and doubles are partial
+  // loose, doubles are partial
   export interface DiscordClient {
     // scripts guard typeof client.on before subscribing
     on?: {

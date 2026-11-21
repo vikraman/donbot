@@ -1,4 +1,3 @@
-// writes emoji vocab candidates from emojilib + datamuse
 // usage: node contrib/gen-emoji-vocab.ts <out.json> [cache.json]
 
 import fs from 'node:fs'
@@ -46,7 +45,7 @@ for (const emoji of targets) {
   if (WORD.test(name) && name.length >= MIN_LENGTH && !names[name]) names[name] = emoji
 }
 
-// the name, else a keyword unique to this emoji; broader keywords drift off topic
+// name, else a keyword unique to this emoji
 const SPECIFIC_RANK = 2000
 const queryFor = (emoji: string): string | undefined => {
   const [name, ...keywords] = data[emoji]!
