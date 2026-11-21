@@ -5,6 +5,12 @@ import { pick, shuffle, chance, randomId, secureRandomInt, randomInt, randomInts
 
 import type { Robot } from 'hubot'
 
+import { fc } from './helpers/arb.ts'
+
+interface RandomOrgRequest {
+  params: { n: number }
+}
+
 interface Buffer { values: number[] }
 interface Pool { values: number[], failedAt: number }
 
@@ -21,15 +27,15 @@ const fakeRobot = (): Robot => {
 
 describe('random lib', () => {
   it('pick returns a member of the array', () => {
-    const options = ['a', 'b', 'c'] as const
-    for (let i = 0; i < 20; i++) assert.ok(options.includes(pick(options)))
+    fc.assert(fc.property(fc.array(fc.integer(), { minLength: 1 }), xs => { assert.ok(xs.includes(pick(xs)!)) }))
   })
 
-  it('shuffle returns a permutation of the same elements', () => {
-    const original = [1, 2, 3, 4, 5]
-    const shuffled = shuffle(original)
-    assert.deepStrictEqual([...shuffled].sort(), [...original].sort())
-    assert.deepStrictEqual(original, [1, 2, 3, 4, 5])
+  it('shuffle returns a permutation, leaving the input alone', () => {
+    fc.assert(fc.property(fc.array(fc.integer()), xs => {
+      const copy = [...xs]
+      assert.deepStrictEqual([...shuffle(xs)].sort(), [...xs].sort())
+      assert.deepStrictEqual(xs, copy)
+    }))
   })
 
   it('chance(0) is always false and chance(1) is always true', () => {
@@ -121,7 +127,7 @@ describe('randomInt/randomInts', () => {
   })
 })
 
-// last: useRandomPool binds the module to this robot for the rest of the file
+// last, binds the pool for the file
 describe('random pool', () => {
   let originalKey: string | undefined
   beforeEach(() => {
@@ -159,14 +165,14 @@ describe('random pool', () => {
 
   it('tops up a partly drained pool with exactly the missing count', async () => {
     const fetchMock = mock.method(global, 'fetch', async (_url: string, init: RequestInit) => {
-      const { n } = JSON.parse(String(init.body)).params
+      const { n } = (JSON.parse(init.body as string) as RandomOrgRequest).params
       return { ok: true, json: async () => ({ result: { random: { data: Array.from({ length: n }, () => 7) } } }) }
     })
     const { robot, warn } = poolRobot(Array.from({ length: 200 }, (_, i) => i))
     useRandomPool(robot)
     await settle()
     assert.strictEqual(fetchMock.mock.calls.length, 1)
-    assert.strictEqual(JSON.parse(String(fetchMock.mock.calls[0]!.arguments[1]!.body)).params.n, 56)
+    assert.strictEqual((JSON.parse(fetchMock.mock.calls[0]!.arguments[1]!.body as string) as RandomOrgRequest).params.n, 56)
     assert.strictEqual(robot.brain.get<Pool>('random:pool')!.values.length, 256)
     assert.strictEqual(warn.mock.calls.length, 0)
   })

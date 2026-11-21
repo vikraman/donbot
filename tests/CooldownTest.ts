@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { burst, cooldown } from '../scripts/lib/cooldown.ts'
+import { fc } from './helpers/arb.ts'
 
 describe('cooldown', () => {
   it('should be ready for an unmarked key', () => {
@@ -69,5 +70,43 @@ describe('burst', () => {
     const b = burst(1, 1000)
     b.take('a', 0)
     assert.ok(b.take('b', 0))
+  })
+})
+
+describe('cooldown properties', () => {
+  // monotonic clock, few keys
+  const ops = <T>(op: fc.Arbitrary<T>) => fc.array(fc.record({ key: fc.constantFrom('a', 'b', 'c'), dt: fc.integer({ min: 0, max: 15 }), op }), { maxLength: 60 })
+  const window = fc.integer({ min: 1, max: 30 })
+
+  it('matches a last-mark model', () => {
+    fc.assert(fc.property(window, ops(fc.constantFrom('ready', 'mark', 'take')), (ms, steps) => {
+      const real = cooldown(ms)
+      const marks = new Map<string, number>()
+      const ready = (key: string, now: number) => !marks.has(key) || now - marks.get(key)! >= ms
+      let now = 0
+      for (const { key, dt, op } of steps) {
+        now += dt
+        if (op === 'mark') { real.mark(key, now); marks.set(key, now); continue }
+        const expected = ready(key, now)
+        if (op === 'take' && expected) marks.set(key, now)
+        assert.strictEqual(real[op](key, now), expected)
+      }
+    }))
+  })
+
+  it('matches a sliding-window model', () => {
+    fc.assert(fc.property(fc.integer({ min: 1, max: 5 }), window, ops(fc.constant(null)), (limit, ms, steps) => {
+      const real = burst(limit, ms)
+      const hits = new Map<string, number[]>()
+      let now = 0
+      for (const { key, dt } of steps) {
+        now += dt
+        const recent = (hits.get(key) ?? []).filter(t => now - t < ms)
+        const expected = recent.length < limit
+        if (expected) recent.push(now)
+        hits.set(key, recent)
+        assert.strictEqual(real.take(key, now), expected)
+      }
+    }))
   })
 })

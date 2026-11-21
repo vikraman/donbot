@@ -2,6 +2,7 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { formatDuration, formatAgo } from '../scripts/lib/duration.ts'
+import { fc } from './helpers/arb.ts'
 
 const S = 1000
 const M = 60 * S
@@ -42,5 +43,35 @@ describe('duration', () => {
     assert.strictEqual(formatAgo(now - 59 * S, now), 'just now')
     assert.strictEqual(formatAgo(now - 3 * M, now), '3m ago')
     assert.strictEqual(formatAgo(now - 26 * H, now), '1d 2h ago')
+  })
+})
+
+describe('duration properties', () => {
+  const SIZES: Record<string, number> = { d: 86_400_000, h: 3_600_000, m: 60_000, s: 1000 }
+  const ORDER = Object.keys(SIZES)
+  const parse = (out: string) => out.split(' ').map(p => ({ unit: p.at(-1)!, n: Number(p.slice(0, -1)) }))
+  const sum = (out: string) => parse(out).reduce((t, p) => t + p.n * SIZES[p.unit]!, 0)
+  const ms = fc.integer({ min: 0, max: 400 * 86_400_000 })
+  const units = fc.integer({ min: 1, max: 4 })
+
+  it('shows at most n descending units, floored within the smallest window unit', () => {
+    fc.assert(fc.property(ms, units, (t, n) => {
+      const out = formatDuration(t, { units: n })
+      const parts = parse(out)
+      assert.ok(parts.length <= n)
+      const idx = parts.map(p => ORDER.indexOf(p.unit))
+      assert.deepStrictEqual(idx, [...idx].sort((a, b) => a - b))
+      assert.strictEqual(new Set(idx).size, idx.length)
+      const first = Math.max(0, ORDER.findIndex(u => t >= SIZES[u]!))
+      const step = SIZES[ORDER[Math.min(first + n - 1, 3)]!]!
+      assert.ok(sum(out) <= t && t - sum(out) < step, out)
+    }))
+  })
+
+  it('is monotonic', () => {
+    fc.assert(fc.property(ms, ms, units, (a, b, n) => {
+      const [lo, hi] = a <= b ? [a, b] : [b, a]
+      assert.ok(sum(formatDuration(lo, { units: n })) <= sum(formatDuration(hi, { units: n })))
+    }))
   })
 })
