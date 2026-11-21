@@ -163,7 +163,7 @@ export const parseReport = (text: string): Report => {
   }
   add('done', text.slice(0, marks[0]?.index ?? text.length))
   marks.forEach((m, i) => {
-    add(ALIASES[m[1]!.toLowerCase()]!, text.slice(m.index! + m[0].length, marks[i + 1]?.index ?? text.length))
+    add(ALIASES[m[1]!.toLowerCase()]!, text.slice(m.index + m[0].length, marks[i + 1]?.index ?? text.length))
   })
   return report
 }

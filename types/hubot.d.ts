@@ -1,4 +1,6 @@
 declare module 'hubot' {
+  import type { Server } from 'node:http'
+
   export class User {
     constructor (id: string, options?: Record<string, unknown>)
     id: string
@@ -118,7 +120,7 @@ declare module 'hubot' {
     listeners?: readonly unknown[]
     adapter: Adapter & { client?: DiscordClient; [key: string]: unknown }
     router: ExpressLike
-    server?: import('node:http').Server
+    server?: Server
 
     respond(regex: RegExp, callback: (res: Response) => unknown): void
     respond(regex: RegExp, options: ListenerOptions, callback: (res: Response) => unknown): void
@@ -138,14 +140,14 @@ declare module 'hubot' {
     run(): Promise<void>
     shutdown(): void
     receive(message: TextMessage): Promise<void>
-    on(event: string, listener: (...args: any[]) => void): void
+    on(event: string, listener: (...args: never[]) => void): void
     emit(event: string, ...args: unknown[]): void
   }
 
   // handlers type their own req/res
   interface ExpressLike {
-    get(path: string, handler: (req: any, res: any) => unknown): void
-    post(path: string, handler: (req: any, res: any) => unknown): void
+    get(path: string, handler: (req: never, res: never) => unknown): void
+    post(path: string, handler: (req: never, res: never) => unknown): void
   }
 
   // loose on purpose: scripts probe defensively and doubles are partial

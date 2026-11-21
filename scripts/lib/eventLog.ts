@@ -21,7 +21,7 @@ const logKey = (kind: LogKind, space: SpaceId): string => spaceKey(space, `log:$
 
 const read = (robot: Robot, kind: LogKind, space: SpaceId): LogEntry[] => {
   const stored = robot.brain.get(logKey(kind, space))
-  return Array.isArray(stored) ? stored.filter((e): e is LogEntry => typeof e?.ts === 'number') : []
+  return Array.isArray(stored) ? (stored as (Partial<LogEntry> | null)[]).filter((e): e is LogEntry => typeof e?.ts === 'number') : []
 }
 
 const spaceFor = (robot: Robot, where: { room?: string, space?: SpaceId }): SpaceId =>

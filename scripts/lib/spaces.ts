@@ -72,7 +72,7 @@ export const membersOf = (robot: Robot, space: SpaceId): Record<string, Member> 
   const members = isMembers(stored) ? stored : {}
   if (space) return members
   // global space knows all brain users
-  const everyone = Object.fromEntries(Object.values(robot.brain.data.users || {}).filter(u => u.name).map(u => [String(u.id), { name: u.name! }]))
+  const everyone = Object.fromEntries(Object.values(robot.brain.data.users || {}).filter(u => u.name).map(u => [String(u.id), { name: u.name }]))
   return { ...everyone, ...members }
 }
 

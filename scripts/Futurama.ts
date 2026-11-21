@@ -28,7 +28,7 @@ const fetchQuote = async (character?: string): Promise<FuturamaQuote | null> => 
   const url = character ? `${BASE_URL}/${encodeURIComponent(character)}` : BASE_URL
   const response = await fetch(url)
   if (!response.ok) return null
-  const data: FuturamaQuoteResponse = await response.json()
+  const data = await response.json() as FuturamaQuoteResponse
   return data.quote ? (data as FuturamaQuote) : null
 }
 

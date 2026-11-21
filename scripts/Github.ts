@@ -423,7 +423,7 @@ export const parseOptions = (text: string): Options => {
     } else if (t === 'all') {
       CATEGORIES.forEach(c => categories.add(c))
     } else if (ALIASES[t]) {
-      categories.add(ALIASES[t] as Category)
+      categories.add(ALIASES[t])
     } else {
       return { categories: [], error: `I don't know "${esc(t)}". Pick from: ${CATEGORIES.join(', ')}, all.` }
     }
@@ -894,7 +894,7 @@ export default async (robot: Robot) => {
       cursor.nextPollAt = Math.min(cursor.nextPollAt, now + baseSeconds(key, cursor, subs) * 1000)
       setCursor(key, cursor)
     }
-    timer = setInterval(() => { tick() }, TICK_MS)
+    timer = setInterval(() => { void tick() }, TICK_MS)
     timer.unref()
   })
   robot.brain.on('close', () => {
@@ -944,7 +944,7 @@ export default async (robot: Robot) => {
     for (const key of Object.keys(subs).sort()) {
       // async for uncached dms
       const candidates = roomsFor(subs[key] || {}, 'prs')
-      const allowed = await Promise.all(candidates.map(r => onlyRoom ? r === onlyRoom : allowsRoomAsync(robot, r, 'github.nudges')))
+      const allowed = await Promise.all(candidates.map(async r => onlyRoom ? r === onlyRoom : allowsRoomAsync(robot, r, 'github.nudges')))
       const rooms = candidates.filter((_, i) => allowed[i])
       if (rooms.length === 0 || now < rateBlockedUntil) continue
       const name = getCursor(key)?.name || key

@@ -17,7 +17,7 @@ interface DogApiResponse {
 export default async (robot: Robot) => {
   robot.respond(/(?:pug me|show me a pug|pug(?:gy)? pic(?:ture)?)$/i, { id: 'pugme.show' }, async res => {
     const response = await fetch('https://dog.ceo/api/breeds/image/random')
-    const data: DogApiResponse = await response.json()
+    const data = await response.json() as DogApiResponse
     await res.send(data.message)
   })
 }

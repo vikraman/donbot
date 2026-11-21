@@ -60,7 +60,7 @@ export const geminiText = async (request: GeminiRequest, { beforeCall, warn }: G
       continue
     }
     if (response.ok) {
-      const data: GeminiResponse = await response.json()
+      const data = await response.json() as GeminiResponse
       return data.candidates?.[0]?.content?.parts?.[0]?.text
     }
     status = response.status

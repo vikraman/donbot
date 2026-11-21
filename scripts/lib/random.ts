@@ -128,7 +128,7 @@ const fetchWithTimeout = async (url: string, options: RequestInit): Promise<numb
   try {
     const response = await fetch(url, { ...options, signal: controller.signal })
     if (!response.ok) throw new Error(`random.org responded with ${response.status}`)
-    const body = await response.json()
+    const body = await response.json() as { error?: { message: string }, result: { random: { data: number[] } } }
     if (body.error) throw new Error(`random.org error: ${body.error.message}`)
     return body.result.random.data
   } finally {

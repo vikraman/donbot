@@ -24,7 +24,7 @@ describe('postToRoom', () => {
   })
   it('still tries to send when the fetch fails', async () => {
     const { robot } = state
-    robot.adapter.client = { channels: { cache: new Map(), fetch: async () => { throw new Error('Unknown Channel') } } } as unknown as DiscordClient
+    robot.adapter.client = { channels: { cache: new Map(), fetch: async () => { throw new Error('Unknown Channel') } } }
     mock.method(robot.logger, 'warn', () => {})
     const send = mock.method(robot, 'messageRoom', async () => {})
     await postToRoom(robot, 'gone', 'hi')

@@ -80,21 +80,21 @@ const askGemini = async (question: string): Promise<AskResult | null> => {
 const askDuckDuckGo = async (question: string): Promise<AskResult | null> => {
   const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(cleanForSearch(question))}&format=json&no_html=1&skip_disambig=1`
   const response = await fetch(url)
-  const data: DuckDuckGoResponse = await response.json()
+  const data = await response.json() as DuckDuckGoResponse
   return withSource('ddg', data.AbstractText || data.Answer || data.Definition || undefined)
 }
 
 const askWikipedia = async (question: string): Promise<AskResult | null> => {
   const searchUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(cleanForSearch(question))}&srlimit=1&format=json`
   const searchResponse = await fetch(searchUrl)
-  const searchData: WikipediaSearchResponse = await searchResponse.json()
+  const searchData = await searchResponse.json() as WikipediaSearchResponse
   const title = searchData.query && searchData.query.search && searchData.query.search[0] && searchData.query.search[0].title
   if (!title) return null
 
   const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`
   const summaryResponse = await fetch(summaryUrl)
   if (!summaryResponse.ok) return null
-  const data: WikipediaSummaryResponse = await summaryResponse.json()
+  const data = await summaryResponse.json() as WikipediaSummaryResponse
   return withSource('wiki', data.extract || undefined)
 }
 

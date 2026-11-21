@@ -30,7 +30,7 @@ export default async (robot: Robot) => {
         await res.send("Couldn't find that comic.")
         return
       }
-      const latest: XkcdComic = await latestResponse.json()
+      const latest = await latestResponse.json() as XkcdComic
       number = String(secureRandomInt(1, latest.num))
     }
 
@@ -42,7 +42,7 @@ export default async (robot: Robot) => {
       return
     }
 
-    const data: XkcdComic = await response.json()
+    const data = await response.json() as XkcdComic
     await res.send(`${data.title}: ${data.img}`)
   })
 }

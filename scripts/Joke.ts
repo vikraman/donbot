@@ -42,7 +42,7 @@ interface JokeApiResponse {
 const fetchDadJoke: JokeFetcher = async () => {
   const response = await fetch('https://icanhazdadjoke.com/', { headers: { Accept: 'application/json' } })
   if (!response.ok) return null
-  const data: DadJokeResponse = await response.json()
+  const data = await response.json() as DadJokeResponse
   return data.joke || null
 }
 
@@ -54,7 +54,7 @@ const fetchChuckNorrisJoke: JokeFetcher = async filter => {
   for (let i = 0; i < (safe ? CHUCK_TRIES : 1); i++) {
     const response = await fetch('https://api.chucknorris.io/jokes/random')
     if (!response.ok) return null
-    const data: ChuckNorrisJokeResponse = await response.json()
+    const data = await response.json() as ChuckNorrisJokeResponse
     if (safe && data.categories?.includes('explicit')) continue
     return data.value || null
   }
@@ -73,7 +73,7 @@ const fetchJokeApiJoke = (category: string): JokeFetcher => async filter => {
   const url = `https://v2.jokeapi.dev/joke/${category}${JOKE_API_QUERY[filter]}`
   const response = await fetch(url)
   if (!response.ok) return null
-  const data: JokeApiResponse = await response.json()
+  const data = await response.json() as JokeApiResponse
   if (data.error) return null
   return data.type === 'twopart' ? `${data.setup} ${data.delivery}` : data.joke || null
 }

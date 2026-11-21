@@ -54,7 +54,7 @@ const queryFor = (emoji: string): string | undefined => {
   return keywords.find(k => usable(k) && keywordSpread.get(k) === 1 && wordRank(k) >= SPECIFIC_RANK)
 }
 
-const cache: Record<string, string[]> = CACHE_PATH && fs.existsSync(CACHE_PATH) ? JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8')) : {}
+const cache: Record<string, string[]> = CACHE_PATH && fs.existsSync(CACHE_PATH) ? JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8')) as Record<string, string[]> : {}
 
 // rel_trg: strongly associated; ml: means like
 const associations = async (relation: 'rel_trg' | 'ml', query: string): Promise<string[]> => {

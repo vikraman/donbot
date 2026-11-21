@@ -29,7 +29,7 @@ export default async (robot: Robot) => {
       return
     }
 
-    const data: DictionaryEntry[] = await response.json()
+    const data = await response.json() as DictionaryEntry[]
     const meaning = data[0] && data[0].meanings && data[0].meanings[0]
     const definition = meaning && meaning.definitions && meaning.definitions[0] && meaning.definitions[0].definition
 

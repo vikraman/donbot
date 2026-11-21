@@ -49,7 +49,7 @@ export default async (robot: Robot) => {
     const city = required(res.match, 1).trim()
 
     const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`)
-    const geoData: GeocodingResult = await geoResponse.json()
+    const geoData = await geoResponse.json() as GeocodingResult
     const place = geoData.results && geoData.results[0]
 
     if (!place) {
@@ -58,7 +58,7 @@ export default async (robot: Robot) => {
     }
 
     const forecastResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code`)
-    const forecastData: ForecastResult = await forecastResponse.json()
+    const forecastData = await forecastResponse.json() as ForecastResult
     const current = forecastData.current
     const description = WMO_DESCRIPTIONS[current.weather_code] || 'Unknown conditions'
 
