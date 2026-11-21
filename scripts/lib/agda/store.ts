@@ -621,6 +621,27 @@ const loadLibrary = async (src: string, raw: Buffer, meta: Meta, gen: string, bu
   return lib
 }
 
+// redis bytes per index byte, gz and plain
+const PER_GZ_BYTE = 30
+const PER_BYTE = 5
+
+const mb = (n: number): string => `${Math.round(n / 1048576)}MB`
+
+// why it won't fit
+export const roomFor = (used: number, max: number, need: number): string | null =>
+  max > 0 && used + need > max * 0.95 ? `not enough redis memory, ${mb(used)} used of ${mb(max)} and it needs about ${mb(need)}` : null
+
+// estimated room for a generation
+const noRoom = async (src: string, raw: Buffer, current: Library | undefined): Promise<string | null> => {
+  // config can be disabled
+  const max = Number((await cmd<string[]>(['CONFIG', 'GET', 'maxmemory']).catch(() => []))[1] ?? 0)
+  if (!max) return null
+  const used = Number(/used_memory:(\d+)/.exec(await cmd<string>(['INFO', 'memory']))?.[1] ?? 0)
+  const total = indexSize()
+  const need = current && total > 0 ? (used * current.count) / total : raw.length * (src.endsWith('.gz') ? PER_GZ_BYTE : PER_BYTE)
+  return roomFor(used, max, need)
+}
+
 export interface LoadResult {
   // reloaded libraries
   loaded: string[]
@@ -668,6 +689,12 @@ const load = async (sources: string[], force: boolean): Promise<LoadResult> => {
     if (current && !force && same) {
       // skip owned builtins
       for (const k of await cmd<string[]>(['SMEMBERS', libKey('builtins', current.name, current.gen)])) if (!builtins.has(k)) builtins.set(k, current.name)
+      continue
+    }
+    // must fit under maxmemory
+    const full = await noRoom(src, raw, current)
+    if (full) {
+      skipped.push(`${src}: ${full}`)
       continue
     }
     const gen = String(await cmd<number>(['INCR', `${prefix()}:gen`]))

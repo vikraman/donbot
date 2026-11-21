@@ -8,7 +8,7 @@ import { gzipSync } from 'node:zlib'
 
 import { ascii, hash, segmentRuns } from '../scripts/lib/agda/fold.ts'
 import { chunks, lex, parse, toQuery, type Env, type Notation } from '../scripts/lib/agda/parse.ts'
-import { closeStore, cmd, generations, indexSize, libraries, loadIndex, wipe } from '../scripts/lib/agda/store.ts'
+import { closeStore, cmd, generations, indexSize, libraries, loadIndex, roomFor, wipe } from '../scripts/lib/agda/store.ts'
 import { wellTyped, type Signature } from '../scripts/lib/agda/typing.ts'
 import { binderNames } from '../scripts/lib/agda/explain.ts'
 import { displayType, lookupName, searchAbout, searchNames, searchType, ordered, splitFilters, splitParts, urlFor, type Hit } from '../scripts/lib/agda/search.ts'
@@ -417,6 +417,13 @@ describe('agda index', { skip: noRedis }, () => {
       await loadIndex(FIXTURES)
       assert.strictEqual(await keys(`${prefix}:d:cubical:999:*`), 0)
       assert.ok(!(await cmd<string[]>(['SMEMBERS', `${prefix}:gens`])).includes('cubical:999'))
+    })
+
+    it('skips a reload that would not fit under maxmemory', () => {
+      const mb = 1048576
+      assert.strictEqual(roomFor(100 * mb, 0, 50 * mb), null)
+      assert.strictEqual(roomFor(100 * mb, 256 * mb, 50 * mb), null)
+      assert.match(roomFor(200 * mb, 256 * mb, 50 * mb)!, /^not enough redis memory, 200MB used of 256MB and it needs about 50MB$/)
     })
 
     it('reads gzipped files', async () => {
