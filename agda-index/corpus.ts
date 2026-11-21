@@ -60,4 +60,12 @@ const main = async () => {
   process.exitCode = failed > 0 ? 1 : 0
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) await main()
+if (import.meta.url === `file://${process.argv[1]}`) {
+  // the redis client is unref'd, so hold the loop open
+  const alive = setInterval(() => {}, 1 << 30)
+  try {
+    await main()
+  } finally {
+    clearInterval(alive)
+  }
+}
