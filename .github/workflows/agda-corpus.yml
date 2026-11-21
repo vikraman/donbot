@@ -25,7 +25,7 @@ jobs:
       # slower runners
       AGDA_SEARCH_MS: '1000'
       # corpus libraries
-      LIBRARIES: cubical stdlib typetopology
+      LIBRARIES: cubical stdlib TypeTopology
     steps:
       - uses: actions/checkout@v7
 

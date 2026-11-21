@@ -28,9 +28,10 @@ env:
   LIBRARIES: |
     stdlib agda/agda-stdlib
     cubical agda/cubical
-    typetopology martinescardo/TypeTopology
+    TypeTopology martinescardo/TypeTopology
     categories agda/agda-categories
     unimath UniMath/agda-unimath
+    En DesyncTheThird/HoTT
 
 jobs:
   index:
@@ -80,8 +81,8 @@ jobs:
           build=" ${{ steps.plan.outputs.build }} "
           while read -r name repo; do
             [ -n "$name" ] || continue
-            # categories checks against stdlib
-            if [[ "$build" == *" $name "* ]] || { [ "$name" = stdlib ] && [[ "$build" == *" categories "* ]]; }; then
+            # categories checks against stdlib, En against cubical
+            if [[ "$build" == *" $name "* ]] || { [ "$name" = stdlib ] && [[ "$build" == *" categories "* ]]; } || { [ "$name" = cubical ] && [[ "$build" == *" En "* ]]; }; then
               git clone --quiet --filter=blob:none "https://github.com/$repo" "$name"
               sha=$(jq -r --arg k "${name}_sha" '.[$k] // empty' <<< '${{ toJSON(steps.plan.outputs) }}')
               if [ -n "$sha" ]; then git -C "$name" checkout --quiet "$sha"; fi
@@ -131,9 +132,10 @@ jobs:
             stdlib/_build
             stdlib/doc/_build
             cubical/_build
-            typetopology/_build
+            TypeTopology/_build
             categories/_build
             unimath/_build
+            En/_build
           key: agdai-${{ env.AGDA_VERSION }}-${{ github.run_id }}
           restore-keys: agdai-${{ env.AGDA_VERSION }}-
 
@@ -179,19 +181,19 @@ jobs:
             --index-out=../cubical.ndjson \
             Cubical/Everything.agda
 
-      - name: Index typetopology
-        id: typetopology
-        if: steps.plan.outputs.typetopology == 'true'
+      - name: Index TypeTopology
+        id: TypeTopology
+        if: steps.plan.outputs.TypeTopology == 'true'
         continue-on-error: true
-        working-directory: typetopology/source
+        working-directory: TypeTopology/source
         run: |
           "$AGDA_INDEX" +RTS -M14G -RTS --index \
             --index-lib=TypeTopology \
             --index-build=${{ steps.plan.outputs.indexer }} \
-            --index-commit=${{ steps.plan.outputs.typetopology_sha }} \
+            --index-commit=${{ steps.plan.outputs.TypeTopology_sha }} \
             --index-url=https://martinescardo.github.io/TypeTopology/ \
-            --index-source=https://github.com/martinescardo/TypeTopology/blob/${{ steps.plan.outputs.typetopology_sha }}/source/ \
-            --index-out=../../typetopology.ndjson \
+            --index-source=https://github.com/martinescardo/TypeTopology/blob/${{ steps.plan.outputs.TypeTopology_sha }}/source/ \
+            --index-out=../../TypeTopology.ndjson \
             AllModulesIndex.lagda
 
       # against stdlib master, by include paths since it pins a release
@@ -228,6 +230,25 @@ jobs:
             --index-out=../unimath.ndjson \
             src/everything.lagda.md
 
+      # against cubical master
+      - name: Index En
+        id: En
+        if: steps.plan.outputs.En == 'true'
+        continue-on-error: true
+        working-directory: En
+        run: |
+          printf '%s\n' "$GITHUB_WORKSPACE/cubical/cubical.agda-lib" "$PWD/agda-En.agda-lib" > ../En-libraries
+          .github/scripts/gen-everything.sh > En/Everything.agda
+          "$AGDA_INDEX" +RTS -M14G -RTS --index --library-file=../En-libraries \
+            --index-modules=En \
+            --index-lib=En \
+            --index-build=${{ steps.plan.outputs.indexer }} \
+            --index-commit=${{ steps.plan.outputs.En_sha }} \
+            --index-url=https://cokernelpanic.com/HoTT/agda/ \
+            --index-source=https://github.com/DesyncTheThird/HoTT/blob/${{ steps.plan.outputs.En_sha }}/ \
+            --index-out=../En.ndjson \
+            En/Everything.agda
+
       # save once agda is built
       - name: Check agda build
         id: deps
@@ -255,9 +276,10 @@ jobs:
             stdlib/_build
             stdlib/doc/_build
             cubical/_build
-            typetopology/_build
+            TypeTopology/_build
             categories/_build
             unimath/_build
+            En/_build
           key: agdai-${{ env.AGDA_VERSION }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Compress indexes
@@ -345,12 +367,12 @@ jobs:
           gh issue list --state open --search "in:title \"$ISSUE\"" --json number -q '.[].number' |
             xargs -r -n1 gh issue close --comment "Fixed by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
-  # notify on index build failure
   # corpus
   corpus:
     needs: publish
     uses: ./.github/workflows/agda-corpus.yml
 
+  # notify on index build failure
   notify:
     needs: [index, publish]
     if: failure()
