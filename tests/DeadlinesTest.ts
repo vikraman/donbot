@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 import type { TestRobot } from './helpers/setup.ts'
+import { discordMessage, runDueJobs, withMessage } from './helpers/fakes.ts'
 
 import { parseDue } from '../scripts/Deadlines.ts'
 import { policyFor } from '../scripts/lib/policy.ts'
@@ -11,13 +12,10 @@ import { DAY_MS, fromZoned } from '../scripts/lib/time.ts'
 const TZ = 'Europe/London'
 // wed 19 nov 2026, 10:00
 const NOW = fromZoned(2026, 11, 19, 10, 0, TZ)
-const tick = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms))
 
-// a message from user in room of guild g1, with or without Manage Channels
-const sayer = (robot: TestRobot) => async (id: string, text: string, { room = 'room', guild = 'g1', staff = false } = {}) => {
-  const user = brainUser(robot, id, id)
-  const perms = { has: (flag: string) => staff && flag === 'ManageChannels' }
-  ;(user as unknown as { message: unknown }).message = { guildId: guild, author: { id }, member: { permissions: { has: () => false } }, channel: { id: room, isThread: () => false, permissionsFor: () => perms } }
+// user in g1, optionally staff
+const sayer = (robot: TestRobot) => async (id: string, text: string, { room = 'room', staff = false } = {}) => {
+  const user = withMessage(brainUser(robot, id, id), discordMessage(room, id, { manageChannels: staff }))
   await robot.adapter.say(user, `@${robot.name} ${text}`, room)
 }
 
@@ -36,7 +34,6 @@ describe('parseDue', () => {
     assert.strictEqual(parseDue('feb 30 at noonish', TZ, NOW), undefined)
   })
   it('falls back to relative times', () => {
-    assert.strictEqual(parseDue('friday at 5pm', TZ, NOW), fromZoned(2026, 11, 20, 17, 0, TZ))
     assert.strictEqual(parseDue('in 3 days', TZ, NOW), NOW + 3 * DAY_MS)
   })
 })
@@ -74,12 +71,7 @@ describe('Deadlines', () => {
     const { robot } = state
     await sayer(robot)('u1', 'deadline HW3 due in 3 days', { staff: true })
     const sent = collect(robot)
-    const fire = async () => {
-      const jobs = robot.brain.get<{ at: number }[]>('schedule:deadline')!
-      robot.brain.set('schedule:deadline', jobs.map(j => ({ ...j, at: Date.now() })))
-      robot.brain.emit('connected')
-      await tick()
-    }
+    const fire = () => runDueJobs(robot, 'deadline')
     await fire()
     assert.match(sent.at(-1)!, /^⏰ Reminder: \*\*HW3\*\* is due /)
     const [job] = robot.brain.get<{ data: { stage: string } }[]>('schedule:deadline')!

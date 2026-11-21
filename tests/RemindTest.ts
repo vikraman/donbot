@@ -1,208 +1,170 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { parseRequest } from '../scripts/Remind.ts'
-import { MAX_PER_PERSON } from '../scripts/Remind.ts'
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { MAX_PER_PERSON, parseRequest } from '../scripts/Remind.ts'
+import { setupRobot, chat, brainUser } from './helpers/setup.ts'
+import { clock, runDueJobs, tick } from './helpers/fakes.ts'
 
 // mon 2026-11-16 10:00 utc
 const NOW = Date.UTC(2026, 10, 16, 10, 0)
-const tick = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 describe('Remind request parsing', () => {
   it('splits time-first and time-last phrasings', () => {
-    assert.deepEqual(parseRequest('in 5 minutes to stretch', 'UTC', NOW)?.message, 'stretch')
-    assert.deepEqual(parseRequest('to stretch in 5 minutes', 'UTC', NOW)?.message, 'stretch')
-    assert.deepEqual(parseRequest('at 3pm to call mom', 'UTC', NOW)?.message, 'call mom')
-    assert.deepEqual(parseRequest('to call mom at 3pm', 'UTC', NOW)?.message, 'call mom')
+    for (const [text, message] of [
+      ['in 5 minutes to stretch', 'stretch'],
+      ['to stretch in 5 minutes', 'stretch'],
+      ['at 3pm to call mom', 'call mom'],
+      ['to call mom at 3pm', 'call mom'],
+      ['to talk to bob on friday at 10', 'talk to bob']
+    ] as const) assert.strictEqual(parseRequest(text, 'UTC', NOW)?.message, message, text)
   })
   it('keeps " to " inside the message', () => {
     const parsed = parseRequest('tomorrow at 9am to talk to bob about moving to rust', 'UTC', NOW)
-    assert.equal(parsed?.message, 'talk to bob about moving to rust')
-    assert.equal(parsed?.when.at, Date.UTC(2026, 10, 17, 9, 0))
-    assert.equal(parseRequest('to talk to bob on friday at 10', 'UTC', NOW)?.message, 'talk to bob')
+    assert.strictEqual(parsed?.message, 'talk to bob about moving to rust')
+    assert.strictEqual(parsed?.when.at, Date.UTC(2026, 10, 17, 9, 0))
   })
   it('parses recurring requests', () => {
     const parsed = parseRequest('every weekday at 9am to post standup', 'UTC', NOW)
-    assert.equal(parsed?.message, 'post standup')
-    assert.equal(parsed?.when.repeat?.kind, 'weekly')
+    assert.strictEqual(parsed?.message, 'post standup')
+    assert.strictEqual(parsed?.when.repeat?.kind, 'weekly')
   })
   it('rejects requests without a time', () => {
-    assert.equal(parseRequest('to stretch', 'UTC', NOW), undefined)
-    assert.equal(parseRequest('sometime to stretch', 'UTC', NOW), undefined)
+    assert.strictEqual(parseRequest('to stretch', 'UTC', NOW), undefined)
+    assert.strictEqual(parseRequest('sometime to stretch', 'UTC', NOW), undefined)
   })
 })
 
-describe('Remind testing Hubot scripts', () => {
+describe('Remind', () => {
   const state = setupRobot('Remind.ts', { envVars: ['OWNER_USER_ID', 'DEFAULT_TIMEZONE'] })
 
-  it('acknowledges a relative reminder', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind me in 5 minutes to stretch', 'test-room')
-    assert.equal(sent[0], "Ok, I'll remind you in 5 minutes.")
+  it('acknowledges one-off and recurring reminders', async () => {
+    clock(NOW)
+    const { sent, ask } = chat(state)
+    await ask('remind me in 5 minutes to stretch')
+    await ask('remind me every weekday at 9am to post standup')
+    assert.deepStrictEqual(sent, ["Ok, I'll remind you in 5 minutes.", "Ok, I'll remind you every weekday at 9am."])
   })
   it('names the timezone only when it is not the default', async () => {
-    const { robot } = state
-    mock.method(Date, 'now', () => NOW)
-    robot.brain.set('tz:user:test-user', 'Asia/Tokyo')
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind me to call mom at 3pm', 'test-room')
-    assert.equal(sent[0], "Ok, I'll remind you tomorrow at 3pm (Asia/Tokyo).")
-  })
-  it('acknowledges a recurring reminder', async () => {
-    const { robot } = state
-    mock.method(Date, 'now', () => NOW)
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind me every weekday at 9am to post standup', 'test-room')
-    assert.equal(sent[0], "Ok, I'll remind you every weekday at 9am.")
-    await robot.adapter.say(user, '@Dumbotheelephant remind me every 2 hours to drink water', 'test-room')
-    assert.equal(sent[1], "Ok, I'll remind you every 2 hours.")
+    clock(NOW)
+    state.robot.brain.set('tz:user:test-user', 'Asia/Tokyo')
+    const { sent, ask } = chat(state)
+    await ask('remind me to call mom at 3pm')
+    assert.strictEqual(sent[0], "Ok, I'll remind you tomorrow at 3pm (Asia/Tokyo).")
   })
   it('uses DEFAULT_TIMEZONE when the requester has none', async () => {
-    const { robot } = state
     process.env.DEFAULT_TIMEZONE = 'America/New_York'
-    mock.method(Date, 'now', () => NOW)
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind me at 3pm to leave', 'test-room')
-    assert.equal(sent[0], "Ok, I'll remind you today at 3pm.")
-    assert.equal(robot.brain.get<{ tz: string }[]>('schedule:remind')![0]!.tz, 'America/New_York')
+    clock(NOW)
+    const { robot, sent, ask } = chat(state)
+    await ask('remind me at 3pm to leave')
+    assert.strictEqual(sent[0], "Ok, I'll remind you today at 3pm.")
+    assert.strictEqual(robot.brain.get<{ tz: string }[]>('schedule:remind')![0]!.tz, 'America/New_York')
   })
   it('explains the formats when it cannot parse the time', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind me in 5 fortnights to stretch', 'test-room')
+    const { sent, ask } = chat(state)
+    await ask('remind me in 5 fortnights to stretch')
     assert.match(sent[0]!, /couldn't tell when/)
     assert.match(sent[0]!, /every weekday at 9am/)
   })
-  it('fires the reminder when due', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind me in 1 second to stretch', 'test-room')
-    await tick(1100)
-    assert.equal(sent[1], '<@test-user> reminder: stretch')
-    assert.deepEqual(robot.brain.get('schedule:remind'), [])
+  it('fires when due and forgets one-off reminders', async () => {
+    const { robot, sent, ask } = chat(state)
+    await ask('remind me in 5 minutes to stretch')
+    await runDueJobs(robot, 'remind')
+    assert.strictEqual(sent[1], '<@test-user> reminder: stretch')
+    assert.deepStrictEqual(robot.brain.get('schedule:remind'), [])
   })
   it('notifies the target, by name or mention', async () => {
-    const { robot } = state
+    const { robot, sent, ask } = chat(state)
     brainUser(robot, 'bob-id', 'bob')
     brainUser(robot, '12345', 'carol')
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind bob to stretch in 1 second', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant remind <@12345> in 5 minutes to review', 'test-room')
-    assert.equal(sent[0], "Ok, I'll remind <@bob-id> in 1 second.")
-    assert.equal(sent[1], "Ok, I'll remind <@12345> in 5 minutes.")
-    await tick(1100)
-    assert.equal(sent[2], '<@bob-id> reminder: stretch')
+    await ask('remind bob to stretch in 1 minute')
+    assert.strictEqual(sent[0], "Ok, I'll remind <@bob-id> in 1 minute.")
+    await runDueJobs(robot, 'remind')
+    assert.strictEqual(sent[1], '<@bob-id> reminder: stretch')
+    await ask('remind <@12345> in 5 minutes to review')
+    assert.strictEqual(sent[2], "Ok, I'll remind <@12345> in 5 minutes.")
   })
-  it('falls back to a plain name for unknown targets', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind nobody-known in 5 minutes to stretch', 'test-room')
-    assert.equal(sent[0], "Ok, I'll remind @\u200bnobody-known in 5 minutes.")
-  })
-  it('never turns an unknown name into an @everyone, @here or role ping', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind everyone in 5 minutes to stretch', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant remind <@&42> in 5 minutes to stretch', 'test-room')
-    assert.equal(sent[0], "Ok, I'll remind @\u200beveryone in 5 minutes.")
-    assert.doesNotMatch(sent[1]!, /<@&42>/)
+  it('never pings unknown names, everyone or roles', async () => {
+    const { sent, ask } = chat(state)
+    await ask('remind nobody-known in 5 minutes to stretch')
+    await ask('remind everyone in 5 minutes to stretch')
+    await ask('remind <@&42> in 5 minutes to stretch')
+    assert.strictEqual(sent[0], "Ok, I'll remind @​nobody-known in 5 minutes.")
+    assert.strictEqual(sent[1], "Ok, I'll remind @​everyone in 5 minutes.")
+    assert.doesNotMatch(sent[2]!, /<@&42>/)
   })
   it('lists reminders in this room, numbered by due time', async () => {
-    const { robot } = state
-    mock.method(Date, 'now', () => NOW)
+    clock(NOW)
+    const { robot, sent, ask } = chat(state)
     brainUser(robot, 'bob-id', 'bob')
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind bob in 1 hour to review PR', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant remind me every weekday at 9am to post standup', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant remind me in 5 minutes to stretch', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant remind me in 5 minutes to elsewhere', 'other-room')
-    await robot.adapter.say(user, '@Dumbotheelephant list reminders', 'test-room')
-    assert.equal(sent[4], [
+    await ask('remind bob in 1 hour to review PR')
+    await ask('remind me every weekday at 9am to post standup')
+    await ask('remind me in 5 minutes to stretch')
+    await ask('remind me in 5 minutes to elsewhere', { room: 'other-room' })
+    await ask('list reminders')
+    assert.strictEqual(sent[4], [
       '1. today at 10:05am for <@test-user>: stretch',
       '2. today at 11am for <@bob-id>: review PR',
       '3. tomorrow at 9am, every weekday at 9am for <@test-user>: post standup'
     ].join('\n'))
+    await ask('my reminders', { room: 'other-room' })
+    assert.strictEqual(sent[5], '1. today at 10:05am for <@test-user>: elsewhere')
   })
   it('shows only your reminders, keeping room numbers', async () => {
-    const { robot } = state
-    mock.method(Date, 'now', () => NOW)
+    clock(NOW)
+    const { robot, sent, ask } = chat(state)
     brainUser(robot, 'bob-id', 'bob')
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind bob in 1 minute to review PR', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant remind me in 5 minutes to stretch', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant my reminders', 'test-room')
-    assert.equal(sent[2], '2. today at 10:05am for <@test-user>: stretch')
+    await ask('remind bob in 1 minute to review PR')
+    await ask('remind me in 5 minutes to stretch')
+    await ask('my reminders')
+    assert.strictEqual(sent[2], '2. today at 10:05am for <@test-user>: stretch')
   })
   it('says when there is nothing pending', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant list reminders', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant my reminders', 'test-room')
-    assert.equal(sent[0], 'No pending reminders in this room.')
-    assert.equal(sent[1], "You don't have any pending reminders.")
+    const { sent, ask } = chat(state)
+    await ask('list reminders')
+    await ask('my reminders')
+    assert.deepStrictEqual(sent, ['No pending reminders in this room.', "You don't have any pending reminders."])
   })
   it('cancels a reminder by number', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind me in 5 minutes to stretch', 'test-room')
-    await robot.adapter.say(user, '@Dumbotheelephant cancel reminder 1', 'test-room')
-    assert.equal(sent[1], 'Cancelled reminder for <@test-user>: stretch')
-    assert.deepEqual(robot.brain.get('schedule:remind'), [])
-    await robot.adapter.say(user, '@Dumbotheelephant forget reminder 1', 'test-room')
+    const { robot, sent, ask } = chat(state)
+    await ask('remind me in 5 minutes to stretch')
+    await ask('cancel reminder 1')
+    assert.strictEqual(sent[1], 'Cancelled reminder for <@test-user>: stretch')
+    assert.deepStrictEqual(robot.brain.get('schedule:remind'), [])
+    await ask('forget reminder 1')
     assert.match(sent[2]!, /no reminder 1 here/)
   })
   it('only lets the setter, target or owner cancel', async () => {
-    const { robot } = state
     process.env.OWNER_USER_ID = 'owner-id'
+    const { robot, sent, ask } = chat(state)
     brainUser(robot, 'bob-id', 'bob')
-    const user = brainUser(robot, 'test-user', 'test user')
     const eve = brainUser(robot, 'eve-id', 'eve')
     const owner = brainUser(robot, 'owner-id', 'owner')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind bob in 5 minutes to stretch', 'test-room')
-    await robot.adapter.say(eve, '@Dumbotheelephant cancel reminder 1', 'test-room')
+    await ask('remind bob in 5 minutes to stretch')
+    await ask('cancel reminder 1', { user: eve })
     assert.match(sent[1]!, /Only the person/)
-    await robot.adapter.say(owner, '@Dumbotheelephant cancel reminder 1', 'test-room')
+    await ask('cancel reminder 1', { user: owner })
     assert.match(sent[2]!, /^Cancelled/)
   })
   it('migrates legacy reminders on brain connect', async () => {
-    const { robot } = state
-    const sent = collect(robot)
+    const { robot, sent } = chat(state)
     robot.brain.set('reminders', [
       { id: 'old-1', targetId: 'bob-id', targetName: 'bob', room: 'test-room', message: 'legacy', dueAt: Date.now() + 30 }
     ])
     robot.brain.emit('connected')
-    assert.equal(robot.brain.get('reminders'), null)
+    assert.strictEqual(robot.brain.get('reminders'), null)
     await tick(80)
-    assert.equal(sent[0], '<@bob-id> reminder: legacy')
+    assert.strictEqual(sent[0], '<@bob-id> reminder: legacy')
   })
   it('limits reminders per person and hourly repeats for others', async () => {
-    const { robot } = state
     delete process.env.OWNER_USER_ID
+    const { robot, sent, ask } = chat(state)
     brainUser(robot, 'bob-id', 'bob')
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant remind bob every 10 minutes to drink water', 'test-room')
-    assert.equal(sent[0], 'Repeating reminders for someone else can be at most hourly.')
-    await robot.adapter.say(user, '@Dumbotheelephant remind me every 10 minutes to drink water', 'test-room')
+    await ask('remind bob every 10 minutes to drink water')
+    assert.strictEqual(sent[0], 'Repeating reminders for someone else can be at most hourly.')
+    await ask('remind me every 10 minutes to drink water')
     assert.match(sent[1]!, /^Ok, I'll remind you every 10 minutes/)
     robot.brain.set('schedule:remind', Array.from({ length: MAX_PER_PERSON }, (_, i) => ({ id: `r${i}`, at: Date.now() + 3_600_000, tz: 'UTC', data: { targetId: 'test-user', targetName: 'x', room: 'other', message: 'm', byId: 'test-user' } })))
-    await robot.adapter.say(user, '@Dumbotheelephant remind me in 5 minutes to stretch', 'test-room')
-    assert.match(sent[2]!, /^You already have 25 reminders set/)
+    await ask('remind me in 5 minutes to stretch')
+    assert.match(sent[2]!, new RegExp(`^You already have ${MAX_PER_PERSON} reminders set`))
   })
 })

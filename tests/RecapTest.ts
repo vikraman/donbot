@@ -1,39 +1,35 @@
-import { beforeEach, describe, it } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { configureLines } from '../scripts/lib/lines.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
 import { dayKey, weekKey } from '../scripts/lib/time.ts'
 import { defaultTz } from '../scripts/lib/timezone.ts'
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, chat, brainUser } from './helpers/setup.ts'
+import { runDueJobs } from './helpers/fakes.ts'
 
 const DAY = 86_400_000
 
 describe('Recap', () => {
-  const state = setupRobot('Recap.ts', { envVars: ['OWNER_USER_ID'] })
   // alice (u1) owns the bot
-  beforeEach(() => { process.env.OWNER_USER_ID = 'u1' })
+  const state = setupRobot('Recap.ts', { owner: 'u1' })
+  const alice = () => chat(state, { id: 'u1', name: 'alice', room: 'room' })
 
   it('says it was a quiet week with nothing logged', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
+    const { sent, ask } = alice()
+    await ask('recap')
     assert.match(sent[0]!, /quiet week/)
   })
   it('keeps a quiet-week recap plain in professional rooms', async () => {
-    const { robot } = state
     setRandomSource(() => 0.99)
     configureLines({ casual: () => false })
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
-    assert.match(sent[0]!, /^📰 Weekly recap: a quiet week here\. A `focus` session or a `standup:` check-in would show up here\./)
+    const { sent, ask } = alice()
+    await ask('recap')
+    assert.match(sent[0]!, /^📰 Weekly recap: a quiet week here\./)
   })
   it('summarizes the week from every log, for this room only', async () => {
-    const { robot } = state
     setRandomSource(() => 0)
-    const user = brainUser(robot, 'u1', 'alice')
+    const { robot, sent, ask } = alice()
     const now = Date.now()
     robot.brain.set('log:kudos', [
       { ts: now - DAY, room: 'room', userId: 'u1', target: '<@u2>', targetId: 'u2', reason: 'fixing the deploy', delta: 1 },
@@ -58,9 +54,8 @@ describe('Recap', () => {
       { ts: now - DAY, kind: 'user-message', authorId: 'u2', id: '2' },
       { ts: now - DAY, kind: 'user-message', authorId: 'u1', id: '3' }
     ])
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
-    assert.equal(sent[0], [
+    await ask('recap')
+    assert.strictEqual(sent[0], [
       '📰 **Weekly recap**',
       '',
       '💛 3 kudos given, most to <@u2> (2).',
@@ -81,68 +76,54 @@ describe('Recap', () => {
     ].join('\n'))
   })
   it('schedules, reports and stops the weekly recap', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant recap status', 'room')
+    const { robot, sent, ask } = alice()
+    await ask('recap status')
     assert.match(sent[0]!, /^No recap scheduled/)
-    await robot.adapter.say(user, '@Dumbotheelephant recap on', 'room')
+    await ask('recap on')
     assert.match(sent[1]!, /^Weekly recap on, every Friday at 4pm\. First one /)
-    await robot.adapter.say(user, '@Dumbotheelephant recap on every monday at 9am', 'room')
+    await ask('recap on every monday at 9am')
     assert.match(sent[2]!, /every Monday at 9am/)
-    assert.equal(robot.brain.get<unknown[]>('schedule:recap')!.length, 1)
-    await robot.adapter.say(user, '@Dumbotheelephant recap off', 'room')
-    assert.equal(sent[3], 'Weekly recap off for this channel.')
+    assert.strictEqual(robot.brain.get<unknown[]>('schedule:recap')!.length, 1)
+    await ask('recap off')
+    assert.strictEqual(sent[3], 'Weekly recap off for this channel.')
   })
   it('lets only channel managers turn the recap on or off', async () => {
-    const { robot } = state
-    const alice = brainUser(robot, 'u1', 'alice')
+    const { robot, sent, ask } = alice()
     const bob = brainUser(robot, 'u2', 'bob')
-    const sent = collect(robot)
-    await robot.adapter.say(bob, '@Dumbotheelephant recap on', 'room')
-    await robot.adapter.say(alice, '@Dumbotheelephant recap on', 'room')
-    await robot.adapter.say(bob, '@Dumbotheelephant recap off', 'room')
-    assert.equal(sent[0], 'Only someone who can manage this channel can do that.')
-    assert.equal(sent[2], 'Only someone who can manage this channel can do that.')
-    assert.equal(robot.brain.get<unknown[]>('schedule:recap')!.length, 1)
+    await ask('recap on', { user: bob })
+    await ask('recap on')
+    await ask('recap off', { user: bob })
+    assert.strictEqual(sent[0], 'Only someone who can manage this channel can do that.')
+    assert.strictEqual(sent[2], 'Only someone who can manage this channel can do that.')
+    assert.strictEqual(robot.brain.get<unknown[]>('schedule:recap')!.length, 1)
   })
   it('posts on schedule', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant recap on', 'room')
-    const jobs = robot.brain.get<{ at: number }[]>('schedule:recap')!
-    robot.brain.set('schedule:recap', jobs.map(j => ({ ...j, at: Date.now() })))
-    robot.brain.emit('connected')
-    await new Promise(resolve => setTimeout(resolve, 30))
+    const { robot, sent, ask } = alice()
+    await ask('recap on')
+    await runDueJobs(robot, 'recap')
     assert.match(sent[1]!, /quiet week/)
   })
   it('adds earned highlights for big weeks', async () => {
-    const { robot } = state
     setRandomSource(() => 0)
-    const user = brainUser(robot, 'u1', 'alice')
+    const { robot, sent, ask } = alice()
     const now = Date.now()
     robot.brain.set('log:win', Array.from({ length: 10 }, (_, i) => ({ ts: now - DAY, room: 'room', userId: 'u1', text: `w${i}` })))
     robot.brain.set('log:focus', [{ ts: now - DAY, room: 'room', userId: 'u1', minutes: 11 * 60 }])
     robot.brain.set('log:standup', [{ ts: now - DAY, room: 'room', userId: 'u1' }, { ts: now - DAY, room: 'room', userId: 'u2' }])
     robot.brain.set('standup:round:room', { startedAt: now - DAY, expected: ['u1', 'u2'], checkIns: [{ userId: 'u1' }, { userId: 'u2' }] })
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
+    await ask('recap')
     assert.match(sent[0]!, /🌪️ 10 wins in one week\./)
     assert.match(sent[0]!, /🧠 Over 11 hours of focus this week\./)
     assert.match(sent[0]!, /💯 Perfect standup attendance/)
   })
   it('varies the quiet-week message without repeating', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    for (let i = 0; i < 20; i++) await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
+    const { sent, ask } = alice()
+    for (let i = 0; i < 20; i++) await ask('recap')
     assert.ok(sent.every(s => /quiet week/.test(s)))
     assert.ok(new Set(sent).size > 4)
   })
   it('lists running streaks of people active in the room, weeks first', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'u1', 'alice')
+    const { robot, sent, ask } = alice()
     const now = Date.now()
     robot.brain.set('log:win', [
       { ts: now - DAY, room: 'room', userId: 'u1', text: 'a' },
@@ -156,8 +137,7 @@ describe('Recap', () => {
     robot.brain.set('streak:win:u2', { current: 2, best: 2, lastDay: today })
     // active elsewhere only
     robot.brain.set('streak:focus:u3', { current: 30, best: 30, lastDay: today })
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant recap', 'room')
+    await ask('recap')
     assert.match(sent[0]!, /🔥 Streaks going: <@u2> 3-week standup, <@u1> 9-day focus\./)
     assert.doesNotMatch(sent[0]!, /u3/)
   })

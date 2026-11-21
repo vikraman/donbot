@@ -1,164 +1,84 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { setupRobot, collect, brainUser, inGuild } from './helpers/setup.ts'
+import { setupRobot, chat, inGuild } from './helpers/setup.ts'
+import { mockFetch } from './helpers/fakes.ts'
 import { policyFor } from '../scripts/lib/policy.ts'
 
-describe('Joke testing Hubot scripts', () => {
+const JOKEAPI = 'https://v2.jokeapi.dev/joke'
+const BLACKLIST = '?blacklistFlags=nsfw,religious,political,racist,sexist,explicit'
+
+describe('Joke', () => {
   const state = setupRobot('Joke.ts')
 
-  it('should reply with a dad joke for "joke"', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    let requestedHeaders: Record<string, string> | null = null
-    mock.method(global, 'fetch', async (url: string, options: { headers: Record<string, string> }) => {
-      requestedUrl = url
-      requestedHeaders = options.headers
-      return { ok: true, json: async () => ({ joke: 'Why did the chicken cross the road?' }) }
+  it('fetches a dad joke as json', async () => {
+    let headers: Record<string, string> = {}
+    const urls = mockFetch((_url: string, init?: RequestInit) => {
+      headers = init?.headers as Record<string, string>
+      return { joke: 'Why did the chicken cross the road?' }
     })
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant joke', 'test-room')
-    assert.strictEqual(requestedUrl, 'https://icanhazdadjoke.com/')
-    assert.strictEqual(requestedHeaders!.Accept, 'application/json')
-    assert.strictEqual(sent[0], 'Why did the chicken cross the road?')
+    const { sent, ask } = chat(state)
+    await ask('joke')
+    assert.deepStrictEqual(urls, ['https://icanhazdadjoke.com/'])
+    assert.strictEqual(headers.Accept, 'application/json')
+    assert.deepStrictEqual(sent, ['Why did the chicken cross the road?'])
   })
 
-  it('should support "tell me a joke" as an alternate phrasing', async () => {
-    const { robot } = state
-    mock.method(global, 'fetch', async () => ({
-      ok: true, json: async () => ({ joke: 'Parallel lines have so much in common. Too bad they will never meet.' })
-    }))
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant tell me a joke', 'test-room')
-    assert.strictEqual(sent[0], 'Parallel lines have so much in common. Too bad they will never meet.')
-    assert.strictEqual(sent.length, 1)
-  })
-
-  it('should say it has no joke when the request fails', async () => {
-    const { robot } = state
-    mock.method(global, 'fetch', async () => ({ ok: false }))
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant joke', 'test-room')
-    assert.strictEqual(sent[0], "I don't have a joke for you right now.")
-  })
-
-  it('should fetch a chuck norris joke for "joke chuck"', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    mock.method(global, 'fetch', async (url: string) => {
-      requestedUrl = url
-      return { ok: true, json: async () => ({ value: 'Chuck Norris counted to infinity. Twice.' }) }
+  for (const [text, url, body, reply] of [
+    ['tell me a joke', 'https://icanhazdadjoke.com/', { joke: 'Parallel lines.' }, 'Parallel lines.'],
+    ['joke chuck', 'https://api.chucknorris.io/jokes/random', { value: 'Chuck counted to infinity.' }, 'Chuck counted to infinity.'],
+    ['joke programming', `${JOKEAPI}/programming${BLACKLIST}`, { error: false, type: 'twopart', setup: 'Why?', delivery: 'Because.' }, 'Why? Because.'],
+    ['tell me a pun joke', `${JOKEAPI}/pun${BLACKLIST}`, { error: false, type: 'single', joke: 'A pun.' }, 'A pun.'],
+    ['joke coding', `${JOKEAPI}/Programming${BLACKLIST}`, { error: false, type: 'single', joke: 'A joke.' }, 'A joke.'],
+    ['joke halloween', `${JOKEAPI}/Spooky${BLACKLIST}`, { error: false, type: 'single', joke: 'Boo.' }, 'Boo.']
+  ] as const) {
+    it(`answers "${text}"`, async () => {
+      const urls = mockFetch(body)
+      const { sent, ask } = chat(state)
+      await ask(text)
+      assert.deepStrictEqual(urls, [url])
+      assert.deepStrictEqual(sent, [reply])
     })
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant joke chuck', 'test-room')
-    assert.strictEqual(requestedUrl, 'https://api.chucknorris.io/jokes/random')
-    assert.strictEqual(sent[0], 'Chuck Norris counted to infinity. Twice.')
-  })
+  }
 
-  it('should fetch a two-part joke from jokeapi for "joke programming"', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    mock.method(global, 'fetch', async (url: string) => {
-      requestedUrl = url
-      return {
-        ok: true,
-        json: async () => ({
-          error: false,
-          type: 'twopart',
-          setup: 'Why does no one like SQLrillex?',
-          delivery: 'He keeps dropping the database.'
-        })
-      }
+  for (const [name, text, opts, body] of [
+    ['the request fails', 'joke', { ok: false }, {}],
+    ['jokeapi returns an error', 'joke programming', {}, { error: true }]
+  ] as const) {
+    it(`has no joke when ${name}`, async () => {
+      mockFetch(body, opts)
+      const { sent, ask } = chat(state)
+      await ask(text)
+      assert.deepStrictEqual(sent, ["I don't have a joke for you right now."])
     })
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant joke programming', 'test-room')
-    assert.strictEqual(requestedUrl, 'https://v2.jokeapi.dev/joke/programming?blacklistFlags=nsfw,religious,political,racist,sexist,explicit')
-    assert.strictEqual(sent[0], 'Why does no one like SQLrillex? He keeps dropping the database.')
-  })
+  }
 
-  it('should support "tell me a <category> joke" phrasing', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    mock.method(global, 'fetch', async (url: string) => {
-      requestedUrl = url
-      return { ok: true, json: async () => ({ error: false, type: 'single', joke: 'A pun.' }) }
-    })
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant tell me a pun joke', 'test-room')
-    assert.strictEqual(requestedUrl, 'https://v2.jokeapi.dev/joke/pun?blacklistFlags=nsfw,religious,political,racist,sexist,explicit')
-    assert.strictEqual(sent[0], 'A pun.')
-    assert.strictEqual(sent.length, 1)
+  it('says when a category is unknown', async () => {
+    const { sent, ask } = chat(state)
+    await ask('joke nonsense')
+    assert.match(sent[0]!, /don't know the "nonsense" category/)
   })
 
   it('keeps dark jokes for channels that turned them on', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    mock.method(global, 'fetch', async (url: string) => {
-      requestedUrl = url
-      return { ok: true, json: async () => ({ error: false, type: 'single', joke: 'A dark one-liner.' }) }
-    })
+    const urls = mockFetch({ error: false, type: 'single', joke: 'A dark one-liner.' })
+    const { robot, sent, ask } = chat(state)
     inGuild(robot, 'g1', ['test-room'], 'casual')
     inGuild(robot, 'g1', ['dark-room'], undefined, { nsfw: true })
     policyFor(robot).update(d => { d.channels['dark-room'] = { on: ['joke.dark'], off: [] } })
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant tell me a dark joke', 'test-room')
+    await ask('tell me a dark joke')
     assert.match(sent[0]!, /don't know the "dark" category/)
     assert.doesNotMatch(sent[0]!.split('Try:')[1]!, /dark/)
-    assert.strictEqual(requestedUrl, '')
-    await robot.adapter.say(user, '@Dumbotheelephant tell me a dark joke', 'dark-room')
-    assert.strictEqual(requestedUrl, 'https://v2.jokeapi.dev/joke/dark')
+    assert.deepStrictEqual(urls, [])
+    await ask('tell me a dark joke', { room: 'dark-room' })
+    assert.deepStrictEqual(urls, [`${JOKEAPI}/dark`])
     assert.strictEqual(sent[1], 'A dark one-liner.')
   })
 
   it('asks jokeapi for safe jokes in professional servers', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    mock.method(global, 'fetch', async (url: string) => {
-      requestedUrl = url
-      return { ok: true, json: async () => ({ error: false, type: 'single', joke: 'A safe one.' }) }
-    })
+    const urls = mockFetch({ error: false, type: 'single', joke: 'A safe one.' })
+    const { robot, ask } = chat(state)
     inGuild(robot, 'g2', ['pro-room'])
-    const user = brainUser(robot, 'test-user', 'test user')
-    await robot.adapter.say(user, '@Dumbotheelephant joke misc', 'pro-room')
-    assert.strictEqual(requestedUrl, 'https://v2.jokeapi.dev/joke/misc?safe-mode')
-  })
-
-  it('should resolve category aliases like "coding" and "halloween"', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    mock.method(global, 'fetch', async (url: string) => {
-      requestedUrl = url
-      return { ok: true, json: async () => ({ error: false, type: 'single', joke: 'A joke.' }) }
-    })
-    const user = brainUser(robot, 'test-user', 'test user')
-    collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant joke coding', 'test-room')
-    assert.strictEqual(requestedUrl, 'https://v2.jokeapi.dev/joke/Programming?blacklistFlags=nsfw,religious,political,racist,sexist,explicit')
-    await robot.adapter.say(user, '@Dumbotheelephant joke halloween', 'test-room')
-    assert.strictEqual(requestedUrl, 'https://v2.jokeapi.dev/joke/Spooky?blacklistFlags=nsfw,religious,political,racist,sexist,explicit')
-  })
-
-  it('should say when a category is unknown', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant joke nonsense', 'test-room')
-    assert.match(sent[0]!, /don't know the "nonsense" category/)
-  })
-
-  it('should say it has no joke when jokeapi returns an error payload', async () => {
-    const { robot } = state
-    mock.method(global, 'fetch', async () => ({ ok: true, json: async () => ({ error: true }) }))
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant joke programming', 'test-room')
-    assert.strictEqual(sent[0], "I don't have a joke for you right now.")
+    await ask('joke misc', { room: 'pro-room' })
+    assert.deepStrictEqual(urls, [`${JOKEAPI}/misc?safe-mode`])
   })
 })

@@ -1,38 +1,52 @@
 import { describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
 
-import type { DiscordClient } from 'hubot'
 
 import { setupRobot } from './helpers/setup.ts'
 
-describe('Presence testing Hubot scripts', () => {
+describe('Presence', () => {
   const state = setupRobot('Presence.ts', { deferLoad: true })
 
-  it('should not error when there is no discord-like client', async () => {
-    const { robot } = state
+  // fake client, then load; returns the setActivity mock
+  const load = async (client: Record<string, unknown> = {}) => {
+    const setActivity = mock.fn()
+    state.robot.adapter.client = { isReady: () => true, user: { setActivity }, ...client }
     await state.loadScript()
-    robot.brain.emit('connected')
+    return setActivity
+  }
+
+  // distinct statuses over n rotations
+  const sample = (setActivity: ReturnType<typeof mock.fn>, n = 200) => {
+    const statuses = new Set<string>()
+    for (let i = 0; i < n; i++) {
+      state.robot.brain.emit('connected')
+      statuses.add(setActivity.mock.calls.at(-1)!.arguments[0] as string)
+    }
+    return [...statuses]
+  }
+
+  it('loads without a discord client', async () => {
+    await state.loadScript()
+    assert.doesNotThrow(() => state.robot.brain.emit('connected'))
   })
 
-  it('should set an activity on the discord client once connected', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = {
-      isReady: () => true,
-      user: { setActivity }
-    } as unknown as DiscordClient
-    await state.loadScript()
-    robot.brain.emit('connected')
+  it('sets a custom activity once connected', async () => {
+    const setActivity = await load()
+    state.robot.brain.emit('connected')
     assert.strictEqual(setActivity.mock.calls.length, 1)
-    const [text, options] = setActivity.mock.calls[0]!.arguments
-    assert.strictEqual(typeof text, 'string')
+    const [text, options] = setActivity.mock.calls[0]!.arguments as [string, { type: number }]
     assert.ok(text.length > 0)
     assert.strictEqual(options.type, 4)
   })
 
+  it('waits until the client is ready', async () => {
+    const setActivity = await load({ isReady: () => false })
+    state.robot.brain.emit('connected')
+    assert.strictEqual(setActivity.mock.calls.length, 0)
+  })
+
   it('keeps one rotation timer across brain reconnects', async () => {
-    const { robot } = state
-    // real intervals keep the brain saving, so only track presence's
+    // only presence's intervals
     const live = new Set<object>()
     const realSet = global.setInterval
     const realClear = global.clearInterval
@@ -46,142 +60,33 @@ describe('Presence testing Hubot scripts', () => {
       if (live.delete(handle as object)) return
       realClear(handle as NodeJS.Timeout)
     })
-    robot.adapter.client = { isReady: () => true, user: { setActivity: mock.fn() } } as unknown as DiscordClient
-    await state.loadScript()
-    for (let i = 0; i < 3; i++) robot.brain.emit('connected')
+    await load()
+    for (let i = 0; i < 3; i++) state.robot.brain.emit('connected')
     assert.strictEqual(live.size, 1)
   })
 
-  it('should not error when the client is present but not ready', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = {
-      isReady: () => false,
-      user: { setActivity }
-    } as unknown as DiscordClient
-    await state.loadScript()
-    robot.brain.emit('connected')
-    assert.strictEqual(setActivity.mock.calls.length, 0)
+  it('rotates through its statuses', async () => {
+    state.robot.brain.set('seen:last', Date.now() - 5 * 60000)
+    const statuses = sample(await load({ guilds: { cache: { size: 3 } } }))
+    for (const [name, pattern] of [
+      ['servers', /^In 3 servers$/],
+      ['tricks', /^Knows \d+ tricks?$/],
+      ['memory', /^Using [\d.]+MB$/],
+      ['brain', /^Brain: [\d.]+ KB$/],
+      ['quiet', /^Quiet for \d+m$/],
+      ['date', /^Today: /],
+      ['mood', /^\p{Emoji}.{0,2}$/u]
+    ] as const) assert.ok(statuses.some(s => pattern.test(s)), name)
   })
 
-  it('should report the guild count when available', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = {
-      isReady: () => true,
-      user: { setActivity },
-      guilds: { cache: { size: 3 } }
-    } as unknown as DiscordClient
-    await state.loadScript()
-    const statuses: string[] = []
-    for (let i = 0; i < 200; i++) {
-      robot.brain.emit('connected')
-      statuses.push(setActivity.mock.calls.at(-1)!.arguments[0])
-    }
-    assert.ok(statuses.includes('In 3 servers'))
-  })
-
-  it('should report the listener count', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = { isReady: () => true, user: { setActivity } } as unknown as DiscordClient
-    await state.loadScript()
-    const statuses: string[] = []
-    for (let i = 0; i < 200; i++) {
-      robot.brain.emit('connected')
-      statuses.push(setActivity.mock.calls.at(-1)!.arguments[0])
-    }
-    assert.ok(statuses.some(s => /^Knows \d+ tricks?$/.test(s)))
-  })
-
-  it('should report memory usage', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = { isReady: () => true, user: { setActivity } } as unknown as DiscordClient
-    await state.loadScript()
-    const statuses: string[] = []
-    for (let i = 0; i < 200; i++) {
-      robot.brain.emit('connected')
-      statuses.push(setActivity.mock.calls.at(-1)!.arguments[0])
-    }
-    assert.ok(statuses.some(s => /^Using [\d.]+MB$/.test(s)))
-  })
-
-  it('should report brain size', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = { isReady: () => true, user: { setActivity } } as unknown as DiscordClient
-    await state.loadScript()
-    const statuses: string[] = []
-    for (let i = 0; i < 200; i++) {
-      robot.brain.emit('connected')
-      statuses.push(setActivity.mock.calls.at(-1)!.arguments[0])
-    }
-    assert.ok(statuses.some(s => /^Brain: [\d.]+ KB$/.test(s)))
-  })
-
-  it('should report quiet time since the last message once someone has spoken', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = { isReady: () => true, user: { setActivity } } as unknown as DiscordClient
-    robot.brain.set('seen:last', Date.now() - 5 * 60000)
-    await state.loadScript()
-    const statuses: string[] = []
-    for (let i = 0; i < 200; i++) {
-      robot.brain.emit('connected')
-      statuses.push(setActivity.mock.calls.at(-1)!.arguments[0])
-    }
-    assert.ok(statuses.some(s => /^Quiet for \d+m$/.test(s)))
-  })
-
-  it('should report today\'s date', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = { isReady: () => true, user: { setActivity } } as unknown as DiscordClient
-    await state.loadScript()
-    const statuses: string[] = []
-    for (let i = 0; i < 200; i++) {
-      robot.brain.emit('connected')
-      statuses.push(setActivity.mock.calls.at(-1)!.arguments[0])
-    }
-    assert.ok(statuses.some(s => /^Today: /.test(s)))
-  })
-
-  it('should sometimes show a random emoji mood', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = { isReady: () => true, user: { setActivity } } as unknown as DiscordClient
-    await state.loadScript()
-    const statuses: string[] = []
-    for (let i = 0; i < 200; i++) {
-      robot.brain.emit('connected')
-      statuses.push(setActivity.mock.calls.at(-1)!.arguments[0])
-    }
-    assert.ok(statuses.some(s => /\p{Emoji}/u.test(s) && s.length <= 3))
-  })
-
-  it('should report who is focusing, leaving out breaks', async () => {
-    const { robot } = state
-    const setActivity = mock.fn()
-    robot.adapter.client = { isReady: () => true, user: { setActivity } } as unknown as DiscordClient
-    await state.loadScript()
-    const sample = () => {
-      const statuses = new Set<string>()
-      for (let i = 0; i < 300; i++) {
-        robot.brain.emit('connected')
-        statuses.add(setActivity.mock.calls.at(-1)!.arguments[0])
-      }
-      return [...statuses]
-    }
-    robot.brain.set('schedule:focus', [
-      { id: 'a', data: { phase: 'work' } },
-      { id: 'b', data: { phase: 'work', cycle: { tock: true } } },
-      { id: 'c', data: { phase: 'break' } }
-    ])
-    assert.ok(sample().includes('2 people focusing 🤫'))
-    robot.brain.set('schedule:focus', [{ id: 'b', data: { phase: 'work', cycle: { tock: true } } }])
-    assert.ok(sample().includes('1 person on a tock 🕰️'))
-    robot.brain.set('schedule:focus', [{ id: 'c', data: { phase: 'break' } }])
-    assert.ok(!sample().some(s => /focusing|tock/.test(s)))
+  it('reports who is focusing, leaving out breaks', async () => {
+    const setActivity = await load()
+    const focus = (...jobs: unknown[]) => { state.robot.brain.set('schedule:focus', jobs); return sample(setActivity, 300) }
+    const work = { id: 'a', data: { phase: 'work' } }
+    const tock = { id: 'b', data: { phase: 'work', cycle: { tock: true } } }
+    const rest = { id: 'c', data: { phase: 'break' } }
+    assert.ok(focus(work, tock, rest).includes('2 people focusing 🤫'))
+    assert.ok(focus(tock).includes('1 person on a tock 🕰️'))
+    assert.ok(!focus(rest).some(s => /focusing|tock/.test(s)))
   })
 })

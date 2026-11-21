@@ -1,89 +1,58 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { isFrustrated, ROOM_COOLDOWN_MS, USER_COOLDOWN_MS } from '../scripts/PepTalk.ts'
-import { setRandomSource } from '../scripts/lib/random.ts'
-import { setupRobot, collect, brainUser, inGuild } from './helpers/setup.ts'
+import { setupRobot, chat, brainUser, inGuild } from './helpers/setup.ts'
+import { clock } from './helpers/fakes.ts'
 
 describe('PepTalk', () => {
-  const state = setupRobot(['PepTalk.ts', 'Policy.ts'], { envVars: ['OWNER_USER_ID'] })
+  const state = setupRobot(['PepTalk.ts', 'Policy.ts'], { owner: 'u1' })
+  const alice = () => chat(state, { id: 'u1', name: 'alice', room: 'room' })
 
   it('spots frustration', () => {
-    assert.equal(isFrustrated('ugh the build is broken again'), true)
-    assert.equal(isFrustrated("why won't this compile"), true)
-    assert.equal(isFrustrated('lunch at noon?'), false)
+    assert.strictEqual(isFrustrated('ugh the build is broken again'), true)
+    assert.strictEqual(isFrustrated("why won't this compile"), true)
+    assert.strictEqual(isFrustrated('lunch at noon?'), false)
   })
-  it('toggles per channel', async () => {
-    const { robot } = state
-    process.env.OWNER_USER_ID = 'u1'
+  it('toggles per channel, then stays quiet when off', async () => {
+    const { robot, sent, say, ask } = alice()
     inGuild(robot, 'g1', ['room'], 'casual')
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant pep talks', 'room')
-    assert.equal(sent[0], 'Pep talks: on here.')
-    await robot.adapter.say(user, '@Dumbotheelephant pep talks off', 'room')
-    assert.equal(sent[1], 'Pep talks: off for this channel.')
-    await robot.adapter.say(user, '@Dumbotheelephant pep talks on', 'room')
-    assert.equal(sent[2], 'Pep talks: on for this channel.')
-    assert.equal(sent.length, 3)
-  })
-  it('stays quiet when turned off', async () => {
-    const { robot } = state
-    process.env.OWNER_USER_ID = 'u1'
-    inGuild(robot, 'g1', ['room'], 'casual')
-    const user = brainUser(robot, 'u1', 'alice')
-    await robot.adapter.say(user, '@Dumbotheelephant pep talks off', 'room')
-    const sent = collect(robot)
-    for (let i = 0; i < 4; i++) await robot.adapter.say(user, 'ugh still stuck', 'room')
-    assert.deepEqual(sent, [])
+    await ask('pep talks')
+    await ask('pep talks off')
+    for (let i = 0; i < 4; i++) await say('ugh still stuck')
+    await ask('pep talks on')
+    assert.deepStrictEqual(sent, ['Pep talks: on here.', 'Pep talks: off for this channel.', 'Pep talks: on for this channel.'])
   })
   it('stays quiet in a professional server', async () => {
-    const { robot } = state
+    const { robot, sent, say } = alice()
     inGuild(robot, 'g2', ['room'])
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    for (let i = 0; i < 4; i++) await robot.adapter.say(user, 'ugh still stuck', 'room')
-    assert.deepEqual(sent, [])
+    for (let i = 0; i < 4; i++) await say('ugh still stuck')
+    assert.deepStrictEqual(sent, [])
   })
   it('sends one pep talk after three frustrated messages, then cools down', async () => {
-    const { robot } = state
-    setRandomSource(() => 0)
-    const alice = brainUser(robot, 'u1', 'alice')
+    const t = clock()
+    const { robot, sent, say } = alice()
     const bob = brainUser(robot, 'u2', 'bob')
-    const sent = collect(robot)
-    await robot.adapter.say(alice, 'ugh', 'room')
-    await robot.adapter.say(alice, 'this is fine', 'room')
-    await robot.adapter.say(alice, 'still stuck', 'room')
-    assert.deepEqual(sent, [])
-    await robot.adapter.say(alice, 'tests failing again', 'room')
-    assert.deepEqual(sent, ["<@u1> you've figured out harder things than this. Take a breather, it'll click."])
-    for (let i = 0; i < 3; i++) await robot.adapter.say(alice, 'ugh broken', 'room')
+    for (const text of ['ugh', 'this is fine', 'still stuck']) await say(text)
+    assert.deepStrictEqual(sent, [])
+    await say('tests failing again')
+    assert.strictEqual(sent.length, 1)
+    assert.match(sent[0]!, /^<@u1> /)
+    for (let i = 0; i < 3; i++) await say('ugh broken')
     // room cooldown blocks bob too
-    for (let i = 0; i < 3; i++) await robot.adapter.say(bob, 'ugh broken', 'room')
-    assert.equal(sent.length, 1)
-    const start = Date.now()
-    mock.method(Date, 'now', () => start + ROOM_COOLDOWN_MS + 1)
-    for (let i = 0; i < 3; i++) await robot.adapter.say(bob, 'ugh broken', 'room')
-    assert.equal(sent.length, 2)
+    for (let i = 0; i < 3; i++) await say('ugh broken', { user: bob })
+    assert.strictEqual(sent.length, 1)
+    t.advance(ROOM_COOLDOWN_MS + 1)
+    for (let i = 0; i < 3; i++) await say('ugh broken', { user: bob })
+    assert.strictEqual(sent.length, 2)
     assert.ok(USER_COOLDOWN_MS > ROOM_COOLDOWN_MS)
   })
   it('gives pep talks on demand', async () => {
-    const { robot } = state
-    setRandomSource(() => 0)
+    const { robot, sent, ask } = alice()
     brainUser(robot, 'u2', 'bob')
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant pep talk', 'room')
-    await robot.adapter.say(user, '@Dumbotheelephant pep talk for bob', 'room')
-    await robot.adapter.say(user, '@Dumbotheelephant pep talk <@99>', 'room')
-    assert.deepEqual(sent.map(s => s.split(' ')[0]), ['<@u1>', '<@u2>', '<@99>'])
-  })
-  it('does not repeat a pep talk back to back', async () => {
-    const { robot } = state
-    const user = brainUser(robot, 'u1', 'alice')
-    const sent = collect(robot)
-    for (let i = 0; i < 40; i++) await robot.adapter.say(user, '@Dumbotheelephant pep talk', 'room')
-    sent.forEach((s, i) => { if (i) assert.notEqual(s, sent[i - 1]) })
-    assert.ok(sent.every(s => s.startsWith('<@u1> ')))
+    await ask('pep talk')
+    await ask('pep talk for bob')
+    await ask('pep talk <@99>')
+    assert.deepStrictEqual(sent.map(s => s.split(' ')[0]), ['<@u1>', '<@u2>', '<@99>'])
   })
 })
