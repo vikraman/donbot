@@ -48,6 +48,10 @@ describe('web chat completion', () => {
     assert.deepStrictEqual(complete('jo', COMMANDS).map((c: { text: string }) => c.text), ['joke', 'joke <category>'])
     assert.deepStrictEqual(complete('he', COMMANDS).map((c: { text: string }) => c.text), ['help', 'help <query>'])
     assert.deepStrictEqual(complete('ask', COMMANDS).map((c: { text: string }) => c.text), ['ask wiki <question>', 'ask ddg <question>'])
+    const agda = [{ cmd: 'agda help [types|patterns|filters|examples]', desc: '' }, { cmd: 'focus [<N> <unit>]', desc: '' }]
+    assert.deepStrictEqual(complete('agda help', agda).map((c: { text: string }) => c.text), ['agda help types', 'agda help patterns', 'agda help filters', 'agda help examples'])
+    assert.deepStrictEqual(complete('agda help e', agda).map((c: { text: string }) => c.text), ['agda help examples'])
+    assert.deepStrictEqual(complete('focus', agda).map((c: { text: string }) => c.text), ['focus <N> <unit>'])
     assert.deepStrictEqual(complete('', COMMANDS), [])
     assert.deepStrictEqual(complete('zzz', COMMANDS), [])
   })

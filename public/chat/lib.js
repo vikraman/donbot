@@ -69,7 +69,12 @@ export const toText = text => {
 // expand [options] and a|b
 const expand = cmd => {
   const opt = cmd.match(/^(.*?)\s*\[([^\]]+)\](.*)$/)
-  if (opt) return [...expand(opt[1] + opt[3]), ...expand(`${opt[1]} <${opt[2]}>${opt[3]}`)]
+  if (opt) {
+    const [, pre, inner, post] = opt
+    // [a|b] lists literal words
+    const fills = /^[^\s<|]+(\|[^\s<|]+)+$/.test(inner) ? inner.split('|') : [inner.includes('<') ? inner : `<${inner}>`]
+    return [...expand(pre + post), ...fills.flatMap(f => expand(`${pre} ${f}${post}`))]
+  }
   const alt = cmd.match(/^([^<]*?)(\S*\|\S*)(.*)$/)
   if (alt && !alt[2].includes('<')) return alt[2].split('|').flatMap(a => expand(alt[1] + a + alt[3]))
   return [cmd.replace(/\s+/g, ' ').trim()]
