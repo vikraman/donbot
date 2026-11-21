@@ -11,7 +11,7 @@ import { setRandomSource } from '../../scripts/lib/random.ts'
 import dummyRobot from '../doubles/DummyAdapter.ts'
 import type { DummyAdapter } from '../doubles/DummyAdapter.ts'
 
-// the dummy adapter, plus any fake discord client a script hangs off it
+// dummy adapter, maybe a fake client
 export type TestRobot = Robot & { adapter: DummyAdapter & Robot['adapter'] }
 
 export interface RobotState {
@@ -23,11 +23,13 @@ export interface RobotState {
 interface SetupOptions {
   envVars?: string[]
   deferLoad?: boolean
+  // OWNER_USER_ID for the test
+  owner?: string
 }
 
-// shared robot bootstrap; envVars restored per test
-// deferLoad: caller runs loadScript() after setting adapter.client
-export const setupRobot = (scriptFiles: string | string[], { envVars = [], deferLoad = false }: SetupOptions = {}): RobotState => {
+// envVars restored per test; deferLoad leaves loadScript to the caller
+export const setupRobot = (scriptFiles: string | string[], { envVars: vars = [], deferLoad = false, owner }: SetupOptions = {}): RobotState => {
+  const envVars = owner ? [...vars, 'OWNER_USER_ID'] : vars
   const files = Array.isArray(scriptFiles) ? scriptFiles : [scriptFiles]
   // assigned in beforeEach
   const state = { robot: null, loadScript: null } as unknown as RobotState
@@ -43,6 +45,7 @@ export const setupRobot = (scriptFiles: string | string[], { envVars = [], defer
     // unplaced rooms use the global space
     configureSpaces({ unplaced: 'global' })
     for (const name of envVars) originalEnv[name] = process.env[name]
+    if (owner) process.env.OWNER_USER_ID = owner
     state.robot = new Robot(dummyRobot, true, 'Dumbotheelephant') as TestRobot
     await state.robot.loadAdapter()
     await state.robot.run()
@@ -73,10 +76,17 @@ export const collect = (robot: Robot, event: string = 'send'): string[] => {
   return messages
 }
 
+// sends with their room
+export const collectRooms = (robot: Robot, event: string = 'send'): { room: string, text: string }[] => {
+  const messages: { room: string, text: string }[] = []
+  robot.on(event, (envelope: { room?: string }, ...strings: string[]) => { messages.push({ room: envelope.room ?? '', text: strings.join('') }) })
+  return messages
+}
+
 export const brainUser = (robot: Robot, id: string, name: string, extra: Record<string, unknown> = {}): User =>
   robot.brain.userForId(id, { name, ...extra })
 
-// like the discord adapter, send resolves to the sent messages, ids `${prefix}-1`, ...
+// send resolves to sent messages, like discord
 export const sendReturnsIds = (robot: Robot, prefix: string) => {
   const send = robot.adapter.send.bind(robot.adapter)
   const adapter = robot.adapter as unknown as { send: (...args: Parameters<typeof send>) => Promise<unknown> }
@@ -95,4 +105,26 @@ export const inGuild = (robot: Robot, guild: string, rooms: string[], mode?: Mod
   adapter.client.channels.cache ??= new Map()
   for (const room of rooms) adapter.client.channels.cache.set(room, { id: room, guildId: guild, nsfw })
   if (mode) policyFor(robot).update(d => { d.guilds[guild] = { mode, on: [], off: [] } })
+}
+
+interface ChatOptions {
+  id?: string
+  name?: string
+  room?: string
+}
+
+interface SayOptions {
+  user?: User
+  room?: string
+}
+
+// default user, collected sends, say raw or ask the bot
+export const chat = (state: RobotState, { id = 'test-user', name = 'test user', room = 'test-room' }: ChatOptions = {}) => {
+  const { robot } = state
+  const user = brainUser(robot, id, name)
+  const sent = collect(robot)
+  const replies = collect(robot, 'reply')
+  const say = (text: string, { user: who = user, room: where = room }: SayOptions = {}) => robot.adapter.say(who, text, where)
+  const ask = (text: string, opts: SayOptions = {}) => say(`@${robot.name} ${text}`, opts)
+  return { robot, user, sent, replies, say, ask }
 }
