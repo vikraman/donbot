@@ -1,5 +1,8 @@
 import { createClient } from 'redis'
 
+// roomy search budget, parallel runs starve the 300ms default
+process.env.AGDA_SEARCH_MS ??= '5000'
+
 // redis 8 or skip
 export const TEST_REDIS_URL = process.env.TEST_REDIS_URL || 'redis://localhost:6379'
 

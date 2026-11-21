@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 
+// first, sets the search budget before search.ts loads
+import { noRedis, useTestRedis } from './helpers/redis.ts'
 import { ascii, hash, segmentRuns } from '../scripts/lib/agda/fold.ts'
 import { chunks, lex, parse, toQuery, type Env, type Notation } from '../scripts/lib/agda/parse.ts'
 import { closeStore, cmd, generations, indexSize, libraries, loadIndex, roomFor, wipe } from '../scripts/lib/agda/store.ts'
@@ -15,7 +17,6 @@ import { displayType, lookupName, searchAbout, searchNames, searchType, ordered,
 import { apply, larger, normalise, TooBig, type NameInfo, type Term } from '../scripts/lib/agda/term.ts'
 import { canonicaliser } from '../scripts/lib/agda/canon.ts'
 import { merged, setSuc, unify, type Subst } from '../scripts/lib/agda/unify.ts'
-import { noRedis, useTestRedis } from './helpers/redis.ts'
 
 const FIXTURES = ['tests/fixtures/agda-cubical.ndjson', 'tests/fixtures/agda-stdlib.ndjson']
 
