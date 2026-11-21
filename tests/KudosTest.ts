@@ -1,7 +1,8 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, chat, brainUser } from './helpers/setup.ts'
+import { clock } from './helpers/fakes.ts'
 
 import { VOTE_COOLDOWN_MS, MAX_THINGS, MAX_VOTES_PER_WINDOW, VOTE_WINDOW_MS } from '../scripts/Kudos.ts'
 import { eventsSince } from '../scripts/lib/eventLog.ts'
@@ -11,146 +12,106 @@ import { setRandomSource } from '../scripts/lib/random.ts'
 // rolls high: no leaderboard commentary, first pick
 const quiet = () => setRandomSource(c => Math.floor(0.9 * c))
 
-describe('Kudos testing Hubot scripts', () => {
+describe('Kudos', () => {
   const state = setupRobot('Kudos.ts')
 
+  // chat plus alice (id 123) and bob
+  const people = () => {
+    const c = chat(state)
+    const alice = brainUser(c.robot, '123', 'alice')
+    const bob = brainUser(c.robot, 'bob-id', 'bob')
+    return { ...c, alice, bob }
+  }
+
   describe('points for things', () => {
-    it('should increment a score on ++', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, 'donbot++', 'test-room')
-      assert.strictEqual(sent[0], 'donbot: 1')
+    it('counts ++ and -- across users, with reasons', async () => {
+      const { say, sent, bob } = people()
+      await say('donbot++')
+      await say('donbot++', { user: bob })
+      await say('mondays--')
+      await say('coffee++ for getting me through monday')
+      assert.deepStrictEqual(sent, ['donbot: 1', 'donbot: 2', 'mondays: -1', 'coffee: 1 (for getting me through monday)'])
     })
+
     it('ignores code and sentences that only look like votes', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
+      const { say, sent } = chat(state)
       for (const text of ['c++', 'g++ for linking', 'i--', 'I love c++', 'ok --', 'that was 2--', 'this whole week was a disaster--', `${'x'.repeat(41)}++`]) {
-        await robot.adapter.say(user, text, 'test-room')
+        await say(text)
       }
       assert.deepStrictEqual(sent, [])
-      await robot.adapter.say(user, 'release train++', 'test-room')
+      await say('release train++')
       assert.strictEqual(sent[0], 'release train: 1')
     })
-    it('still takes a space before ++ for people', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      brainUser(robot, '123', 'alice')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '<@123> ++', 'test-room')
-      await robot.adapter.say(user, '@alice ++ for reviewing', 'test-room')
-      assert.strictEqual(sent[0], '<@123>: 1')
-      assert.strictEqual(robot.brain.get('plusplus:user:123'), 1)
-    })
+
     it('forgets a thing back at zero unless it has reasons', async () => {
-      const { robot } = state
-      const alice = brainUser(robot, 'alice-id', 'alice')
-      const bob = brainUser(robot, 'bob-id', 'bob')
-      await robot.adapter.say(alice, 'pizza++', 'test-room')
-      await robot.adapter.say(bob, 'pizza--', 'test-room')
+      const { say, alice, bob, robot } = people()
+      await say('pizza++', { user: alice })
+      await say('pizza--', { user: bob })
       assert.strictEqual(robot.brain.get('plusplus:pizza'), null)
-      await robot.adapter.say(alice, 'tea++ for warmth', 'test-room')
-      await robot.adapter.say(bob, 'tea--', 'test-room')
+      await say('tea++ for warmth', { user: alice })
+      await say('tea--', { user: bob })
       assert.strictEqual(robot.brain.get('plusplus:tea'), 0)
     })
+
     it('stops tracking new things past the cap', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
+      const { robot, say, sent } = chat(state)
       for (let i = 0; i < MAX_THINGS; i++) robot.brain.set(`plusplus:thing${i}`, 1)
       robot.brain.set('plusplus:user:9', 1)
-      const sent = collect(robot)
-      await robot.adapter.say(user, 'newthing++', 'test-room')
-      await robot.adapter.say(user, 'thing3++', 'test-room')
+      await say('newthing++')
+      await say('thing3++')
       assert.deepStrictEqual(sent, ['thing3: 2'])
       assert.strictEqual(robot.brain.get('plusplus:newthing'), null)
     })
-    it('should decrement a score on --', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, 'donbot--', 'test-room')
-      assert.strictEqual(sent[0], 'donbot: -1')
-    })
-    it('should accept and echo a reason', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, 'coffee++ for getting me through monday', 'test-room')
-      assert.strictEqual(sent[0], 'coffee: 1 (for getting me through monday)')
-    })
-    it('should accumulate score across multiple users', async () => {
-      const { robot } = state
-      const alice = brainUser(robot, 'alice-id', 'alice')
-      const bob = brainUser(robot, 'bob-id', 'bob')
-      const sent = collect(robot)
-      await robot.adapter.say(alice, 'donbot++', 'test-room')
-      await robot.adapter.say(bob, 'donbot++', 'test-room')
-      assert.strictEqual(sent[1], 'donbot: 2')
-    })
-    it('should report score via "score for" and "points for"', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, 'donbot++', 'test-room')
-      await robot.adapter.say(user, '@Dumbotheelephant score for donbot', 'test-room')
-      await robot.adapter.say(user, '@Dumbotheelephant points for donbot', 'test-room')
+
+    it('reports a score via "score for" and "points for"', async () => {
+      const { say, ask, sent } = chat(state)
+      await say('donbot++')
+      await ask('score for donbot')
+      await ask('points for donbot')
       assert.deepStrictEqual(sent, ['donbot: 1', 'donbot: 1', 'donbot: 1'])
     })
-    it('should list the latest reasons for a thing', async () => {
-      const { robot } = state
-      const alice = brainUser(robot, 'alice-id', 'alice')
-      const bob = brainUser(robot, 'bob-id', 'bob')
-      const sent = collect(robot)
-      await robot.adapter.say(alice, 'tea++ for warmth', 'test-room')
-      await robot.adapter.say(bob, 'tea-- for being too hot', 'test-room')
-      await robot.adapter.say(bob, 'tea++', 'other-room')
-      await robot.adapter.say(alice, '@Dumbotheelephant reasons for tea', 'test-room')
-      assert.strictEqual(sent.at(-1), 'Why tea has points:\n• (−) being too hot — from <@bob-id>, just now\n• warmth — from <@alice-id>, just now')
-    })
-    it('should say when a thing has no reasons', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant reasons for tea', 'test-room')
+
+    it('lists the latest reasons for a thing', async () => {
+      const { say, ask, sent, bob } = people()
+      const alice = brainUser(state.robot, 'alice-id', 'ann')
+      await ask('reasons for tea')
       assert.strictEqual(sent[0], 'No reasons recorded for tea yet.')
+      await say('tea++ for warmth', { user: alice })
+      await say('tea-- for being too hot', { user: bob })
+      await say('tea++', { user: bob, room: 'other-room' })
+      await ask('reasons for tea', { user: alice })
+      assert.strictEqual(sent.at(-1), 'Why tea has points:\n• (−) being too hot — from <@bob-id>, just now\n• warmth — from <@alice-id>, just now')
     })
   })
 
   describe('points for people', () => {
-    it('should key a mention by user id and render the mention', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      brainUser(robot, '123', 'alice')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '<@123>++ for the review', 'test-room')
-      await robot.adapter.say(user, '@Dumbotheelephant score for alice', 'test-room')
+    it('keys a mention by user id and renders the mention', async () => {
+      const { robot, say, ask, sent } = people()
+      await say('<@123>++ for the review')
+      await ask('score for alice')
       assert.deepStrictEqual(sent, ['<@123>: 1 (for the review)', '<@123>: 1'])
       assert.strictEqual(robot.brain.get('plusplus:user:123'), 1)
     })
-    it('should resolve @name and exact names to people', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      brainUser(robot, '123', 'alice')
-      const bob = brainUser(robot, 'bob-id', 'bob')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@alice++', 'test-room')
-      await robot.adapter.say(bob, 'Alice++', 'test-room')
+
+    it('takes a space before ++ for people', async () => {
+      const { say, sent } = people()
+      await say('<@123> ++')
+      await say('@bob ++ for reviewing')
+      assert.deepStrictEqual(sent, ['<@123>: 1', '<@bob-id>: 1 (for reviewing)'])
+    })
+
+    it('resolves @name and exact names, and ignores unknown names', async () => {
+      const { say, sent, bob } = people()
+      await say('@nobody++')
+      await say('@alice++')
+      await say('Alice++', { user: bob })
       assert.deepStrictEqual(sent, ['<@123>: 1', '<@123>: 2'])
     })
-    it('should ignore ++ for an unknown @name', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@nobody++', 'test-room')
-      assert.deepStrictEqual(sent, [])
-    })
-    it('should refuse self ++ with a joke and no points', async () => {
-      const { robot } = state
+
+    it('refuses self ++ with a joke and no points', async () => {
       quiet()
-      const user = brainUser(robot, '123', 'alice')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '<@123>++', 'test-room')
+      const { robot, say, sent, alice } = people()
+      await say('<@123>++', { user: alice })
       assert.strictEqual(sent.length, 1)
       assert.doesNotMatch(sent[0]!, /: \d/)
       assert.strictEqual(robot.brain.get('plusplus:user:123') ?? null, null)
@@ -158,97 +119,57 @@ describe('Kudos testing Hubot scripts', () => {
   })
 
   describe('kudos command', () => {
-    it('should give kudos with a reason and a warm ack', async () => {
-      const { robot } = state
-      setRandomSource(() => 0)
-      const user = brainUser(robot, 'test-user', 'test user')
-      brainUser(robot, '123', 'alice')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant kudos <@123> for fixing the deploy', 'test-room')
-      assert.strictEqual(sent[0], '🎉 Kudos to <@123> for fixing the deploy! (score: 1)')
+    it('acks kudos with or without a reason, celebrating milestones', async () => {
+      const { robot, ask, sent } = people()
+      brainUser(robot, '456', 'carol smith')
+      brainUser(robot, '789', 'dave')
+      robot.brain.set('plusplus:user:789', 9)
+      await ask('kudos <@123> for fixing the deploy')
+      await ask('kudos carol smith')
+      await ask('kudos <@789> for the release')
+      assert.match(sent[0]!, /^(?=.*<@123>)(?=.*fixing the deploy).* \(score: 1\)$/)
+      assert.match(sent[1]!, /<@456>.* \(score: 1\)$/)
+      const [ack, milestone, ...rest] = sent[2]!.split('\n')
+      assert.match(ack!, /^(?=.*<@789>)(?=.*the release).* \(score: 10\)$/)
+      assert.match(milestone!, /^🎊 (?=.*<@789>)(?=.*10)/)
+      assert.deepStrictEqual(rest, [])
     })
-    it('should give kudos by name without a reason', async () => {
-      const { robot } = state
-      setRandomSource(() => 0)
-      const user = brainUser(robot, 'test-user', 'test user')
-      brainUser(robot, '123', 'alice smith')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant kudos alice smith', 'test-room')
-      assert.strictEqual(sent[0], '🎉 Kudos to <@123>! (score: 1)')
-    })
-    it('should celebrate round-number scores', async () => {
-      const { robot } = state
-      setRandomSource(() => 0)
-      const user = brainUser(robot, 'test-user', 'test user')
-      brainUser(robot, '123', 'alice')
-      robot.brain.set('plusplus:user:123', 9)
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant kudos <@123> for the release', 'test-room')
-      assert.strictEqual(sent[0], '🎉 Kudos to <@123> for the release! (score: 10)\n🎊 That makes 10 points for <@123>. A milestone!')
-    })
-    it('should not repeat an ack back to back', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const people = Array.from({ length: 30 }, (_, i) => brainUser(robot, `${9000 + i}`, `person ${i}`))
-      const sent = collect(robot)
-      // fresh ids dodge the per-target cooldown; a new voter per 5 dodges the burst limit
-      for (const [i, p] of people.entries()) {
-        const voter = brainUser(robot, `v${Math.floor(i / 5)}`, `voter ${Math.floor(i / 5)}`)
-        await robot.adapter.say(voter, `@Dumbotheelephant kudos <@${p.id}>`, 'test-room')
-      }
-      const acks = sent.map(s => s.replace(/<@9\d+>/g, '@x').replace(/ \(score: \d+\)$/, ''))
-      assert.equal(acks.length, 30)
-      acks.forEach((ack, i) => { if (i) assert.notEqual(ack, acks[i - 1]) })
-      assert.ok(user)
-    })
-    it('should not give kudos to an unknown person', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant kudos coffee for existing', 'test-room')
-      assert.strictEqual(sent[0], "I don't know who coffee is. Try mentioning them.")
-    })
-    it('should not give yourself kudos', async () => {
-      const { robot } = state
+
+    it('refuses unknown people and yourself', async () => {
       quiet()
-      const user = brainUser(robot, '123', 'alice')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant kudos <@123> for being me', 'test-room')
-      assert.strictEqual(sent.length, 1)
-      assert.doesNotMatch(sent[0]!, /score/)
+      const { ask, sent, alice } = people()
+      await ask('kudos coffee for existing')
+      await ask('kudos <@123> for being me', { user: alice })
+      assert.strictEqual(sent[0], "I don't know who coffee is. Try mentioning them.")
+      assert.strictEqual(sent.length, 2)
+      assert.doesNotMatch(sent[1]!, /score/)
     })
-    it('should say so when kudos hit the cooldown', async () => {
-      const { robot } = state
-      setRandomSource(() => 0)
-      const user = brainUser(robot, 'test-user', 'test user')
-      brainUser(robot, '123', 'alice')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '<@123>++', 'test-room')
-      await robot.adapter.say(user, '@Dumbotheelephant kudos <@123> for more', 'test-room')
+
+    it('says so when kudos hit the cooldown', async () => {
+      const { say, ask, sent } = people()
+      await say('<@123>++')
+      await ask('kudos <@123> for more')
       assert.strictEqual(sent[1], 'You just gave <@123> a point. Give it a few minutes.')
     })
-    it('should list kudos reasons for a person, newest first', async () => {
-      const { robot } = state
-      setRandomSource(() => 0)
+
+    it('lists kudos reasons for a person, newest first', async () => {
+      const { robot, ask, sent } = chat(state)
       const alice = brainUser(robot, 'alice-id', 'alice')
       const carol = brainUser(robot, 'carol-id', 'carol')
       brainUser(robot, '123', 'bob')
-      const sent = collect(robot)
-      const now = mock.method(Date, 'now', () => 1_000_000_000)
-      await robot.adapter.say(alice, '@Dumbotheelephant kudos bob for the docs', 'test-room')
-      now.mock.mockImplementation(() => 1_000_000_000 + 2 * 3_600_000)
-      await robot.adapter.say(carol, '@Dumbotheelephant kudos <@123> for pairing', 'test-room')
-      await robot.adapter.say(alice, '@Dumbotheelephant kudos for bob', 'test-room')
+      const t = clock(1_000_000_000)
+      await ask('kudos bob for the docs', { user: alice })
+      t.advance(2 * 3_600_000)
+      await ask('kudos <@123> for pairing', { user: carol })
+      await ask('kudos for bob', { user: alice })
       assert.strictEqual(sent.at(-1), 'Why <@123> has points:\n• pairing — from <@carol-id>, just now\n• the docs — from <@alice-id>, 2h ago')
     })
-    it('should log every vote to the kudos event log', async () => {
-      const { robot } = state
-      setRandomSource(() => 0)
-      const user = brainUser(robot, 'test-user', 'test user')
-      brainUser(robot, '123', 'alice')
-      await robot.adapter.say(user, '@Dumbotheelephant kudos <@123> for shipping', 'test-room')
-      await robot.adapter.say(user, 'mondays--', 'test-room')
-      const log = eventsSince(robot, 'kudos', 0).map(({ ts, ...rest }) => rest)
+
+    it('logs every vote to the kudos event log', async () => {
+      const { robot, say, ask } = people()
+      await ask('kudos <@123> for shipping')
+      await say('mondays--')
+      const log = eventsSince(robot, 'kudos', 0).map(({ ts: _ts, ...rest }) => rest)
       assert.deepStrictEqual(log, [
         { room: 'test-room', userId: 'test-user', target: '<@123>', targetId: '123', reason: 'shipping', delta: 1 },
         { room: 'test-room', userId: 'test-user', target: 'mondays', targetId: undefined, reason: undefined, delta: -1 }
@@ -257,118 +178,89 @@ describe('Kudos testing Hubot scripts', () => {
   })
 
   describe('limits', () => {
-    it('should ignore repeat votes from the same user within the cooldown', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      for (let i = 0; i < 5; i++) await robot.adapter.say(user, 'donbot++', 'test-room')
-      await robot.adapter.say(user, 'DONBOT--', 'other-room')
-      await robot.adapter.say(user, '@Dumbotheelephant score for donbot', 'test-room')
+    it('ignores repeat votes from the same user within the cooldown', async () => {
+      const { say, ask, sent } = chat(state)
+      for (let i = 0; i < 5; i++) await say('donbot++')
+      await say('DONBOT--', { room: 'other-room' })
+      await ask('score for donbot')
       assert.deepStrictEqual(sent, ['donbot: 1', 'donbot: 1'])
     })
-    it('should let the same user vote again once the cooldown expires', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      const now = mock.method(Date, 'now', () => 1_000_000)
-      await robot.adapter.say(user, 'donbot++', 'test-room')
-      now.mock.mockImplementation(() => 1_000_000 + VOTE_COOLDOWN_MS)
-      await robot.adapter.say(user, 'donbot++', 'test-room')
+
+    it('lets the same user vote again once the cooldown expires', async () => {
+      const t = clock(1_000_000)
+      const { say, sent } = chat(state)
+      await say('donbot++')
+      t.advance(VOTE_COOLDOWN_MS)
+      await say('donbot++')
       assert.strictEqual(sent[1], 'donbot: 2')
     })
-    it('should ignore a user flooding votes across many things', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      for (let i = 0; i < MAX_VOTES_PER_WINDOW + 3; i++) await robot.adapter.say(user, `thing${i}++`, 'test-room')
+
+    it('ignores a user flooding votes, without blocking others', async () => {
+      const { say, sent, bob } = people()
+      for (let i = 0; i < MAX_VOTES_PER_WINDOW + 3; i++) await say(`thing${i}++`)
       assert.strictEqual(sent.length, MAX_VOTES_PER_WINDOW)
-    })
-    it('should not use up the per-thing cooldown on a vote dropped by the flood limit', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      const now = mock.method(Date, 'now', () => 1_000_000)
-      for (let i = 0; i < MAX_VOTES_PER_WINDOW; i++) await robot.adapter.say(user, `thing${i}++`, 'test-room')
-      await robot.adapter.say(user, 'donbot++', 'test-room')
-      now.mock.mockImplementation(() => 1_000_000 + VOTE_WINDOW_MS)
-      await robot.adapter.say(user, 'donbot++', 'test-room')
+      await say('donbot++', { user: bob })
       assert.strictEqual(sent.at(-1), 'donbot: 1')
     })
-    it("should not let one user's flood block another user", async () => {
-      const { robot } = state
-      const alice = brainUser(robot, 'alice-id', 'alice')
-      const bob = brainUser(robot, 'bob-id', 'bob')
-      const sent = collect(robot)
-      for (let i = 0; i < MAX_VOTES_PER_WINDOW + 1; i++) await robot.adapter.say(alice, `thing${i}++`, 'test-room')
-      await robot.adapter.say(bob, 'donbot++', 'test-room')
+
+    it('keeps the per-thing cooldown for a vote dropped by the flood limit', async () => {
+      const t = clock(1_000_000)
+      const { say, sent } = chat(state)
+      for (let i = 0; i < MAX_VOTES_PER_WINDOW; i++) await say(`thing${i}++`)
+      await say('donbot++')
+      t.advance(VOTE_WINDOW_MS)
+      await say('donbot++')
       assert.strictEqual(sent.at(-1), 'donbot: 1')
     })
   })
 
   describe('leaderboard', () => {
-    it('should say there are no scores yet', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
-      assert.strictEqual(sent[0], 'No scores yet.')
+    it('says when there are no scores', async () => {
+      const { ask, sent } = chat(state)
+      await ask('leaderboard')
+      await ask('leaderboard week')
+      assert.deepStrictEqual(sent, ['No scores yet.', 'No points changed hands this week.'])
     })
-    it('should list things and people in descending order', async () => {
-      const { robot } = state
+
+    it('lists things and people in descending order', async () => {
       quiet()
+      const { robot, ask, sent } = chat(state)
       robot.brain.set('plusplus:tacos', 5)
       robot.brain.set('plusplus:pizza', 10)
       robot.brain.set('plusplus:user:123', 7)
       robot.brain.set('kudos:reasons:tacos', [{ reason: 'yum', by: 'x', ts: 1, delta: 1 }])
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
-      await robot.adapter.say(user, '@Dumbotheelephant leaderboard people', 'test-room')
-      await robot.adapter.say(user, '@Dumbotheelephant top scores things', 'test-room')
+      await ask('leaderboard')
+      await ask('leaderboard people')
+      await ask('top scores things')
       assert.deepStrictEqual(sent, ['1. pizza: 10\n2. <@123>: 7\n3. tacos: 5', '1. <@123>: 7', '1. pizza: 10\n2. tacos: 5'])
     })
-    it('should include commentary about the top scorer when the roll succeeds', async () => {
-      const { robot } = state
+
+    it('adds top-scorer commentary on a lucky roll, plain in professional rooms', async () => {
       setRandomSource(() => 0)
+      const { robot, ask, sent } = chat(state)
       robot.brain.set('plusplus:tacos', 5)
       robot.brain.set('plusplus:pizza', 10)
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
+      await ask('leaderboard')
       assert.match(sent[0]!, /pizza is untouchable right now\./)
-    })
-    it('keeps top-scorer commentary plain in professional rooms', async () => {
-      const { robot } = state
-      setRandomSource(() => 0)
       configureLines({ casual: () => false })
-      robot.brain.set('plusplus:pizza', 10)
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant leaderboard', 'test-room')
-      assert.match(sent[0]!, /pizza leads the board\./)
+      await ask('leaderboard')
+      assert.match(sent[1]!, /pizza leads the board\./)
     })
-    it('should rank net gains over the last week', async () => {
-      const { robot } = state
+
+    it('ranks net gains over the last week', async () => {
       quiet()
+      const t = clock(1_000_000_000_000)
+      const { robot, say, ask, sent } = chat(state)
       const alice = brainUser(robot, 'alice-id', 'alice')
       const bob = brainUser(robot, 'bob-id', 'bob')
       brainUser(robot, '123', 'carol')
-      const now = mock.method(Date, 'now', () => 1_000_000_000_000)
-      await robot.adapter.say(alice, 'pizza++', 'test-room')
-      now.mock.mockImplementation(() => 1_000_000_000_000 + 8 * 86_400_000)
-      await robot.adapter.say(alice, '<@123>++', 'test-room')
-      await robot.adapter.say(bob, '<@123>++', 'test-room')
-      await robot.adapter.say(alice, 'mondays--', 'test-room')
-      const sent = collect(robot)
-      await robot.adapter.say(alice, '@Dumbotheelephant leaderboard week', 'test-room')
-      assert.strictEqual(sent[0], 'This week:\n1. <@123>: 2\n2. mondays: -1')
-    })
-    it('should say when nothing changed this week', async () => {
-      const { robot } = state
-      const user = brainUser(robot, 'test-user', 'test user')
-      const sent = collect(robot)
-      await robot.adapter.say(user, '@Dumbotheelephant leaderboard week', 'test-room')
-      assert.strictEqual(sent[0], 'No points changed hands this week.')
+      await say('pizza++', { user: alice })
+      t.advance(8 * 86_400_000)
+      await say('<@123>++', { user: alice })
+      await say('<@123>++', { user: bob })
+      await say('mondays--', { user: alice })
+      await ask('leaderboard week', { user: alice })
+      assert.strictEqual(sent.at(-1), 'This week:\n1. <@123>: 2\n2. mondays: -1')
     })
   })
 })

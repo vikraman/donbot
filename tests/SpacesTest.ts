@@ -3,13 +3,12 @@ import assert from 'node:assert/strict'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 import type { TestRobot } from './helpers/setup.ts'
+import { tick, withMessage } from './helpers/fakes.ts'
 
 import { appliedMigrations } from '../scripts/lib/migrations.ts'
 import { policyFor } from '../scripts/lib/policy.ts'
 import { configureSpaces, membersOf, spaceOf } from '../scripts/lib/spaces.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
-
-const settle = () => new Promise(resolve => setTimeout(resolve, 10))
 
 describe('Spaces', () => {
   const state = setupRobot(['DisableBuiltinHelp.ts', 'Policy.ts', 'Spaces.ts', 'Seen.ts', 'Kudos.ts', 'Wins.ts', 'Roles.ts'], { envVars: ['LEGACY_GUILD_ID'] })
@@ -25,8 +24,7 @@ describe('Spaces', () => {
 
   // guild null for a dm
   const say = async (id: string, name: string, text: string, room: string, guild: string | null) => {
-    const user = brainUser(state.robot, id, name)
-    ;(user as unknown as { message: unknown }).message = { guildId: guild, author: { id }, channel: { id: room, isThread: () => false } }
+    const user = withMessage(brainUser(state.robot, id, name), { guildId: guild, author: { id }, channel: { id: room, isThread: () => false } })
     await state.robot.adapter.say(user, text, room)
   }
   const bot = (text: string) => `@${state.robot.name} ${text}`
@@ -101,7 +99,7 @@ describe('Spaces', () => {
       legacyBrain(robot)
       discord(robot, ['home'], { a: 'home', b: 'other' })
       robot.brain.emit('connected')
-      await settle()
+      await tick(10)
       assert.ok(appliedMigrations(robot)['002-spaces'])
       assert.strictEqual(robot.brain.get('g:home:plusplus:pizza'), 3)
       assert.strictEqual(robot.brain.get('g:home:praise:count'), 7)
@@ -123,12 +121,12 @@ describe('Spaces', () => {
       legacyBrain(robot)
       discord(robot, ['home', 'other'], { a: 'home', b: 'other' })
       robot.brain.emit('connected')
-      await settle()
+      await tick(10)
       assert.strictEqual(appliedMigrations(robot)['002-spaces'], undefined)
       assert.strictEqual(robot.brain.get('plusplus:pizza'), 3)
       process.env.LEGACY_GUILD_ID = 'other'
       robot.brain.emit('connected')
-      await settle()
+      await tick(10)
       assert.strictEqual(robot.brain.get('g:other:plusplus:pizza'), 3)
     })
   })

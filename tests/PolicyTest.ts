@@ -5,33 +5,14 @@ import type { User } from 'hubot'
 
 import { setupRobot, collect, brainUser, inGuild } from './helpers/setup.ts'
 import type { TestRobot } from './helpers/setup.ts'
+import { discordMessage, tick, withMessage } from './helpers/fakes.ts'
+import type { RawOptions } from './helpers/fakes.ts'
 
 import { configurePolicy, policyFor, POLICY_KEY } from '../scripts/lib/policy.ts'
 import { appliedMigrations } from '../scripts/lib/migrations.ts'
 import { postToRoom } from '../scripts/lib/rooms.ts'
 import { membersOf } from '../scripts/lib/spaces.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
-
-interface RawOptions {
-  guild?: string | null
-  manageGuild?: boolean
-  manageChannels?: boolean
-  nsfw?: boolean
-  // thread inside this channel
-  parent?: string
-}
-
-// fake discord.js message
-const rawFor = (room: string, user: string, { guild = 'g1', manageGuild = false, manageChannels = false, nsfw = false, parent }: RawOptions = {}) => {
-  const perms = (channelLevel: boolean) => ({ has: (flag: string) => flag === 'ManageGuild' ? manageGuild : flag === 'ManageChannels' ? channelLevel : false })
-  const member = { permissions: perms(false) }
-  const channel = parent
-    ? { id: room, parentId: parent, parent: { id: parent, nsfw }, isThread: () => true, permissionsFor: () => perms(manageChannels) }
-    : { id: room, nsfw, isThread: () => false, permissionsFor: () => perms(manageChannels) }
-  return { guildId: guild, author: { id: user }, member: guild ? member : null, channel }
-}
-
-const settle = () => new Promise(resolve => setTimeout(resolve, 10))
 
 describe('Policy', () => {
   const state = setupRobot(['DisableBuiltinHelp.ts', 'Policy.ts', 'Garble.ts', 'Joke.ts', 'Puns.ts', 'Seen.ts'], { envVars: ['OWNER_USER_ID'] })
@@ -44,7 +25,7 @@ describe('Policy', () => {
   })
 
   const say = async (text: string, room = 'room', raw?: RawOptions) => {
-    ;(user as unknown as { message?: unknown }).message = raw ? rawFor(room, 'u1', raw) : undefined
+    withMessage(user, raw ? discordMessage(room, 'u1', raw) : undefined)
     await state.robot.adapter.say(user, text, room)
   }
   const bot = (text: string) => `@${state.robot.name} ${text}`
@@ -123,7 +104,7 @@ describe('Policy', () => {
         d.guilds.g2 = { mode: 'casual', on: [], off: [] }
       })
       const bob = brainUser(robot, 'u2', 'bob')
-      ;(bob as unknown as { message?: unknown }).message = rawFor('room', 'u2')
+      withMessage(bob, discordMessage('room', 'u2'))
       await robot.adapter.say(bob, 'hello', 'room')
       const sent = collect(robot)
       await say(bot('enable seen'), 'dm', { guild: null })
@@ -279,7 +260,7 @@ describe('Policy', () => {
       robot.brain.set('lines:ai-off', { room2: { by: 'x', at: 1 } })
       ready(robot, true)
       robot.brain.emit('connected')
-      await settle()
+      await tick(10)
       const d = policyFor(robot).data()
       assert.ok(appliedMigrations(robot)['001-policy'])
       assert.strictEqual(d.guilds.old1?.mode, 'casual')
@@ -290,7 +271,7 @@ describe('Policy', () => {
       // later servers start professional
       policyFor(robot).update(dd => { dd.guilds.old1!.on.push('x') })
       robot.brain.emit('connected')
-      await settle()
+      await tick(10)
       assert.strictEqual(policyFor(robot).data().guilds.new, undefined)
       assert.deepStrictEqual(policyFor(robot).data().guilds.old1?.on, ['x'])
     })
@@ -304,7 +285,7 @@ describe('Policy', () => {
       // dms aren't cached after a restart
       channels.fetch = async id => { channels.cache.set(id, { id, isDMBased: () => true, recipientId: 'u9' }) }
       robot.brain.emit('connected')
-      await settle()
+      await tick(10)
       const d = policyFor(robot).data()
       assert.deepStrictEqual(d.channels.chan1?.off, ['puns'])
       assert.deepStrictEqual(d.dms.u9?.off, ['puns'])
@@ -316,7 +297,7 @@ describe('Policy', () => {
       delete robot.brain.data.users.u1
       ready(robot, true)
       robot.brain.emit('connected')
-      await settle()
+      await tick(10)
       assert.ok(appliedMigrations(robot)['001-policy'])
       assert.deepStrictEqual(policyFor(robot).data().guilds, {})
     })
@@ -324,7 +305,7 @@ describe('Policy', () => {
     it('waits for discord to be ready', async () => {
       ready(state.robot, false)
       state.robot.brain.emit('connected')
-      await settle()
+      await tick(10)
       assert.strictEqual(state.robot.brain.get(POLICY_KEY), null)
     })
   })
