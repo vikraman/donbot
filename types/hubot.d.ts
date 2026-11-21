@@ -53,12 +53,17 @@ declare module 'hubot' {
     0: string
   }
 
+  // attachments, per the discord adapter's sendWithDelegate
+  export interface FilesPayload {
+    files: { file: string; name: string; description?: string }[]
+  }
+
   export class Response {
     message: TextMessage & { user: User & { message?: DiscordMessage } }
     match: MatchArray
     envelope: unknown
     reply(message: string): Promise<void>
-    send(message: string): Promise<void>
+    send(message: string | FilesPayload): Promise<void>
   }
 
   export class Brain {

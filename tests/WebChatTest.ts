@@ -13,7 +13,7 @@ const realFetch = globalThis.fetch
 
 interface Reply {
   status: number
-  body: { replies?: string[], error?: string }
+  body: { replies?: string[], sounds?: string[], error?: string }
   headers: Headers
 }
 
@@ -31,7 +31,7 @@ const mockFetchText = (text: string) =>
   mock.method(globalThis, 'fetch', async () => new Response(text, { status: 200 }))
 
 describe('WebChat testing Hubot scripts', () => {
-  const state = setupRobot(['DisableBuiltinHelp.ts', 'Policy.ts', 'Eightball.ts', 'Fortune.ts', 'Garble.ts', 'Joke.ts', 'Killit.ts', 'Kudos.ts', 'Remind.ts', 'Ask.ts', 'RateLimit.ts', 'WebChat.ts'], {
+  const state = setupRobot(['DisableBuiltinHelp.ts', 'Policy.ts', 'Eightball.ts', 'Fortune.ts', 'Garble.ts', 'Joke.ts', 'Killit.ts', 'Kudos.ts', 'Remind.ts', 'Ask.ts', 'RateLimit.ts', 'Zoidberg.ts', 'WebChat.ts'], {
     envVars: ['GEMINI_API_KEY', 'OWNER_USER_ID'],
     deferLoad: true
   })
@@ -56,6 +56,24 @@ describe('WebChat testing Hubot scripts', () => {
     assert.ok(res.body.replies![0]!.length > 0)
     assert.deepStrictEqual(sent, [])
     assert.deepStrictEqual(replies, [])
+    assert.ok(!('sounds' in res.body))
+  })
+
+  it('hands back attached sounds as static urls', async () => {
+    await load()
+    const { robot } = state
+    const sent = collect(robot)
+    const res = await post(robot, 'whoop')
+    assert.deepStrictEqual(res.body.replies, ['(V) (°,,,,°) (V) whoop whoop whoop'])
+    assert.strictEqual(res.body.sounds!.length, 1)
+    assert.match(res.body.sounds![0]!, /^\/chat\/static\/zoidberg-whoop\.mp3\?v=\w+$/)
+    assert.deepStrictEqual(sent, [])
+    const { port } = robot.server!.address() as AddressInfo
+    const mp3 = await realFetch(`http://127.0.0.1:${port}${res.body.sounds![0]}`)
+    assert.strictEqual(mp3.status, 200)
+    assert.match(mp3.headers.get('content-type')!, /^audio\/mpeg/)
+    // id3 header
+    assert.strictEqual(Buffer.from(await mp3.arrayBuffer()).subarray(0, 3).toString(), 'ID3')
   })
 
   it('accepts a leading bot name', async () => {
@@ -212,6 +230,7 @@ describe('WebChat testing Hubot scripts', () => {
     const { port } = state.robot.server!.address() as AddressInfo
     const res = await realFetch(`http://127.0.0.1:${port}/chat`)
     assert.match(res.headers.get('content-security-policy')!, /script-src 'self'; .*/)
+    assert.match(res.headers.get('content-security-policy')!, /media-src 'self'/)
     assert.strictEqual(res.headers.get('cache-control'), 'no-store')
     const html = await res.text()
     assert.ok(html.includes('<title>dtterm : Dumbotheelephant</title>'))

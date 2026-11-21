@@ -47,9 +47,13 @@ const reply = (text, note) => note
   ? h('div', { className: 'out note' }, text)
   : h('div', { className: 'out' }, parse(text).map(build), h('button', { className: 'copy bevel', textContent: 'copy', onclick: copy(toText(text)) }))
 
-const exchange = ({ cmd, replies = [], note }) => h('div', { className: 'ex' },
+// only our own static sounds
+const SOUND = /^\/chat\/static\/[\w.-]+\.(mp3|ogg|wav)\?v=\w+$/
+const sound = src => h('audio', { className: 'out', src, controls: true, preload: 'auto' })
+
+const exchange = ({ cmd, replies = [], sounds = [], note }) => h('div', { className: 'ex' },
   cmd ? h('div', { className: 'cmd', textContent: cmd }) : null,
-  replies.map(r => reply(r)), note ? reply(note, true) : null)
+  replies.map(r => reply(r)), sounds.filter(s => SOUND.test(s)).map(sound), note ? reply(note, true) : null)
 
 const motd = () => h('div', { className: 'motd' }, `workspace ${ws} · type `, h('b', { textContent: 'help' }), ', or press Tab to complete a command')
 const bottom = () => { screen.scrollTop = screen.scrollHeight }
@@ -90,13 +94,19 @@ const send = async text => {
     const body = await res.json().catch(() => ({}))
     if (!res.ok) ex.note = res.status === 429 ? 'Slow down a little, then try again.' : body.error || `Something went wrong (${res.status}).`
     else if (!body.replies?.length) ex.note = 'No reply. `help` lists what I can do.'
-    else ex.replies = body.replies
+    else {
+      ex.replies = body.replies
+      if (Array.isArray(body.sounds)) ex.sounds = body.sounds.filter(s => typeof s === 'string' && SOUND.test(s))
+    }
   } catch {
     ex.note = "Couldn't reach the server. Check your connection and try again."
   }
   pending = false
   busy.classList.remove('on')
-  el.replaceWith(exchange(ex))
+  const done = exchange(ex)
+  el.replaceWith(done)
+  // autoplay fresh replies only
+  done.querySelectorAll('audio').forEach(a => a.play().catch(() => {}))
   remember(ex)
   form.hidden = false
   input.focus()

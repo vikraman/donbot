@@ -5,7 +5,7 @@
 //
 
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 
 import { TextMessage, User } from 'hubot'
 import type { Robot } from 'hubot'
@@ -32,15 +32,47 @@ const escapeRegExp = (str: string): string => str.replace(/[.*+?^${}()|[\]\\]/g,
 
 const STATIC: Record<string, string> = { 'app.js': 'text/javascript', 'lib.js': 'text/javascript', 'chat.css': 'text/css' }
 const dir = new URL('../public/chat/', import.meta.url)
-const assets = Object.fromEntries(Object.entries(STATIC).map(([name, type]) => [name, { type, body: readFileSync(new URL(name, dir), 'utf8') }]))
+const assets: Record<string, { type: string, body: string | Buffer }> = Object.fromEntries(Object.entries(STATIC).map(([name, type]) => [name, { type, body: readFileSync(new URL(name, dir), 'utf8') }]))
+// sounds scripts attach
+const AUDIO: Record<string, string> = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav' }
+const soundDir = new URL('../assets/sounds/', import.meta.url)
+const sounds = new Set<string>()
+for (const name of existsSync(soundDir) ? readdirSync(soundDir).sort() : []) {
+  const type = AUDIO[name.split('.').pop()!.toLowerCase()]
+  if (!type || Object.hasOwn(assets, name)) continue
+  assets[name] = { type, body: readFileSync(new URL(name, soundDir)) }
+  sounds.add(name)
+}
 // cache buster
-const version = createHash('sha256').update(Object.values(assets).map(a => a.body).join('')).digest('hex').slice(0, 10)
+const hash = createHash('sha256')
+for (const a of Object.values(assets)) hash.update(a.body)
+const version = hash.digest('hex').slice(0, 10)
 // app.js's own import needs the version too
-assets['app.js']!.body = assets['app.js']!.body.replace("from './lib.js'", `from './lib.js?v=${version}'`)
+assets['app.js']!.body = (assets['app.js']!.body as string).replace("from './lib.js'", `from './lib.js?v=${version}'`)
 
 export interface WebCommand {
   cmd: string
   desc: string
+}
+
+interface Collected {
+  replies: string[]
+  sounds: string[]
+}
+
+// text replies and known sound attachments, anything else dropped
+const gather = (into: Collected | undefined, strings: unknown[]): void => {
+  if (!into) return
+  const text = strings.filter(s => typeof s === 'string')
+  if (text.length) into.replies.push(text.join(''))
+  for (const s of strings) {
+    const files = (s as { files?: unknown } | null)?.files
+    if (!Array.isArray(files)) continue
+    for (const f of files) {
+      const name = (f as { name?: unknown } | null)?.name
+      if (typeof name === 'string' && sounds.has(name)) into.sounds.push(`/chat/static/${name}?v=${version}`)
+    }
+  }
 }
 
 interface Visitor {
@@ -61,14 +93,14 @@ interface Res {
   status(code: number): Res
   set(name: string, value: string): Res
   json(body: unknown): void
-  send(body: string): void
+  send(body: string | Buffer): void
   type(t: string): Res
 }
 
 export default async (robot: Robot) => {
   const template = readFileSync(new URL('index.html', dir), 'utf8')
   const visitors = new Map<string, Visitor>()
-  const collectors = new Map<string, string[]>()
+  const collectors = new Map<string, Collected>()
   let inFlight = 0
 
   const visitorFor = (key: string, now: number): Visitor => {
@@ -94,7 +126,7 @@ export default async (robot: Robot) => {
   robot.responseMiddleware(async ({ response, strings }) => {
     const room = (response.envelope as { room?: string } | undefined)?.room
     if (!isWebRoom(room)) return true
-    collectors.get(room!)?.push(strings.join(''))
+    gather(collectors.get(room!), strings)
     return false
   })
 
@@ -102,7 +134,7 @@ export default async (robot: Robot) => {
   const send = robot.adapter.send.bind(robot.adapter)
   robot.adapter.send = async (envelope, ...strings) => {
     if (isWebRoom(envelope?.room)) {
-      collectors.get(envelope.room!)?.push(strings.join(''))
+      gather(collectors.get(envelope.room!), strings)
       return
     }
     return send(envelope, ...strings)
@@ -125,7 +157,7 @@ export default async (robot: Robot) => {
 
   robot.router.get('/chat', (_req: Req, res: Res) => {
     page ??= render()
-    res.set('Content-Security-Policy', "default-src 'self'; img-src https: data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+    res.set('Content-Security-Policy', "default-src 'self'; img-src https: data:; media-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
     res.set('X-Content-Type-Options', 'nosniff')
     res.set('Referrer-Policy', 'no-referrer')
     // no edge caching
@@ -173,8 +205,8 @@ export default async (robot: Robot) => {
     if (inFlight >= MAX_IN_FLIGHT) return res.status(503).json({ error: 'busy, try again in a moment' })
 
     const room = `${WEB_PREFIX}${key}`
-    const replies: string[] = []
-    collectors.set(room, replies)
+    const out: Collected = { replies: [], sounds: [] }
+    collectors.set(room, out)
     v.busy = true
     inFlight++
     let timer: NodeJS.Timeout | undefined
@@ -196,6 +228,6 @@ export default async (robot: Robot) => {
       v.busy = false
       inFlight--
     }
-    res.json({ replies })
+    res.json(out.sounds.length ? out : { replies: out.replies })
   })
 }
