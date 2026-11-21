@@ -348,7 +348,17 @@ describe('agda index', { skip: noRedis }, () => {
       assert.strictEqual(indexSize(), 39 + 24 - 1)
     })
 
-    const keys = async (pattern: string) => (await cmd<[string, string[]]>(['SCAN', '0', 'MATCH', pattern, 'COUNT', '100000']))[1].length
+    // full scan
+    const keys = async (pattern: string) => {
+      let n = 0
+      let cursor = '0'
+      do {
+        const [next, found] = await cmd<[string, string[]]>(['SCAN', cursor, 'MATCH', pattern, 'COUNT', '10000'])
+        n += found.length
+        cursor = next
+      } while (cursor !== '0')
+      return n
+    }
 
     it('skips unchanged libraries and swaps generations', async () => {
       const before = generations()
