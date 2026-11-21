@@ -3,7 +3,7 @@ services:
     image: ghcr.io/vikraman/donbot:latest
     container_name: donbot
     restart: unless-stopped
-    mem_limit: 256m
+    mem_limit: 384m
     env_file: .env
     ports:
       - 127.0.0.1:8080:8080
@@ -16,12 +16,12 @@ services:
     image: redis:8-alpine
     container_name: donbot-redis
     restart: unless-stopped
-    mem_limit: 320m
+    mem_limit: 576m
     ports:
       - 127.0.0.1:6379:6379
     volumes:
       - redis-data:/data
-    command: redis-server --save 3600 1 --appendonly yes --auto-aof-rewrite-min-size 8mb --search-max-prefix-expansions 1000000 --hash-max-listpack-value 8192 --maxmemory 256mb --maxmemory-policy noeviction
+    command: redis-server --save 3600 1 --appendonly yes --auto-aof-rewrite-min-size 8mb --search-max-prefix-expansions 1000000 --hash-max-listpack-value 8192 --maxmemory 384mb --maxmemory-policy noeviction --activedefrag yes
 
   watchtower:
     image: nickfedor/watchtower:latest

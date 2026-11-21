@@ -24,7 +24,7 @@ defineFeature({ id: 'agda', label: 'Agda search', level: 'professional', web: tr
 
 const RELEASE = 'https://github.com/vikraman/donbot/releases/download/agda-index'
 // measured on agda 2.9
-const DEFAULT_SOURCES = ['cubical', 'stdlib', 'typetopology'].map(l => `${RELEASE}/${l}.ndjson.gz`).join(',')
+const DEFAULT_SOURCES = ['cubical', 'stdlib', 'TypeTopology', 'categories', 'unimath', 'En'].map(l => `${RELEASE}/${l}.ndjson.gz`).join(',')
 const REFRESH_MS = 24 * 60 * 60 * 1000
 const PAGE = 5
 const MAX_TYPE = 300
