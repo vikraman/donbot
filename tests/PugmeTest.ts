@@ -1,29 +1,18 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, chat } from './helpers/setup.ts'
+import { mockFetch } from './helpers/fakes.ts'
 
-describe('Pugme testing Hubot scripts', () => {
+describe('Pugme', () => {
   const state = setupRobot('Pugme.ts')
 
-  it('should send the image url from the api response', async () => {
-    const { robot } = state
-    mock.method(global, 'fetch', async () => ({
-      json: async () => ({ message: 'https://images.dog.ceo/breeds/pug/example.jpg', status: 'success' })
-    }))
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant pug me', 'test-room')
-    assert.strictEqual(sent[0], 'https://images.dog.ceo/breeds/pug/example.jpg')
-  })
-  it('should support the "show me a pug" alternate phrasing', async () => {
-    const { robot } = state
-    mock.method(global, 'fetch', async () => ({
-      json: async () => ({ message: 'https://images.dog.ceo/breeds/pug/example2.jpg', status: 'success' })
-    }))
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant show me a pug', 'test-room')
-    assert.strictEqual(sent[0], 'https://images.dog.ceo/breeds/pug/example2.jpg')
-  })
+  for (const text of ['pug me', 'show me a pug']) {
+    it(`sends the image url for "${text}"`, async () => {
+      mockFetch({ message: 'https://images.dog.ceo/breeds/pug/example.jpg', status: 'success' })
+      const { sent, ask } = chat(state)
+      await ask(text)
+      assert.strictEqual(sent[0], 'https://images.dog.ceo/breeds/pug/example.jpg')
+    })
+  }
 })

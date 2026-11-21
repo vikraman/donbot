@@ -2,21 +2,18 @@ import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
-import type { TestRobot } from './helpers/setup.ts'
-
-// a message from user in room of guild g1, with or without Manage Channels
-const sayer = (robot: TestRobot) => async (id: string, text: string, { room = 'room', guild = 'g1', staff = false } = {}) => {
-  const user = brainUser(robot, id, id)
-  const perms = { has: (flag: string) => staff && flag === 'ManageChannels' }
-  ;(user as unknown as { message: unknown }).message = { guildId: guild, author: { id }, member: { permissions: { has: () => false } }, channel: { id: room, isThread: () => false, permissionsFor: () => perms } }
-  await robot.adapter.say(user, `@${robot.name} ${text}`, room)
-}
+import { discordMessage, withMessage } from './helpers/fakes.ts'
 
 describe('FAQ', () => {
   const state = setupRobot('Faq.ts')
 
+  // user in room of guild g1, staff can manage channels
+  const say = async (id: string, text: string, { room = 'room', guild = 'g1', staff = false } = {}) => {
+    const user = withMessage(brainUser(state.robot, id, id), discordMessage(room, id, { guild, manageChannels: staff }))
+    await state.robot.adapter.say(user, `@${state.robot.name} ${text}`, room)
+  }
+
   it('lets staff save and forget answers that anyone can recall, per server', async () => {
-    const say = sayer(state.robot)
     const sent = collect(state.robot)
     await say('u2', 'faq install is see the wiki')
     assert.strictEqual(sent.at(-1), 'Only someone who can manage this channel can do that.')

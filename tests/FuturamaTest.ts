@@ -1,56 +1,32 @@
-import { describe, it, mock } from 'node:test'
+import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { setupRobot, collect, brainUser } from './helpers/setup.ts'
+import { setupRobot, chat } from './helpers/setup.ts'
+import { mockFetch } from './helpers/fakes.ts'
 
-describe('Futurama testing Hubot scripts', () => {
+const API = 'https://bender.sierrasoftworks.com/api/v1/quote'
+
+describe('Futurama', () => {
   const state = setupRobot('Futurama.ts')
 
-  it('should reply with a random quote and attribution for "quote"', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    mock.method(global, 'fetch', async (url: string) => {
-      requestedUrl = url
-      return { ok: true, json: async () => ({ quote: 'Bite my shiny metal ass.', who: 'Bender' }) }
+  for (const [text, url] of [
+    ['quote', API],
+    ['entertain me', API],
+    ['quote Farnsworth', `${API}/Farnsworth`]
+  ] as const) {
+    it(`quotes with attribution for "${text}"`, async () => {
+      const urls = mockFetch({ quote: 'Good news, everyone!', who: 'Professor Farnsworth' })
+      const { sent, ask } = chat(state)
+      await ask(text)
+      assert.deepStrictEqual(urls, [url])
+      assert.strictEqual(sent[0], '"Good news, everyone!" — Professor Farnsworth')
     })
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant quote', 'test-room')
-    assert.strictEqual(requestedUrl, 'https://bender.sierrasoftworks.com/api/v1/quote')
-    assert.strictEqual(sent[0], '"Bite my shiny metal ass." — Bender')
-  })
+  }
 
-  it('should reply with a character-specific quote for "quote <character>"', async () => {
-    const { robot } = state
-    let requestedUrl = ''
-    mock.method(global, 'fetch', async (url: string) => {
-      requestedUrl = url
-      return { ok: true, json: async () => ({ quote: 'Good news, everyone!', who: 'Professor Farnsworth' }) }
-    })
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant quote Farnsworth', 'test-room')
-    assert.strictEqual(requestedUrl, 'https://bender.sierrasoftworks.com/api/v1/quote/Farnsworth')
-    assert.strictEqual(sent[0], '"Good news, everyone!" — Professor Farnsworth')
-  })
-
-  it('should support "entertain me" as an alternate phrasing', async () => {
-    const { robot } = state
-    mock.method(global, 'fetch', async () => ({
-      ok: true, json: async () => ({ quote: "Shut up and take my money!", who: 'Fry' })
-    }))
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant entertain me', 'test-room')
-    assert.strictEqual(sent[0], '"Shut up and take my money!" — Fry')
-  })
-
-  it('should say it has no quote when the character is not found', async () => {
-    const { robot } = state
-    mock.method(global, 'fetch', async () => ({ ok: false }))
-    const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
-    await robot.adapter.say(user, '@Dumbotheelephant quote Donbot', 'test-room')
+  it('says it has no quote when the character is not found', async () => {
+    mockFetch(null, { ok: false })
+    const { sent, ask } = chat(state)
+    await ask('quote Donbot')
     assert.strictEqual(sent[0], "I don't have a quote for that.")
   })
 })

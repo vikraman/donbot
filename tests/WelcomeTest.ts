@@ -1,27 +1,16 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { EventEmitter } from 'node:events'
 
-import type { DiscordClient } from 'hubot'
-
-import { setupRobot } from './helpers/setup.ts'
+import { setupRobot, inGuild } from './helpers/setup.ts'
+import { fakeClient, tick } from './helpers/fakes.ts'
 
 import { policyFor } from '../scripts/lib/policy.ts'
-
-const tick = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms))
 
 describe('Welcome', () => {
   const state = setupRobot('Welcome.ts', { deferLoad: true })
 
-  const withClient = async () => {
-    const client = new EventEmitter()
-    state.robot.adapter.client = client as unknown as DiscordClient
-    await state.loadScript()
-    return client
-  }
-
   it('says a short hello in a new server, not one it already knows', async () => {
-    const client = await withClient()
+    const client = await fakeClient(state)
     const posted: string[] = []
     const guild = (id: string) => ({ id, systemChannel: { send: async (text: string) => { posted.push(text) } } })
     client.emit('guildCreate', guild('new'))
@@ -33,7 +22,7 @@ describe('Welcome', () => {
   })
 
   it('waves at people joining, unless welcomes are off there', async () => {
-    const client = await withClient()
+    const client = await fakeClient(state)
     const reacted: string[] = []
     const join = (id: string, room: string, extra: Record<string, unknown> = {}) =>
       ({ id, type: 7, guildId: 'g1', channelId: room, author: { id: 'u9', bot: false }, react: async (emoji: string) => { reacted.push(`${id}:${emoji}`) }, ...extra })
@@ -41,8 +30,7 @@ describe('Welcome', () => {
     client.emit('messageCreate', join('m2', 'room', { type: 0 }))
     client.emit('messageCreate', join('m3', 'room', { author: { id: 'b', bot: true } }))
     policyFor(state.robot).update(d => { d.channels.quiet = { on: [], off: ['welcome'] } })
-    const adapter = state.robot.adapter as unknown as { client: { channels?: { cache: Map<string, unknown> } } }
-    adapter.client.channels = { cache: new Map([['quiet', { id: 'quiet', guildId: 'g1' }]]) }
+    inGuild(state.robot, 'g1', ['quiet'])
     client.emit('messageCreate', join('m4', 'quiet'))
     await tick()
     assert.deepStrictEqual(reacted, ['m1:👋'])
