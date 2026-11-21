@@ -31,6 +31,7 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "emojilib": "^4.0.3",
+    "fast-check": "^4.11.0",
     "typescript": "^7.0.2"
   }
 }
