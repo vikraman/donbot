@@ -221,8 +221,14 @@ export const resolveNames = async (names: string[], lib?: string): Promise<Map<s
 // per-generation cache
 export const cached = <T>(key: string, make: () => T): T => {
   if (!state) return make()
-  if (!state.caches.has(key)) state.caches.set(key, make())
-  return state.caches.get(key) as T
+  const caches = state.caches
+  if (!caches.has(key)) {
+    const v = make()
+    caches.set(key, v)
+    // failures aren't kept
+    if (v instanceof Promise) v.catch(() => caches.get(key) === v && caches.delete(key))
+  }
+  return caches.get(key) as T
 }
 
 // folded names by id

@@ -254,4 +254,10 @@ describe('Agda', { skip: noRedis }, () => {
     const ok = await ask('agda reindex', FIXTURES, 'boss')
     assert.strictEqual(ok[0], 'Reloaded 62 definitions.')
   })
+
+  it('says which sources a reindex skipped', async () => {
+    process.env.OWNER_USER_ID = 'boss'
+    const partial = await ask('agda reindex', `${FIXTURES},tests/fixtures/missing.ndjson`, 'boss')
+    assert.match(partial[0]!, /^Reloaded 62 definitions\. Skipped `tests\/fixtures\/missing\.ndjson: [^`]+`\.$/)
+  })
 })

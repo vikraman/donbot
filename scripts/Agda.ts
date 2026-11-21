@@ -165,15 +165,20 @@ export default (robot: Robot) => {
   const sources = (process.env.AGDA_INDEX_URLS || DEFAULT_SOURCES).split(',').map(s => s.trim()).filter(Boolean)
   const pages = new Map<string, Page>()
   let loaded: Promise<void> = Promise.resolve()
+  // redis-held index
+  let refreshed: Promise<unknown> = Promise.resolve()
   let failure = ''
+  // last skipped sources
+  let skippedLast: string[] = []
 
   // reuse redis state
   const reload = (force = false) => {
     // queued in order
-    void refresh().catch(() => false)
+    refreshed = refresh().catch(() => false)
     loaded = loadIndex(sources, force).then(
       ({ loaded, skipped }) => {
         failure = ''
+        skippedLast = skipped
         robot.logger.info(`agda index: ${indexSize()} definitions${loaded.length > 0 ? `, loaded ${loaded.join(', ')}` : ''}`)
         for (const s of skipped) robot.logger.warn(`agda index skipped ${s}`)
       },
@@ -219,7 +224,8 @@ export default (robot: Robot) => {
   }
 
   const ready = async (res: Response): Promise<boolean> => {
-    // old index serves during reload
+    // redis first, then downloads
+    if (indexSize() === 0) await refreshed
     if (indexSize() === 0) await loaded
     if (indexSize() > 0) return true
     await res.send(failure ? `The Agda index failed to load: ${failure}` : 'The Agda index is still loading, try again in a minute.')
@@ -315,7 +321,9 @@ export default (robot: Robot) => {
     if (word === 'reindex') {
       if (!isOwner(res)) return res.send(OWNER_ONLY)
       await reload(true)
-      return res.send(failure ? `Reindex failed: ${failure}` : `Reloaded ${indexSize()} definitions.`)
+      if (failure) return res.send(`Reindex failed: ${failure}`)
+      const skipped = skippedLast.length > 0 ? ` Skipped ${skippedLast.map(s => `\`${code(clip(s, 200))}\``).join(', ')}.` : ''
+      return res.send(`Reloaded ${indexSize()} definitions.${skipped}`)
     }
     return answer(res, q)
   })
