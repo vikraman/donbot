@@ -69,7 +69,7 @@ export const setupRobot = (scriptFiles: string | string[], { envVars = [], defer
 // joined strings from each robot.on(event) emission
 export const collect = (robot: Robot, event: string = 'send'): string[] => {
   const messages: string[] = []
-  robot.on(event, (envelope: unknown, ...strings: string[]) => { messages.push(strings.join('')) })
+  robot.on(event, (_envelope: unknown, ...strings: string[]) => { messages.push(strings.join('')) })
   return messages
 }
 

@@ -11,6 +11,7 @@
     "start:shell": "source .env 2>/dev/null; export REDIS_URL=redis://localhost:6379; hubot --name donbot --adapter Shell",
     "redis:local": "docker compose up -d redis",
     "typecheck": "tsc --noEmit",
+    "lint": "npm --prefix lint ci --silent && lint/node_modules/.bin/eslint -c lint/eslint.config.js .",
     "test": "npm run typecheck && node --test tests/*.ts"
   },
   "keywords": [],
@@ -24,6 +25,7 @@
     "hubot-redis-brain": "^3.0.1",
     "hubot-rules": "^2.1.1",
     "most-common-words-by-language": "^3.0.14",
+    "redis": "^4.7.1",
     "sentiment": "^5.0.2"
   },
   "devDependencies": {

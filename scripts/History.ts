@@ -110,14 +110,14 @@ const fetchText = async (channel: DiscordChannel, messageId: string): Promise<st
 }
 
 
-const authorOf = (robot: Robot, entries: HistoryEntry[], messageId: string): string | null => {
+const authorOf = (entries: HistoryEntry[], messageId: string): string | null => {
   const entry = entries.find(e => e.id === messageId && e.kind === 'user-message')
   return entry ? entry.authorId || null : null
 }
 
-const describeMessage = async (robot: Robot, channel: DiscordChannel, entries: HistoryEntry[], messageId: string, score: number): Promise<string> => {
+const describeMessage = async (channel: DiscordChannel, entries: HistoryEntry[], messageId: string, score: number): Promise<string> => {
   const text = await fetchText(channel, messageId)
-  const authorId = authorOf(robot, entries, messageId)
+  const authorId = authorOf(entries, messageId)
   const mention = mentionFor({ id: authorId ?? undefined })
   if (text === null) {
     return `${mention} said something, but I can't find it anymore.`
@@ -207,7 +207,7 @@ export default async (robot: Robot) => {
       await res.send('No upvoted messages yet.')
       return
     }
-    await res.send(await describeMessage(robot, channel, entries, winner[0], winner[1]))
+    await res.send(await describeMessage(channel, entries, winner[0], winner[1]))
   })
 
   robot.respond(/most downvoted message$/i, { id: 'history.downvoted' }, async res => {
@@ -223,7 +223,7 @@ export default async (robot: Robot) => {
       await res.send('No downvoted messages yet.')
       return
     }
-    await res.send(await describeMessage(robot, channel, entries, loser[0], loser[1]))
+    await res.send(await describeMessage(channel, entries, loser[0], loser[1]))
   })
 
   robot.respond(/top (\d+) messages$/i, { id: 'history.topn' }, async res => {
@@ -242,7 +242,7 @@ export default async (robot: Robot) => {
     }
     const lines = await Promise.all(ranked.map(async ([id, score], i) => {
       const text = await fetchText(channel, id)
-      const authorId = authorOf(robot, entries, id)
+      const authorId = authorOf(entries, id)
       const mention = mentionFor({ id: authorId ?? undefined })
       const preview = text === null ? "(can't find it anymore)" : `"${text.slice(0, 80)}${text.length > 80 ? '…' : ''}"`
       return `${i + 1}. ${mention} (+${score}): ${preview}`

@@ -14,7 +14,7 @@ describe('Killit testing Hubot scripts', () => {
     setRandomSource(c => Math.floor(0 * c))
     const user = brainUser(robot, 'test-user', 'test user')
     let actual = ''
-    robot.on('send', (envelope, ...strings) => {
+    robot.on('send', (_envelope, ...strings) => {
       actual = strings.join('')
     })
     await robot.adapter.say(user, 'kill the process', 'test-room')

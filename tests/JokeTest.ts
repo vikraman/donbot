@@ -138,7 +138,7 @@ describe('Joke testing Hubot scripts', () => {
       return { ok: true, json: async () => ({ error: false, type: 'single', joke: 'A joke.' }) }
     })
     const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
+    collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant joke coding', 'test-room')
     assert.strictEqual(requestedUrl, 'https://v2.jokeapi.dev/joke/Programming?blacklistFlags=nsfw,religious,political,racist,sexist,explicit')
     await robot.adapter.say(user, '@Dumbotheelephant joke halloween', 'test-room')

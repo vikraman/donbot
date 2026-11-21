@@ -27,7 +27,7 @@ describe('Xkcd testing Hubot scripts', () => {
       return { ok: true, json: async () => ({ title: 'Barrel - Part 1', img: 'https://imgs.xkcd.com/comics/barrel_part_1.jpg' }) }
     })
     const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
+    collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant xkcd 1', 'test-room')
     assert.strictEqual(requestedUrl, 'https://xkcd.com/1/info.0.json')
   })

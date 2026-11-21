@@ -118,7 +118,7 @@ describe('Ask testing Hubot scripts', () => {
       return { ok: true, json: async () => ({ extract: 'Photosynthesis is a system of biological processes.' }) }
     })
     const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
+    collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant ask how does photosynthesis work', 'test-room')
     assert.match(decodeURIComponent(wikiSearchUrl), /srsearch=photosynthesis work&/)
   })
@@ -127,12 +127,12 @@ describe('Ask testing Hubot scripts', () => {
     const { robot } = state
     process.env.GEMINI_API_KEY = 'test-key'
     let requestBody: GeminiRequest | null = null
-    mock.method(global, 'fetch', async (url: string, options: { body: string }) => {
+    mock.method(global, 'fetch', async (_url: string, options: { body: string }) => {
       requestBody = JSON.parse(options.body)
       return geminiResponse('Paris.')
     })
     const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
+    collect(robot)
     await robot.adapter.say(user, "@Dumbotheelephant ask what's the capital of France?", 'test-room')
     assert.strictEqual(requestBody!.contents[0]!.parts[0]!.text, "what's the capital of France?")
   })
@@ -141,12 +141,12 @@ describe('Ask testing Hubot scripts', () => {
     const { robot } = state
     process.env.GEMINI_API_KEY = 'test-key'
     let requestBody: GeminiRequest | null = null
-    mock.method(global, 'fetch', async (url: string, options: { body: string }) => {
+    mock.method(global, 'fetch', async (_url: string, options: { body: string }) => {
       requestBody = JSON.parse(options.body)
       return geminiResponse('Answer.')
     })
     const user = brainUser(robot, 'test-user', 'test user')
-    const sent = collect(robot)
+    collect(robot)
     await robot.adapter.say(user, '@Dumbotheelephant ask years of Napoleon\'s rule?', 'test-room')
     assert.ok(requestBody!.generationConfig.maxOutputTokens >= 1000)
     assert.match(requestBody!.systemInstruction.parts[0]!.text, /short/i)

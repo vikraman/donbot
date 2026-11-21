@@ -10,7 +10,7 @@
 //   DEFAULT_TIMEZONE - Timezone for people who haven't set one. Defaults to Europe/London.
 //
 
-import type { Robot, User } from 'hubot'
+import type { Robot } from 'hubot'
 
 import { required } from './lib/match.ts'
 import { mentionFor } from './lib/mention.ts'

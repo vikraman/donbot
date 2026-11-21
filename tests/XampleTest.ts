@@ -27,7 +27,7 @@ describe('Xample testing Hubot scripts', () => {
     const expected = "HELO World! I'm Dumbotheelephant."
     const user = brainUser(robot, 'test-user', 'test user')
     let actual = ''
-    robot.on('reply', (envelope: Envelope, ...strings: string[]) => {
+    robot.on('reply', (_envelope: Envelope, ...strings: string[]) => {
       actual = strings.join('')
     })
     await robot.adapter.say(user, '@Dumbotheelephant helo', 'test-room')
@@ -39,7 +39,7 @@ describe('Xample testing Hubot scripts', () => {
     const expected = 'general'
     const user = brainUser(robot, 'test-user', 'test user')
     let actual = ''
-    robot.on('send', (envelope: Envelope, ...strings: string[]) => {
+    robot.on('send', (envelope: Envelope, ..._strings: string[]) => {
       actual = envelope.room!
     })
     await robot.adapter.say(user, '@Dumbotheelephant helo room', 'general')

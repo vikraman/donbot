@@ -16,6 +16,14 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # agda search tests
+    services:
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+    env:
+      TEST_REDIS_URL: redis://localhost:6379
     steps:
       - uses: actions/checkout@v7
 
@@ -26,8 +34,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
       - name: Test
         run: npm test
+
+  # search regressions
+  corpus:
+    uses: ./.github/workflows/agda-corpus.yml
 
   image:
     needs: test

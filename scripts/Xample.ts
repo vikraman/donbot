@@ -20,7 +20,7 @@ export default async (robot: Robot) => {
   robot.respond(/helo room/, { id: 'xample.room' }, async res => {
     await res.send('Hello World!')
   })
-  robot.router.get('/helo', async (req, res) => {
+  robot.router.get('/helo', async (_req, res) => {
     res.send("HELO World! I'm Dumbotheelephant.")
   })
 }

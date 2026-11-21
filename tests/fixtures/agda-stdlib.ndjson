@@ -1,0 +1,70 @@
+{"meta":{"agda":"2.9.0","builtins":{"fromNat":"Agda.Builtin.FromNat._.fromNat","fromNeg":"Agda.Builtin.FromNeg._.fromNeg","fromString":"Agda.Builtin.FromString._.fromString","suc":"Agda.Builtin.Nat.Nat.suc","zero":"Agda.Builtin.Nat.Nat.zero"},"commit":"ac7c79b24ecf16cf82decc872d2690c2ee9d8498","count":24,"format":2,"library":"stdlib","names":45,"source":"https://github.com/agda/agda-stdlib/blob/ac7c79b24ecf16cf82decc872d2690c2ee9d8498/src/","url":"https://agda.github.io/agda-stdlib/master/"}}
+{"fix":["non",2],"n":"Σ-syntax","q":"Data.Product.Base.Σ-syntax","same":"Agda.Builtin.Sigma.Σ","syntax":[["i","Σ["],["v",1,0],["i","∈"],["h",0,0],["i","]"],["h",1,0]]}
+{"n":"Level","q":"Agda.Primitive.Level"}
+{"n":"Set","q":"Agda.Primitive.Set"}
+{"fix":["non",3],"n":"_↔_","q":"Function.Bundles._↔_"}
+{"fix":["right",1],"n":"_⊎_","q":"Data.Sum.Base._⊎_"}
+{"n":"swap-↔","q":"Data.Sum.Properties.swap-↔"}
+{"fix":["non",4],"n":"_≡_","q":"Agda.Builtin.Equality._≡_"}
+{"n":"refl","q":"Agda.Builtin.Equality._≡_.refl"}
+{"n":"Rel","q":"Relation.Binary.Core.Rel"}
+{"fix":["non",4],"n":"_≢_","q":"Relation.Binary.PropositionalEquality.Core._≢_"}
+{"n":"cong","q":"Relation.Binary.PropositionalEquality.Core.cong"}
+{"n":"Symmetric","q":"Relation.Binary.Definitions.Symmetric"}
+{"n":"sym","q":"Relation.Binary.PropositionalEquality.Core.sym"}
+{"n":"≢-sym","q":"Relation.Binary.PropositionalEquality.Core.≢-sym"}
+{"fix":["non",4],"n":"_≗_","q":"Relation.Binary.PropositionalEquality.Core._≗_"}
+{"n":"map","q":"Data.List.Base.map"}
+{"n":"id","q":"Function.Base.id"}
+{"n":"List","q":"Agda.Builtin.List.List"}
+{"n":"map-id","q":"Data.List.Properties.map-id"}
+{"fix":["right",5],"n":"_++_","q":"Data.List.Base._++_"}
+{"n":"map-++","q":"Data.List.Properties.map-++"}
+{"n":"Associative","np":1,"q":"Algebra.Definitions.Associative"}
+{"n":"++-assoc","q":"Data.List.Properties._.++-assoc"}
+{"n":"Transitive","q":"Relation.Binary.Definitions.Transitive"}
+{"fix":["non",4],"n":"_≤_","q":"Data.Nat.Base._≤_"}
+{"n":"Nat","q":"Agda.Builtin.Nat.Nat"}
+{"n":"≤-trans","q":"Data.Nat.Properties.≤-trans"}
+{"n":"RightIdentity","np":1,"q":"Algebra.Definitions.RightIdentity"}
+{"fix":["left",6],"n":"_+_","q":"Agda.Builtin.Nat._+_"}
+{"n":"+-identityʳ","q":"Data.Nat.Properties.+-identityʳ"}
+{"n":"Commutative","np":1,"q":"Algebra.Definitions.Commutative"}
+{"n":"+-comm","q":"Data.Nat.Properties.+-comm"}
+{"n":"foldr","q":"Data.List.Base.foldr"}
+{"n":"sym-cong","q":"Relation.Binary.PropositionalEquality.Properties.sym-cong"}
+{"fix":["non",3],"n":"¬_","q":"Relation.Nullary.Negation.Core.¬_"}
+{"n":"contradiction","q":"Relation.Nullary.Negation.Core.contradiction","same":"Relation.Nullary.Negation.Core.contradiction-irr"}
+{"fix":["right",2],"n":"_×_","q":"Data.Product.Base._×_"}
+{"n":"swap","q":"Data.Product.Base.swap"}
+{"n":"Σ","q":"Agda.Builtin.Sigma.Σ"}
+{"n":"fst","q":"Agda.Builtin.Sigma.Σ.fst"}
+{"n":"Carrier","q":"Relation.Binary.Bundles.Setoid.Carrier"}
+{"n":"setoid","q":"Relation.Binary.PropositionalEquality.Properties.setoid"}
+{"fix":["non",4],"n":"_∈_","q":"Data.List.Membership.Propositional._._∈_"}
+{"fix":["non",4],"n":"_∈_","np":1,"q":"Data.List.Membership.Setoid._∈_"}
+{"n":"∈-++⁺ˡ","q":"Data.List.Membership.Propositional.Properties._.∈-++⁺ˡ"}
+{"file":"Data.Sum.Properties","kind":"fun","line":49,"module":"Data.Sum.Properties","name":"swap-↔","pos":1483,"qname":5,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["c",1],["p",1,3,["a",["c",2],[0,["v",2]]],["a",["c",3],[0,["a",["c",4],[0,["v",1]],[0,["v",3]]]],[0,["a",["c",4],[0,["v",3]],[0,["v",1]]]]]]]]],"type":"{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} → (A ⊎ B) ↔ (B ⊎ A)"}
+{"file":"Agda.Builtin.Equality","kind":"data","line":6,"module":"Agda.Builtin.Equality","name":"_≡_","pos":167,"qname":6,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",0,null,["v",1],["p",0,null,["v",1],["a",["c",2],[0,["v",0]]]]]]],"type":"{a : Level} {A : Set a} → A → A → Set a"}
+{"file":"Agda.Builtin.Equality","kind":"con","line":7,"module":"Agda.Builtin.Equality._≡_","name":"refl","pos":224,"qname":7,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["v",1],["a",["c",6],[0,["v",2]],[0,["v",2]]]]]],"type":"{a : Level} {A : Set a} {x : A} → x ≡ x"}
+{"file":"Relation.Binary.PropositionalEquality.Core","kind":"fun","line":37,"module":"Relation.Binary.PropositionalEquality.Core","name":"_≢_","pos":1064,"qname":9,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["a",["c",8],[0,["v",1]],[0,["v",0]]]]],"type":"{a : Level} {A : Set a} → Rel A a","unf":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",0,null,["v",1],["p",0,null,["v",1],["a",["c",2],[0,["v",0]]]]]]]}
+{"file":"Relation.Binary.PropositionalEquality.Core","kind":"fun","line":57,"module":"Relation.Binary.PropositionalEquality.Core","name":"cong","pos":1545,"qname":10,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["c",1],["p",1,3,["a",["c",2],[0,["v",2]]],["p",0,4,["p",0,null,["v",1],["v",3]],["p",1,5,["v",1],["p",1,6,["v",1],["p",0,null,["a",["c",6],[0,["v",5]],[0,["v",6]]],["a",["c",6],[0,["a",["v",4],[0,["v",5]]]],[0,["a",["v",4],[0,["v",6]]]]]]]]]]]]],"type":"{A.a : Level} {A : Set A.a} {B.a : Level} {B : Set B.a} (f : A → B) {x y : A} → x ≡ y → f x ≡ f y"}
+{"file":"Relation.Binary.PropositionalEquality.Core","kind":"fun","line":79,"module":"Relation.Binary.PropositionalEquality.Core","name":"sym","pos":2099,"qname":12,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["a",["c",11],[0,["c",6]]]]],"type":"{A.a : Level} {A : Set A.a} → Symmetric _≡_","unf":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["v",1],["p",1,3,["v",1],["p",0,null,["a",["c",6],[0,["v",2]],[0,["v",3]]],["a",["c",6],[0,["v",3]],[0,["v",2]]]]]]]]}
+{"file":"Relation.Binary.PropositionalEquality.Core","kind":"fun","line":106,"module":"Relation.Binary.PropositionalEquality.Core","name":"≢-sym","pos":2716,"qname":13,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["a",["c",11],[0,["c",9]]]]],"type":"{A.a : Level} {A : Set A.a} → Symmetric _≢_","unf":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["v",1],["p",1,3,["v",1],["p",0,null,["a",["c",9],[0,["v",2]],[0,["v",3]]],["a",["c",9],[0,["v",3]],[0,["v",2]]]]]]]]}
+{"file":"Data.List.Properties","kind":"fun","line":90,"module":"Data.List.Properties","name":"map-id","pos":3565,"qname":18,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["a",["c",14],[0,["a",["c",15],[0,["c",16]]]],[0,["c",16]]]]],"type":"{A.a : Level} {A : Set A.a} → map id ≗ id","unf":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",0,2,["a",["c",17],[0,["v",1]]],["a",["c",6],[0,["a",["c",15],[0,["c",16]],[0,["v",2]]]],[0,["a",["c",16],[0,["v",2]]]]]]]]}
+{"file":"Data.List.Properties","kind":"fun","line":98,"module":"Data.List.Properties","name":"map-++","pos":3836,"qname":20,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["c",1],["p",1,3,["a",["c",2],[0,["v",2]]],["p",0,4,["p",0,null,["v",1],["v",3]],["p",0,5,["a",["c",17],[0,["v",1]]],["p",0,6,["a",["c",17],[0,["v",1]]],["a",["c",6],[0,["a",["c",15],[0,["v",4]],[0,["a",["c",19],[0,["v",5]],[0,["v",6]]]]]],[0,["a",["c",19],[0,["a",["c",15],[0,["v",4]],[0,["v",5]]]],[0,["a",["c",15],[0,["v",4]],[0,["v",6]]]]]]]]]]]]]],"type":"{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} (f : A → B) (xs ys : List A) → map f (xs ++ ys) ≡ (map f xs ++ map f ys)"}
+{"file":"Data.List.Properties","kind":"fun","line":138,"module":"Data.List.Properties._","name":"++-assoc","pos":5209,"qname":22,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["a",["c",21],[0,["c",6]],[0,["c",19]]]]],"type":"{a : Level} {A : Set a} → Associative _≡_ _++_","unf":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",0,2,["a",["c",17],[0,["v",1]]],["p",0,3,["a",["c",17],[0,["v",1]]],["p",0,4,["a",["c",17],[0,["v",1]]],["a",["c",6],[0,["a",["c",19],[0,["a",["c",19],[0,["v",2]],[0,["v",3]]]],[0,["v",4]]]],[0,["a",["c",19],[0,["v",2]],[0,["a",["c",19],[0,["v",3]],[0,["v",4]]]]]]]]]]]]}
+{"file":"Data.Nat.Properties","kind":"fun","line":195,"module":"Data.Nat.Properties","name":"≤-trans","pos":6407,"qname":26,"term":["a",["c",23],[0,["c",24]]],"type":"Transitive _≤_","unf":["p",1,0,["c",25],["p",1,1,["c",25],["p",1,2,["c",25],["p",0,null,["a",["c",24],[0,["v",0]],[0,["v",1]]],["p",0,null,["a",["c",24],[0,["v",1]],[0,["v",2]]],["a",["c",24],[0,["v",0]],[0,["v",2]]]]]]]]}
+{"file":"Data.Nat.Properties","kind":"fun","line":557,"module":"Data.Nat.Properties","name":"+-identityʳ","pos":15794,"qname":29,"term":["a",["c",27],[0,["c",6]],[0,["n","0"]],[0,["c",28]]],"type":"RightIdentity _≡_ 0 _+_","unf":["p",0,0,["c",25],["a",["c",6],[0,["a",["c",28],[0,["v",0]],[0,["n","0"]]]],[0,["v",0]]]]}
+{"file":"Data.Nat.Properties","kind":"fun","line":564,"module":"Data.Nat.Properties","name":"+-comm","pos":15971,"qname":31,"term":["a",["c",30],[0,["c",6]],[0,["c",28]]],"type":"Commutative _≡_ _+_","unf":["p",0,0,["c",25],["p",0,1,["c",25],["a",["c",6],[0,["a",["c",28],[0,["v",0]],[0,["v",1]]]],[0,["a",["c",28],[0,["v",1]],[0,["v",0]]]]]]]}
+{"file":"Data.List.Base","kind":"fun","line":48,"module":"Data.List.Base","name":"map","pos":1612,"qname":15,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["c",1],["p",1,3,["a",["c",2],[0,["v",2]]],["p",0,null,["p",0,null,["v",1],["v",3]],["p",0,null,["a",["c",17],[0,["v",1]]],["a",["c",17],[0,["v",3]]]]]]]]],"type":"{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} → (A → B) → List A → List B"}
+{"file":"Data.List.Base","kind":"fun","line":54,"module":"Data.List.Base","name":"_++_","pos":1712,"qname":19,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",0,null,["a",["c",17],[0,["v",1]]],["p",0,null,["a",["c",17],[0,["v",1]]],["a",["c",17],[0,["v",1]]]]]]],"type":"{A.a : Level} {A : Set A.a} → List A → List A → List A"}
+{"file":"Data.List.Base","kind":"fun","line":126,"module":"Data.List.Base","name":"foldr","pos":4126,"qname":32,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["c",1],["p",1,3,["a",["c",2],[0,["v",2]]],["p",0,null,["p",0,null,["v",1],["p",0,null,["v",3],["v",3]]],["p",0,null,["v",3],["p",0,null,["a",["c",17],[0,["v",1]]],["v",3]]]]]]]],"type":"{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} → (A → B → B) → B → List A → B"}
+{"file":"Function.Base","kind":"fun","line":29,"module":"Function.Base","name":"id","pos":704,"qname":16,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",0,null,["v",1],["v",1]]]],"type":"{A.a : Level} {A : Set A.a} → A → A"}
+{"file":"Relation.Binary.PropositionalEquality.Properties","kind":"fun","line":97,"module":"Relation.Binary.PropositionalEquality.Properties","name":"sym-cong","pos":3369,"qname":33,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["c",1],["p",1,3,["a",["c",2],[0,["v",2]]],["p",1,4,["v",1],["p",1,5,["v",1],["p",1,6,["p",0,null,["v",1],["v",3]],["p",0,7,["a",["c",6],[0,["v",4]],[0,["v",5]]],["a",["c",6],[0,["a",["c",12],[0,["a",["c",10],[0,["v",6]],[0,["v",7]]]]]],[0,["a",["c",10],[0,["v",6]],[0,["a",["c",12],[0,["v",7]]]]]]]]]]]]]]],"type":"{A.a : Level} {A : Set A.a} {B.a : Level} {B : Set B.a} {x y : A} {f : A → B} (p : x ≡ y) → sym (cong f p) ≡ cong f (sym p)"}
+{"file":"Relation.Nullary.Negation.Core","kind":"fun","line":72,"module":"Relation.Nullary.Negation.Core","name":"contradiction","pos":1860,"qname":35,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["c",1],["p",1,3,["a",["c",2],[0,["v",2]]],["p",0,null,["v",1],["p",0,null,["a",["c",34],[0,["v",1]]],["v",3]]]]]]],"type":"{A.a : Level} {A : Set A.a} {Whatever.w : Level} {Whatever : Set Whatever.w} → A → ¬ A → Whatever"}
+{"file":"Data.Product.Base","kind":"fun","line":182,"module":"Data.Product.Base","name":"swap","pos":5188,"qname":37,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["c",1],["p",1,3,["a",["c",2],[0,["v",2]]],["p",0,null,["a",["c",36],[0,["v",1]],[0,["v",3]]],["a",["c",36],[0,["v",3]],[0,["v",1]]]]]]]],"type":"{A.a : Level} {A : Set A.a} {B.b : Level} {B : Set B.b} → A × B → B × A"}
+{"file":"Agda.Builtin.Sigma","kind":"field","line":10,"module":"Agda.Builtin.Sigma.Σ","name":"fst","pos":268,"qname":39,"term":["p",1,0,["c",1],["p",1,1,["c",1],["p",1,2,["a",["c",2],[0,["v",0]]],["p",1,3,["p",0,null,["v",2],["a",["c",2],[0,["v",1]]]],["p",0,null,["a",["c",38],[0,["v",2]],[0,["v",3]]],["v",2]]]]]],"type":"{a b : Level} {A : Set a} {B : A → Set b} → Σ A B → A"}
+{"copy":true,"file":"Data.List.Membership.Propositional","kind":"fun","line":29,"module":"Data.List.Membership.Propositional._","name":"_∈_","pos":925,"qname":42,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",0,null,["a",["c",40],[0,["a",["c",41],[0,["v",1]]]]],["p",0,null,["a",["c",17],[0,["a",["c",40],[0,["a",["c",41],[0,["v",1]]]]]]],["a",["c",2],[0,["v",0]]]]]]],"type":"{a : Level} {A : Set a} → Carrier (setoid A) → List (Carrier (setoid A)) → Set a"}
+{"file":"Data.List.Membership.Propositional.Properties","kind":"fun","line":120,"module":"Data.List.Membership.Propositional.Properties._","name":"∈-++⁺ˡ","pos":4618,"qname":44,"term":["p",1,0,["c",1],["p",1,1,["a",["c",2],[0,["v",0]]],["p",1,2,["v",1],["p",1,3,["a",["c",17],[0,["a",["c",40],[0,["a",["c",41],[0,["v",1]]]]]]],["p",1,4,["a",["c",17],[0,["a",["c",40],[0,["a",["c",41],[0,["v",1]]]]]]],["p",0,null,["a",["c",43],[0,["a",["c",41],[0,["v",1]]]],[0,["v",2]],[0,["v",3]]],["a",["c",43],[0,["a",["c",41],[0,["v",1]]]],[0,["v",2]],[0,["a",["c",19],[0,["v",3]],[0,["v",4]]]]]]]]]]],"type":"{A.ℓ : Level} {A : Set A.ℓ} {v : A} {xs ys : List (Carrier (setoid A))} → (setoid A ∈ v) xs → (setoid A ∈ v) (xs ++ ys)"}
+{"alias":"Agda.Builtin.Nat.Nat","file":"Data.Nat.Base","kind":"data","line":0,"module":"Data.Nat.Base","name":"ℕ","pos":0,"qname":25,"term":["c",2],"type":"Set"}

@@ -1,6 +1,6 @@
 name: agda index
 
-# builds the cubical and stdlib search index
+# builds the search index of each agda library
 # every 6 days to keep cache alive
 on:
   schedule:
@@ -24,59 +24,73 @@ env:
   AGDA_VERSION: 2.9.0
   TAG: agda-index
   ISSUE: agda index build failing
+  # name repo, one per line
+  LIBRARIES: |
+    stdlib agda/agda-stdlib
+    cubical agda/cubical
+    typetopology martinescardo/TypeTopology
+    categories agda/agda-categories
+    unimath UniMath/agda-unimath
 
 jobs:
   index:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     outputs:
-      skip: ${{ steps.commits.outputs.skip }}
-      stamp: ${{ steps.commits.outputs.stamp }}
-      cubical: ${{ steps.commits.outputs.cubical }}
-      stdlib: ${{ steps.commits.outputs.stdlib }}
+      build: ${{ steps.plan.outputs.build }}
+      stamps: ${{ steps.plan.outputs.stamps }}
+      failed: ${{ steps.check.outputs.failed }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
-      - uses: actions/checkout@v7
-        with:
-          repository: agda/cubical
-          path: cubical
-          persist-credentials: false
-
-      - uses: actions/checkout@v7
-        with:
-          repository: agda/agda-stdlib
-          path: stdlib
-          persist-credentials: false
-
-      # skip if nothing changed
-      - name: Check for changes
-        id: commits
+      # libraries whose commit, agda or indexer changed since the last release
+      - name: Plan
+        id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
         run: |
-          cubical=$(git -C cubical rev-parse HEAD)
-          stdlib=$(git -C stdlib rev-parse HEAD)
-          stamp="cubical $cubical stdlib $stdlib agda $AGDA_VERSION ghc $GHC_VERSION indexer ${{ hashFiles('agda-index/AgdaIndex.hs', '.github/workflows/agda-index.yml') }}"
+          indexer="${{ hashFiles('agda-index/AgdaIndex.hs', '.github/workflows/agda-index.yml') }}"
+          notes=$(gh release view "$TAG" --json body -q .body 2>/dev/null || true)
+          build=""
+          stamps=""
+          while read -r name repo; do
+            [ -n "$name" ] || continue
+            sha=$(git ls-remote "https://github.com/$repo" HEAD | cut -f1)
+            stamp="$name $sha agda $AGDA_VERSION ghc $GHC_VERSION indexer $indexer"
+            stamps="$stamps$stamp;"
+            # stamps hide in comments in the release notes
+            if [ "$FORCE" = "true" ] || ! printf '%s\n' "$notes" | grep -qxF "<!-- stamp: $stamp -->"; then
+              build="$build $name"
+              echo "${name}_sha=$sha" >> "$GITHUB_OUTPUT"
+            fi
+          done <<< "$LIBRARIES"
           {
-            echo "cubical=$cubical"
-            echo "stdlib=$stdlib"
-            echo "stamp=$stamp"
+            echo "build=${build# }"
+            echo "indexer=$indexer"
+            echo "stamps=$stamps"
           } >> "$GITHUB_OUTPUT"
-          # stamp hides in a comment in the release notes
-          last=$(gh release view "$TAG" --json body -q .body 2>/dev/null | sed -n 's/^<!-- stamp: \(.*\) -->$/\1/p' || true)
-          if [ "$last" = "$stamp" ] && [ "${{ inputs.force }}" != "true" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
+          for name in $build; do echo "$name=true" >> "$GITHUB_OUTPUT"; done
 
-      # stdlib's cabal files
+      - name: Checkout libraries
+        if: steps.plan.outputs.build != ''
+        run: |
+          build=" ${{ steps.plan.outputs.build }} "
+          while read -r name repo; do
+            [ -n "$name" ] || continue
+            # categories checks against stdlib
+            if [[ "$build" == *" $name "* ]] || { [ "$name" = stdlib ] && [[ "$build" == *" categories "* ]]; }; then
+              git clone --quiet --filter=blob:none "https://github.com/$repo" "$name"
+              sha=$(jq -r --arg k "${name}_sha" '.[$k] // empty' <<< '${{ toJSON(steps.plan.outputs) }}')
+              if [ -n "$sha" ]; then git -C "$name" checkout --quiet "$sha"; fi
+            fi
+          done <<< "$LIBRARIES"
+
       - name: Cache keys
         id: keys
-        run: |
-          echo "cabal=cabal-$GHC_VERSION-$AGDA_VERSION-${{ hashFiles('agda-index/AgdaIndex.hs', 'stdlib/*.cabal', 'stdlib/cabal.project*') }}" >> "$GITHUB_OUTPUT"
-          echo "agdai=agdai-$AGDA_VERSION-${{ steps.commits.outputs.cubical }}-${{ steps.commits.outputs.stdlib }}" >> "$GITHUB_OUTPUT"
+        run: echo "cabal=cabal-$GHC_VERSION-$AGDA_VERSION-${{ hashFiles('agda-index/AgdaIndex.hs') }}" >> "$GITHUB_OUTPUT"
 
       # one dir for packages, store and script builds
       - name: Pin cabal dir
@@ -87,7 +101,7 @@ jobs:
         id: cabal
         uses: actions/cache/restore@v6
         with:
-          lookup-only: ${{ steps.commits.outputs.skip == 'true' }}
+          lookup-only: ${{ steps.plan.outputs.build == '' }}
           path: |
             ~/.cabal/packages
             ~/.cabal/store
@@ -96,60 +110,128 @@ jobs:
           restore-keys: cabal-${{ env.GHC_VERSION }}-${{ env.AGDA_VERSION }}-
 
       - uses: haskell-actions/setup@v2
-        if: steps.commits.outputs.skip != 'true'
+        if: steps.plan.outputs.build != ''
         with:
           ghc-version: ${{ env.GHC_VERSION }}
           cabal-version: ${{ env.CABAL_VERSION }}
           cabal-update: true
 
       - name: Build indexer
-        if: steps.commits.outputs.skip != 'true'
+        if: steps.plan.outputs.build != ''
         run: |
           cabal build --ghc-options='+RTS -M6G -RTS' agda-index/AgdaIndex.hs
           echo "AGDA_INDEX=$(cabal list-bin agda-index/AgdaIndex.hs)" >> "$GITHUB_ENV"
 
-      - name: Restore interface cache
+      # one interface cache per library, so a change rebuilds only that one
+      - name: Restore interface caches
         uses: actions/cache/restore@v6
         with:
-          lookup-only: ${{ steps.commits.outputs.skip == 'true' }}
+          lookup-only: ${{ steps.plan.outputs.build == '' }}
           path: |
-            cubical/_build
             stdlib/_build
             stdlib/doc/_build
-          key: ${{ steps.keys.outputs.agdai }}
+            cubical/_build
+            typetopology/_build
+            categories/_build
+            unimath/_build
+          key: agdai-${{ env.AGDA_VERSION }}-${{ github.run_id }}
           restore-keys: agdai-${{ env.AGDA_VERSION }}-
 
+      - name: Index stdlib
+        id: stdlib
+        if: steps.plan.outputs.stdlib == 'true'
+        continue-on-error: true
+        working-directory: stdlib
+        run: |
+          # non-deprecated modules, as GenerateEverything picks them
+          {
+            echo '{-# OPTIONS --rewriting --guardedness --sized-types #-}'
+            echo 'module Everything where'
+            find src -name '*.agda' -o -name '*.lagda' | LC_ALL=C sort | while read -r f; do
+              head -12 "$f" | grep -qi 'deprecated' && continue
+              m=${f#src/}; m=${m%.agda}; m=${m%.lagda}
+              echo "import ${m//\//.}"
+            done
+          } > doc/Everything.agda
+          cd doc
+          "$AGDA_INDEX" +RTS -M14G -RTS --index \
+            --index-lib=stdlib \
+            --index-build=${{ steps.plan.outputs.indexer }} \
+            --index-commit=${{ steps.plan.outputs.stdlib_sha }} \
+            --index-url=https://agda.github.io/agda-stdlib/master/ \
+            --index-source=https://github.com/agda/agda-stdlib/blob/${{ steps.plan.outputs.stdlib_sha }}/src/ \
+            --index-out=../../stdlib.ndjson \
+            Everything.agda
+
       - name: Index cubical
-        if: steps.commits.outputs.skip != 'true'
+        id: cubical
+        if: steps.plan.outputs.cubical == 'true'
+        continue-on-error: true
         working-directory: cubical
         run: |
           ./generate-everything.sh > Cubical/Everything.agda
           "$AGDA_INDEX" +RTS -M14G -RTS --index \
             --index-lib=cubical \
-            --index-commit=${{ steps.commits.outputs.cubical }} \
+            --index-build=${{ steps.plan.outputs.indexer }} \
+            --index-commit=${{ steps.plan.outputs.cubical_sha }} \
             --index-url=https://agda.github.io/cubical/ \
-            --index-source=https://github.com/agda/cubical/blob/${{ steps.commits.outputs.cubical }}/ \
-            --index-out=../cubical.json \
+            --index-source=https://github.com/agda/cubical/blob/${{ steps.plan.outputs.cubical_sha }}/ \
+            --index-out=../cubical.ndjson \
             Cubical/Everything.agda
 
-      - name: Index stdlib
-        if: steps.commits.outputs.skip != 'true'
-        working-directory: stdlib
+      - name: Index typetopology
+        id: typetopology
+        if: steps.plan.outputs.typetopology == 'true'
+        continue-on-error: true
+        working-directory: typetopology/source
         run: |
-          cabal run GenerateEverything -- --out-dir doc
-          cd doc
           "$AGDA_INDEX" +RTS -M14G -RTS --index \
-            --index-lib=stdlib \
-            --index-commit=${{ steps.commits.outputs.stdlib }} \
-            --index-url=https://agda.github.io/agda-stdlib/master/ \
-            --index-source=https://github.com/agda/agda-stdlib/blob/${{ steps.commits.outputs.stdlib }}/src/ \
-            --index-out=../../stdlib.json \
+            --index-lib=TypeTopology \
+            --index-build=${{ steps.plan.outputs.indexer }} \
+            --index-commit=${{ steps.plan.outputs.typetopology_sha }} \
+            --index-url=https://martinescardo.github.io/TypeTopology/ \
+            --index-source=https://github.com/martinescardo/TypeTopology/blob/${{ steps.plan.outputs.typetopology_sha }}/source/ \
+            --index-out=../../typetopology.ndjson \
+            AllModulesIndex.lagda
+
+      # against stdlib master, by include paths since it pins a release
+      - name: Index categories
+        id: categories
+        if: steps.plan.outputs.categories == 'true'
+        continue-on-error: true
+        working-directory: categories
+        run: |
+          make Everything.agda
+          "$AGDA_INDEX" +RTS -M14G -RTS --index --no-libraries -i . -i src -i ../stdlib/src \
+            --index-modules=Categories \
+            --index-lib=categories \
+            --index-build=${{ steps.plan.outputs.indexer }} \
+            --index-commit=${{ steps.plan.outputs.categories_sha }} \
+            --index-url=https://agda.github.io/agda-categories/ \
+            --index-source=https://github.com/agda/agda-categories/blob/${{ steps.plan.outputs.categories_sha }}/src/ \
+            --index-out=../categories.ndjson \
             Everything.agda
+
+      - name: Index unimath
+        id: unimath
+        if: steps.plan.outputs.unimath == 'true'
+        continue-on-error: true
+        working-directory: unimath
+        run: |
+          make SKIPAGDA=1 src/everything.lagda.md
+          "$AGDA_INDEX" +RTS -M14G -RTS --index \
+            --index-lib=unimath \
+            --index-build=${{ steps.plan.outputs.indexer }} \
+            --index-commit=${{ steps.plan.outputs.unimath_sha }} \
+            --index-url=https://unimath.github.io/agda-unimath/ \
+            --index-source=https://github.com/UniMath/agda-unimath/blob/${{ steps.plan.outputs.unimath_sha }}/src/ \
+            --index-out=../unimath.ndjson \
+            src/everything.lagda.md
 
       # save once agda is built
       - name: Check agda build
         id: deps
-        if: always() && steps.commits.outputs.skip != 'true'
+        if: always() && steps.plan.outputs.build != ''
         run: |
           if ls -d "$CABAL_DIR"/store/*/Agda-"$AGDA_VERSION"-* >/dev/null 2>&1; then
             echo "agda=true" >> "$GITHUB_OUTPUT"
@@ -165,33 +247,48 @@ jobs:
             ~/.cabal/script-builds
           key: ${{ steps.keys.outputs.cabal }}
 
-      - name: Save interface cache
-        if: always() && steps.commits.outputs.skip != 'true' && steps.keys.outputs.agdai
+      - name: Save interface caches
+        if: always() && steps.plan.outputs.build != ''
         uses: actions/cache/save@v6
         with:
           path: |
-            cubical/_build
             stdlib/_build
             stdlib/doc/_build
-          key: ${{ steps.keys.outputs.agdai }}-${{ github.run_id }}-${{ github.run_attempt }}
+            cubical/_build
+            typetopology/_build
+            categories/_build
+            unimath/_build
+          key: agdai-${{ env.AGDA_VERSION }}-${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Compress index
-        if: steps.commits.outputs.skip != 'true'
-        run: gzip -9 cubical.json stdlib.json
+      - name: Compress indexes
+        id: check
+        if: always() && steps.plan.outputs.build != ''
+        run: |
+          failed=""
+          for name in ${{ steps.plan.outputs.build }}; do
+            if [ -s "$name.ndjson" ]; then gzip -9 "$name.ndjson"; else failed="$failed $name"; fi
+          done
+          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
+          ls ./*.ndjson.gz >/dev/null 2>&1 || { echo "no library indexed"; exit 1; }
 
       - uses: actions/upload-artifact@v7
-        if: steps.commits.outputs.skip != 'true'
+        if: always() && steps.plan.outputs.build != ''
         with:
           name: agda-index
-          path: |
-            cubical.json.gz
-            stdlib.json.gz
-          if-no-files-found: error
+          path: '*.ndjson.gz'
+          if-no-files-found: ignore
           retention-days: 7
+
+      # after the upload, so the others still publish
+      - name: Fail on a broken library
+        if: steps.check.outputs.failed != ''
+        run: |
+          echo "failed to index: ${{ steps.check.outputs.failed }}"
+          exit 1
 
   publish:
     needs: index
-    if: needs.index.outputs.skip != 'true'
+    if: always() && needs.index.outputs.build != '' && needs.index.outputs.build != needs.index.outputs.failed
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -206,34 +303,54 @@ jobs:
 
       - name: Publish
         env:
-          STAMP: ${{ needs.index.outputs.stamp }}
-          CUBICAL: ${{ needs.index.outputs.cubical }}
-          STDLIB: ${{ needs.index.outputs.stdlib }}
+          STAMPS: ${{ needs.index.outputs.stamps }}
+          FAILED: ${{ needs.index.outputs.failed }}
         run: |
-          count() { gunzip -c "$1" | jq '.meta.count'; }
-          commit() { echo "[\`$(echo "$2" | cut -c1-7)\`](https://github.com/$1/commit/$2)"; }
-          cat > notes.md <<EOF
-          Search index of [agda/cubical](https://github.com/agda/cubical) and [agda/agda-stdlib](https://github.com/agda/agda-stdlib) for donbot's \`agda\` command.
-
-          | library | commit | definitions |
-          |---|---|---:|
-          | cubical | $(commit agda/cubical "$CUBICAL") | $(count cubical.json.gz) |
-          | stdlib | $(commit agda/agda-stdlib "$STDLIB") | $(count stdlib.json.gz) |
-
-          Agda $AGDA_VERSION · GHC $GHC_VERSION · built $(date -u +%F) by [run $GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)
-
-          <!-- stamp: $STAMP -->
-          EOF
+          old=$(gh release view "$TAG" --json body -q .body 2>/dev/null || true)
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "agda index" --notes "" --latest=false
-          gh release upload "$TAG" cubical.json.gz stdlib.json.gz --clobber
+          for f in *.ndjson.gz; do gh release upload "$TAG" "$f" --clobber; done
+          # rows and stamps of fresh libraries, the old ones for the rest
+          rows=""
+          stamps=""
+          IFS=';' read -ra all <<< "$STAMPS"
+          for stamp in "${all[@]}"; do
+            [ -n "$stamp" ] || continue
+            name=${stamp%% *}
+            sha=$(echo "$stamp" | cut -d' ' -f2)
+            if [ -f "$name.ndjson.gz" ]; then
+              count=$(gunzip -c "$name.ndjson.gz" | head -1 | jq '.meta.count')
+              rows="$rows| $name | [\`${sha:0:7}\`]($(gunzip -c "$name.ndjson.gz" | head -1 | jq -r '.meta.source' | sed 's|/blob/.*||')/commit/$sha) | $count |"$'\n'
+              stamps="$stamps<!-- stamp: $stamp -->"$'\n'
+            else
+              rows="$rows$(printf '%s\n' "$old" | grep "^| $name |" || true)"$'\n'
+              stamps="$stamps$(printf '%s\n' "$old" | grep "^<!-- stamp: $name " || true)"$'\n'
+            fi
+          done
+          {
+            echo "Search index of Agda libraries for donbot's \`agda\` command, one \`<library>.ndjson.gz\` each."
+            echo
+            echo "| library | commit | definitions |"
+            echo "|---|---|---:|"
+            printf '%s' "$rows" | grep -v '^$'
+            echo
+            echo "Agda $AGDA_VERSION · GHC $GHC_VERSION · built $(date -u +%F) by [run $GITHUB_RUN_ID]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)${FAILED:+ · failed: $FAILED}"
+            echo
+            printf '%s' "$stamps" | grep -v '^$'
+          } > notes.md
           gh release edit "$TAG" --notes-file notes.md
 
       - name: Close failure issue
+        if: needs.index.result == 'success'
         run: |
           gh issue list --state open --search "in:title \"$ISSUE\"" --json number -q '.[].number' |
             xargs -r -n1 gh issue close --comment "Fixed by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
   # notify on index build failure
+  # corpus
+  corpus:
+    needs: publish
+    uses: ./.github/workflows/agda-corpus.yml
+
   notify:
     needs: [index, publish]
     if: failure()
@@ -245,13 +362,16 @@ jobs:
       GH_REPO: ${{ github.repository }}
     steps:
       - name: Open or update failure issue
+        env:
+          FAILED: ${{ needs.index.outputs.failed }}
         run: |
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          what=${FAILED:+ ($FAILED)}
           open=$(gh issue list --state open --search "in:title \"$ISSUE\"" --json number -q '.[0].number')
           if [ -n "$open" ]; then
-            gh issue comment "$open" --body "Failed again: $run"
+            gh issue comment "$open" --body "Failed again$what: $run"
           else
-            gh issue create --title "$ISSUE" --body "The agda index build failed: $run. donbot keeps serving the last published index until a build succeeds."
+            gh issue create --title "$ISSUE" --body "The agda index build failed$what: $run. donbot keeps serving the last published index of each library until its build succeeds."
           fi
 
   # keepalive after 60 idle days

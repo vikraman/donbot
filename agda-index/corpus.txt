@@ -1,0 +1,85 @@
+# query #> names, one in the top 3; #? known miss; #! names kept out
+# run: node agda-index/corpus.ts (REDIS_URL with real indexes)
+
+- (- a) = a #> neg-involutive -Invol
+(A -> B) -> List A -> List B #> map
+(a -> b) -> Maybe a -> Maybe b #> map map-Maybe
+(H : (a : A) -> f a = g a) -> H x . cong g p = cong f p . H y #> homotopyNatural
+(H : f ~ g) -> H x . cong g p = cong f p . H y #? homotopyNatural
+[] ++ xs = xs #> unitl-++ ++-identityˡ
+0 + a = a #> zero-left-neutral +-identityˡ zero-plus-n-equals-n
+a - a = 0 #> n∸n≡0
+a * (b + c) = a * b + a * c #> ·DistR+ *-distribˡ-+
+a * 1 = a #> mult-right-id *-identityʳ
+a * b = b * a #> ·Comm ·-comm *-comm
+a + (b + c) = (a + b) + c #> +-assoc +Assoc
+a + 0 = a #> zero-right-neutral +-identityʳ n-plus-zero-equals-n
+A ~= B -> B ~= C -> A ~= C #> compEquiv _∙ₑ_ ≃-comp
+ap f (p . q) = ap f p . ap f q #> ap-∙
+cong (g . f) p = cong g (cong f p) #> cong-∘ congFunct
+cong f (p . q) = _ #> cong-∙ congFunct comp-cong-square
+cong f (p . q) = cong f p . cong f q #> cong-∙ congFunct comp-cong-square
+cong f (sym p) = sym (cong f p) #> sym-cong
+cong f refl = refl
+cong id p = p #> cong-id
+f ~ g -> ap f p . H y = H x . ap g p #> homotopies-are-natural ~-naturality
+fst (x , y) = x
+funExt _ = _ #> funExtRefl funExtHapply #! happlyFunExt
+isEquiv f -> isEquiv g -> isEquiv (g . f) #? isEquivComp compEquiv
+Iso A B -> Iso B A #> invIso
+isProp A -> isProp B -> isProp (A * B) #> isProp×
+isSet A -> isSet (List A) #? isOfHLevelList
+length (xs ++ ys) = length xs + length ys #> length-++ length++
+m <= n -> n <= m -> m = n #> ≤-antisym isAntisym≤
+map (f . g) xs = map f (map g xs) #> map-∘
+map f (xs ++ ys) = map f xs ++ map f ys #> map-++ map-++-commute
+map id xs = xs #> map-id
+n <= n + m #> m≤m+n ≤SumLeft
+p -1 -1 = p #> sym-invol ⁻¹-involutive
+p . (q . r) = (p . q) . r #> assoc ∙assoc
+p . sym p = refl #> invR rCancel
+refl . p = p #> refl-left lUnit refl-left-neutral
+reverse (reverse xs) = xs #> reverse-involutive
+subst B refl x = x #> substRefl
+suc (a + b) = a + suc b #> +-suc
+sym (p . q) = sym q . sym p #> symDistr
+sym (sym p) = p #> sym-invol symInvo
+sym p . p = refl #> invL lCancel
+transport refl x = x #> transportRefl
+x + y <= x + z #> ≤-+ˡ ≤-o+ +-monoʳ-≤
+xs ++ [] = xs #> ++-unit-r ++-identityʳ
+(Σ x ꞉ X , A x) -> X #> pr₁
+Σ x ꞉ X , A x -> X #> pr₁
+Sigma x : X , A x -> X #> pr₁
+Sigma[ x <- A ] B x -> A #> fst proj₁ pr₁
+(Pi x : X , A x) -> A x #> Π-proj
+∃[ x ∈ A ] P x
+.(m = n) -> Fin m -> Fin n #> cast
+u .fst = v .fst -> u = v #> equivEq Σ≡Prop AlgebraHom≡ CommRingHom≡ RingHom≡
+map (λ x → f (g x)) xs = map f (map g xs) #> map-∘
+(Π x ꞉ X , A x) -> A x #> Π-proj
+[ φ ↦ u , ψ ↦ v ]
+2 + n = suc (suc n)
+n + 1 = suc n #? +-comm n+1≡suc
+PathP (λ i → A) (p . q) _ -> _
+PathP (λ _ → A) x y -> PathP (λ _ → A) y x #> sym
+Path A x y -> Path A y x #> sym
+transp (λ i → A) i0 x = x #? transportRefl transpRefl
+transp (λ i → p i) i0 (transp (λ i → sym p i) i0 x) = x
+PathP (λ i → p i ≡ q i) r s -> PathP (λ i → r i ≡ s i) p q #> flipSquare
+((a , b) : Σ A B) -> B a #> snd proj₂ pr₂
+((x , p) : Σ[ x ∈ A ] P x) -> A #> fst proj₁ pr₁
+(if_then x else y) true = x
+Σ[ x ∈ A ] P x -> A #> fst proj₁ pr₁
+((x : A) -> P x) -> (x : A) -> P x #? _$_ #! obj[_] canonical-map have_so_ Ķ seq
+(Σ[ x ∈ A ] (B x)) = (Σ[ y ∈ A ] (B y))
+isProp A -> isSet A #> isProp→isSet #! isSetFiber∥∥₂
+Square p q r s -> Square r s p q #> flipSquare
+Square p q r s -> Square p r q s #! elim₁ flipSquare
+Square p q p q #> compPath→Square #! connectionBoth flipSquare elimFunT²'
+x <- xs -> x <- xs ++ ys #> ∈-++⁺ˡ
+sym (p . q) = _ . _ #> symDistr
+sym (cong f p) = _ #> sym-cong
+x /= y -> y /= x #> ≢-sym
+isProp B -> (A -> B) -> ||A|| -> B #> rec ∥∥-rec
+Iso A B -> A = B #> isoToPath

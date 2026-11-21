@@ -10,4 +10,4 @@ DEPS=$(sed -n '/^depends:/,/^[a-z-]*:/p' "$INPLACE"/Agda-*-inplace.conf | grep -
 mkdir -p build
 $GHC -O1 -package-env - -hide-all-packages -package-db "$STORE/package.db" -package-db "$INPLACE" \
   -package base -package-id Agda-2.9.0-inplace $(for d in $DEPS; do printf ' -package-id %s' "$d"; done) \
-  -outputdir build -o build/agda-index AgdaIndex.hs
+  -rtsopts "-with-rtsopts=-A64m" -outputdir build -o build/agda-index AgdaIndex.hs

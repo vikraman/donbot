@@ -5,6 +5,8 @@
     "moduleResolution": "nodenext",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     "allowJs": true,
     "checkJs": false,
@@ -12,5 +14,5 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["scripts/**/*", "tests/**/*", "types/**/*", "contrib/**/*"]
+  "include": ["scripts/**/*", "agda-index/*.ts", "tests/**/*", "types/**/*", "contrib/**/*"]
 }

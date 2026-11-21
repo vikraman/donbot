@@ -1,0 +1,70 @@
+name: agda corpus
+
+# corpus against published indexes
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  corpus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      REDIS_URL: redis://localhost:6379
+      AGDA_REDIS_PREFIX: corpus
+      # slower runners
+      AGDA_SEARCH_MS: '1000'
+      # corpus libraries
+      LIBRARIES: cubical stdlib typetopology
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download indexes
+        id: indexes
+        run: |
+          missing=""
+          for name in $LIBRARIES; do
+            gh release download agda-index -p "$name.ndjson.gz" -D indexes || missing="$missing $name"
+          done
+          echo "missing=${missing# }" >> "$GITHUB_OUTPUT"
+
+      # before first publish
+      - name: Skip without indexes
+        if: steps.indexes.outputs.missing != ''
+        run: echo "::notice::no published index for ${{ steps.indexes.outputs.missing }}, corpus skipped"
+
+      - uses: actions/setup-node@v7
+        if: steps.indexes.outputs.missing == ''
+        with:
+          node-version-file: .node-version
+
+      - name: Install dependencies
+        if: steps.indexes.outputs.missing == ''
+        run: npm ci
+
+      - name: Run corpus
+        if: steps.indexes.outputs.missing == ''
+        run: |
+          files=""
+          for name in $LIBRARIES; do files="$files indexes/$name.ndjson.gz"; done
+          status=0
+          # shellcheck disable=SC2086
+          node agda-index/corpus.ts --load $files > corpus.out || status=$?
+          cat corpus.out
+          # summary
+          {
+            echo '```'
+            grep -v '^[·✓]' corpus.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
