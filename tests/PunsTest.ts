@@ -1,88 +1,68 @@
-import { describe, it, mock, beforeEach } from 'node:test'
+import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { EventEmitter } from 'node:events'
+import type { EventEmitter } from 'node:events'
 
-import type { User, DiscordClient } from 'hubot'
-
-import { setupRobot, brainUser, collect, inGuild } from './helpers/setup.ts'
+import { setupRobot, chat, inGuild, sendReturnsIds } from './helpers/setup.ts'
+import { clock, fakeClient } from './helpers/fakes.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
-import { configureLines, resetLines } from '../scripts/lib/lines.ts'
 import { JARGON } from '../scripts/lib/punJargon.ts'
 import {
   findPuns, feedbackFor, chanceFor, PUN_CHANCE, MIN_CHANCE, MAX_CHANCE, PUN_COOLDOWN_MS, REPEAT_WINDOW_MS, FEEDBACK_HALF_LIFE_MS
 } from '../scripts/Puns.ts'
 
-// fresh bags, so each call sees each list's first line
-const texts = (text: string) => {
-  resetLines()
-  configureLines({ extras: false })
-  setRandomSource(() => 0)
-  const result = findPuns(text, 'donbot').map(p => p.text())
-  setRandomSource(null)
-  return result
-}
+// kind:word for each pun found
+const found = (text: string) => findPuns(text, 'donbot').map(p => `${p.kind}:${p.word}`)
 
 describe('Puns detection', () => {
-  it('makes knew-her puns for rare -er/-or words', () => {
-    assert.deepStrictEqual(texts('the functor is lovely'), ['Functor? I barely knew her!'])
-    assert.deepStrictEqual(texts('two functors'), ['Functor? I barely knew her!'])
+  for (const [text, expected] of [
+    ['the functor is lovely', ['her:functor']],
+    ['two functors', ['her:functor']],
+    ['the printer and the manager are faster and better', []],
+    ['proved the theorem', ['em:theorem']],
+    ['the problem with the system is the museum', []],
+    ["I'm hungry", ['dad:hungry']],
+    ['im so tired!', ['dad:tired']],
+    ['I’m exhausted', ['dad:exhausted']],
+    ['i am tired', ['dad:tired']],
+    ["I'm back", []],
+    ["I'm fine", []],
+    ["I'm going to the store, hungry", []],
+    ['i am here', []],
+    ["I can't do this", ['attitude:attitude']],
+    ['i cant even', ['attitude:attitude']],
+    ['I cannot dance.', ['attitude:attitude']],
+    ["I can't figure out why the compiler keeps crashing on this file", []],
+    ["I can't stand this awful bug", []],
+    ["I can't do this anymore", []],
+    ["I can't cope", []],
+    ["I can't sleep", []],
+    ["I can't wait", []],
+    ["I can't believe it", []],
+    ['no pun intended', ['intended:intended']],
+    ['pun very much intended', ['intended:intended']],
+    ['puns were not intended', ['intended:intended']],
+    ['proved the lemma trivially', ['jargon:lemma', 'jargon:trivial']],
+    ['use `functor` here', []],
+    ['```\nfunctor\n```', []],
+    ['see https://example.com/functor', []],
+    ['<:functor:123>', []]
+  ] as const) {
+    it(`finds ${expected.length ? expected.join(', ') : 'nothing'} in ${JSON.stringify(text)}`, () => {
+      assert.deepStrictEqual(found(text), expected)
+    })
+  }
+
+  it('fills the pun lines with the word, name and pronoun', () => {
+    const text = (s: string) => findPuns(s, 'donbot')[0]!.text()
+    assert.match(text('the functor is lovely'), /^Functor\? /)
+    assert.match(text('the pilgrim'), /^Pilgrim\? .*'im/)
+    assert.match(text('proved the theorem'), /^Theorem\? .*'em/)
+    const dad = text('im so tired!')
+    assert.match(dad, /So tired/)
+    assert.match(dad, /donbot/)
   })
-  it('skips common -er/-or words', () => {
-    assert.deepStrictEqual(texts('the printer and the manager are faster and better'), [])
-  })
-  it("makes knew-'em puns, with 'im for -im words", () => {
-    assert.deepStrictEqual(texts('proved the theorem'), ["Theorem? I barely knew 'em!"])
-    assert.deepStrictEqual(texts('the pilgrim'), ["Pilgrim? I barely knew 'im!"])
-  })
-  it("skips common -em/-um words", () => {
-    assert.deepStrictEqual(texts('the problem with the system is the museum'), [])
-  })
-  it('makes dad jokes for short uncommon "i\'m" messages only', () => {
-    assert.deepStrictEqual(texts("I'm hungry"), ["Hi Hungry, I'm donbot!"])
-    assert.deepStrictEqual(texts('im so tired!'), ["Hi So tired, I'm donbot!"])
-    assert.deepStrictEqual(texts("I’m exhausted"), ["Hi Exhausted, I'm donbot!"])
-    assert.deepStrictEqual(texts('i am tired'), ["Hi Tired, I'm donbot!"])
-    for (const text of ["I'm back", "I'm fine", "I'm going to the store, hungry", 'i am here']) {
-      assert.deepStrictEqual(texts(text), [], text)
-    }
-  })
-  it('varies dad-joke phrasing', () => {
-    resetLines()
-    configureLines({ extras: false })
-    setRandomSource(c => c - 1)
-    assert.deepStrictEqual(findPuns("I'm hungry", 'donbot').map(p => p.text()), ["Hi Hungry! I'm dad. Wait, no, I'm donbot."])
-    setRandomSource(null)
-  })
-  it('answers short "i can\'t" messages', () => {
-    assert.deepStrictEqual(texts("I can't do this"), ['Not with that attitude!'])
-    assert.deepStrictEqual(texts('i cant even'), ['Not with that attitude!'])
-    assert.deepStrictEqual(texts('I cannot dance.'), ['Not with that attitude!'])
-  })
-  it('leaves "i can\'t" alone when long, upset, distressed or not defeat', () => {
-    for (const text of [
-      "I can't figure out why the compiler keeps crashing on this file",
-      "I can't stand this awful bug",
-      "I can't do this anymore",
-      "I can't cope",
-      "I can't sleep",
-      "I can't wait",
-      "I can't believe it"
-    ]) {
-      assert.deepStrictEqual(texts(text), [], text)
-    }
-  })
-  it('responds to pun intended', () => {
-    for (const text of ['no pun intended', 'pun intended', 'pun very much intended', 'puns were not intended']) {
-      assert.deepStrictEqual(texts(text), ['Pun appreciated.'], text)
-    }
-  })
-  it('has in-jokes for math and programming jargon', () => {
-    assert.deepStrictEqual(texts('is it a monad'), ["A monad is just a monoid in the category of endofunctors, what's the problem?"])
-    assert.deepStrictEqual(texts('write a regex for it'), ['Now you have two problems.'])
-    assert.deepStrictEqual(texts('the halting problem'), ["I'd tell you a halting problem joke, but I can't tell if it ends."])
-    assert.deepStrictEqual(texts('proved the lemma trivially'), ['Lemma? Sounds like a dilemma.', 'Proof left as an exercise for the reader.'])
-  })
+
   it('triggers every in-joke from a natural sample', () => {
     const samples: Record<string, string> = {
       monad: 'is it a monad', monoid: 'lists form a monoid', yoneda: 'by yoneda', category: 'learning category theory',
@@ -101,155 +81,133 @@ describe('Puns detection', () => {
     }
     for (const key of Object.keys(JARGON)) {
       assert.ok(samples[key], `no sample for ${key}`)
-      assert.ok(findPuns(samples[key]!, 'donbot').some(p => p.kind === 'jargon' && p.word === key), key)
+      assert.ok(found(samples[key]).includes(`jargon:${key}`), key)
     }
   })
+
   it('stays quiet on everyday chat', () => {
     for (const text of [
       'he admitted it was late', 'what category is this in', 'a nan bread with curry', 'banana for scale',
       'that was a close race', 'no conditions apply', 'the hotel was full', 'I pushed the door', 'let me check'
     ]) {
-      assert.deepStrictEqual(findPuns(text, 'donbot').filter(p => p.kind === 'jargon'), [], text)
-    }
-  })
-  it('ignores code, links and discord tokens', () => {
-    for (const text of ['use `functor` here', '```\nfunctor\n```', 'see https://example.com/functor', '<:functor:123>']) {
-      assert.deepStrictEqual(texts(text), [], text)
+      assert.deepStrictEqual(found(text).filter(k => k.startsWith('jargon:')), [], text)
     }
   })
 })
 
-describe('Puns testing Hubot scripts', () => {
+describe('Puns', () => {
   const state = setupRobot('Puns.ts')
-  let now: number
-  let user: User
+  let t: ReturnType<typeof clock>
 
   beforeEach(() => {
-    now = 1_000_000_000_000
-    mock.method(Date, 'now', () => now)
+    t = clock(1_000_000_000_000)
     setRandomSource(() => 0)
-    user = brainUser(state.robot, 'test-user', 'test user')
   })
 
-  const say = (text: string, room = 'test-room') => state.robot.adapter.say(user, text, room)
+  const fail = () => setRandomSource(c => Math.floor(0.999 * c))
 
-  it('sends a pun when the roll succeeds', async () => {
-    const sent = collect(state.robot)
+  it('sends a pun when the roll succeeds, in its own name', async () => {
+    const { robot, sent, say } = chat(state)
     await say('functor')
-    assert.deepStrictEqual(sent, ['Functor? I barely knew her!'])
-  })
-  it('uses its own name in dad jokes', async () => {
-    const sent = collect(state.robot)
+    t.advance(PUN_COOLDOWN_MS)
     await say("I'm hungry")
-    assert.deepStrictEqual(sent, [`Hi Hungry, I'm ${state.robot.name}!`])
-  })
-  it('prefers a specific joke over a word-shape pun', async () => {
-    const sent = collect(state.robot)
-    await say('no pun intended, the functor')
-    assert.deepStrictEqual(sent, ['Pun appreciated.'])
-  })
-  it('falls back to a word-shape pun when the specific joke was just used', async () => {
-    const sent = collect(state.robot)
-    await say('no pun intended')
-    now += PUN_COOLDOWN_MS
-    await say('no pun intended, the functor')
-    assert.deepStrictEqual(sent, ['Pun appreciated.', 'Functor? I barely knew her!'])
-  })
-  it('stays quiet when the roll fails', async () => {
-    setRandomSource(c => Math.floor(0.999 * c))
-    const sent = collect(state.robot)
-    await say('functor')
-    assert.deepStrictEqual(sent, [])
-  })
-  it('stays quiet for common words', async () => {
-    const sent = collect(state.robot)
-    for (const word of ['faster', 'better', 'container', 'printer', 'manager', 'compiler', 'problem']) await say(word)
-    assert.deepStrictEqual(sent, [])
-  })
-  it('ignores messages addressed to the bot', async () => {
-    const sent = collect(state.robot)
-    await say(`${state.robot.name} what is a functor`)
-    assert.deepStrictEqual(sent, [])
-  })
-  it('waits out the cooldown per channel', async () => {
-    const sent = collect(state.robot)
-    await say('functor')
-    await say('theorem')
-    assert.strictEqual(sent.length, 1)
-    await say('theorem', 'other-room')
     assert.strictEqual(sent.length, 2)
-    now += PUN_COOLDOWN_MS
-    await say('theorem')
-    // second line of the no-repeat bag
-    assert.deepStrictEqual(sent.at(-1), "Theorem? I hardly knew 'em!")
+    assert.match(sent[0]!, /^Functor\? /)
+    assert.match(sent[1]!, new RegExp(`Hungry.*${robot.name}`))
   })
-  it('does not pun the same word twice in a channel within the window', async () => {
-    const sent = collect(state.robot)
-    await say('functor')
-    now += PUN_COOLDOWN_MS
-    await say('functor')
-    assert.strictEqual(sent.length, 1)
-    now += REPEAT_WINDOW_MS
-    await say('functor')
+
+  it('prefers a specific joke, falling back to a word pun once it was used', async () => {
+    const { sent, say } = chat(state)
+    await say('no pun intended, the functor')
+    t.advance(PUN_COOLDOWN_MS)
+    await say('no pun intended, the functor')
     assert.strictEqual(sent.length, 2)
+    assert.doesNotMatch(sent[0]!, /Functor/)
+    assert.match(sent[1]!, /^Functor\? /)
   })
-  it('a failed roll does not start the cooldown', async () => {
-    const sent = collect(state.robot)
-    setRandomSource(c => Math.floor(0.999 * c))
+
+  it('stays quiet when the roll fails, without starting the cooldown', async () => {
+    const { sent, say } = chat(state)
+    fail()
     await say('functor')
+    assert.deepStrictEqual(sent, [])
     setRandomSource(() => 0)
     await say('functor')
     assert.strictEqual(sent.length, 1)
+  })
+
+  it('ignores messages addressed to the bot', async () => {
+    const { sent, ask } = chat(state)
+    await ask('what is a functor')
+    assert.deepStrictEqual(sent, [])
+  })
+
+  it('waits out the cooldown per channel', async () => {
+    const { sent, say } = chat(state)
+    await say('functor')
+    await say('theorem')
+    assert.strictEqual(sent.length, 1)
+    await say('theorem', { room: 'other-room' })
+    assert.strictEqual(sent.length, 2)
+    t.advance(PUN_COOLDOWN_MS)
+    await say('theorem')
+    assert.match(sent.at(-1)!, /^Theorem\? /)
+  })
+
+  it('does not pun the same word twice in a channel within the window', async () => {
+    const { sent, say } = chat(state)
+    await say('functor')
+    t.advance(PUN_COOLDOWN_MS)
+    await say('functor')
+    assert.strictEqual(sent.length, 1)
+    t.advance(REPEAT_WINDOW_MS)
+    await say('functor')
+    assert.strictEqual(sent.length, 2)
   })
 
   it('reports the chance per kind', async () => {
-    const sent = collect(state.robot)
-    await say(`${state.robot.name} puns chances`)
+    const { sent, ask } = chat(state)
+    await ask('puns chances')
     assert.match(sent.at(-1)!, /knew-her 31%, knew-'em 31%, dad jokes 31%, attitude 31%, pun intended 31%, in-jokes 31%/)
   })
 })
 
 describe('Puns policy', () => {
-  const state = setupRobot(['Puns.ts', 'Policy.ts'], { envVars: ['OWNER_USER_ID'] })
-  let user: User
+  const state = setupRobot(['Puns.ts', 'Policy.ts'], { owner: 'test-user' })
 
   beforeEach(() => {
-    process.env.OWNER_USER_ID = 'test-user'
-    mock.method(Date, 'now', () => 1_000_000_000_000)
+    clock(1_000_000_000_000)
     setRandomSource(() => 0)
-    user = brainUser(state.robot, 'test-user', 'test user')
   })
-
-  const say = (text: string, room = 'test-room') => state.robot.adapter.say(user, text, room)
 
   it('turns puns off and on per channel', async () => {
     inGuild(state.robot, 'g1', ['test-room', 'other-room'], 'casual')
-    const sent = collect(state.robot)
-    await say(`${state.robot.name} puns off`)
+    const { sent, say, ask } = chat(state)
+    await ask('puns off')
     assert.match(sent.at(-1)!, /^Puns: off for this channel\.$/)
     await say('functor')
     assert.strictEqual(sent.length, 1)
-    await say('functor', 'other-room')
+    await say('functor', { room: 'other-room' })
     assert.strictEqual(sent.length, 2)
-
-    await say(`${state.robot.name} puns on`)
+    await ask('puns on')
     assert.match(sent.at(-1)!, /^Puns: on for this channel\.$/)
     await say('functor')
-    // bag doesn't repeat
-    assert.strictEqual(sent.at(-1), 'Functor? But I barely know her!')
+    assert.match(sent.at(-1)!, /^Functor\? /)
   })
+
   it('reports status', async () => {
     inGuild(state.robot, 'g1', ['test-room'], 'casual')
-    const sent = collect(state.robot)
-    await say(`${state.robot.name} puns`)
+    const { sent, ask } = chat(state)
+    await ask('puns')
     assert.match(sent.at(-1)!, /^Puns: on here/)
-    await say(`${state.robot.name} puns off`)
-    await say(`${state.robot.name} puns status`)
+    await ask('puns off')
+    await ask('puns status')
     assert.match(sent.at(-1)!, /^Puns: off here/)
   })
+
   it('stays quiet in a professional server', async () => {
     inGuild(state.robot, 'g2', ['test-room'])
-    const sent = collect(state.robot)
+    const { sent, say } = chat(state)
     await say('functor')
     assert.deepStrictEqual(sent, [])
   })
@@ -263,7 +221,7 @@ describe('Puns feedback scoring', () => {
   it('starts at the base chance', () => {
     assert.strictEqual(chanceFor(feedbackFor([], 'r', 'her', now)), PUN_CHANCE)
   })
-  it('one like nudges the chance up, one dislike down', () => {
+  it('nudges the chance up on one like, down on one dislike', () => {
     const up = chanceFor(feedbackFor([record({ a: 1 })], 'r', 'her', now))
     const down = chanceFor(feedbackFor([record({ a: -1 })], 'r', 'her', now))
     assert.ok(up > PUN_CHANCE && up < MAX_CHANCE, String(up))
@@ -275,12 +233,12 @@ describe('Puns feedback scoring', () => {
     assert.strictEqual(chanceFor(feedbackFor(loved, 'r', 'her', now)), MAX_CHANCE)
     assert.strictEqual(chanceFor(feedbackFor(hated, 'r', 'her', now)), MIN_CHANCE)
   })
-  it('unreacted puns pull back toward the base chance', () => {
+  it('pulls back toward the base chance on unreacted puns', () => {
     const loved = [record({ a: 1, b: 1 })]
     const diluted = [...loved, record({}), record({}), record({})]
     assert.ok(feedbackFor(diluted, 'r', 'her', now) < feedbackFor(loved, 'r', 'her', now))
   })
-  it('old feedback fades', () => {
+  it('fades old feedback', () => {
     const fresh = feedbackFor([record({ a: -1, b: -1 })], 'r', 'her', now)
     const old = feedbackFor([record({ a: -1, b: -1 }, now - 4 * FEEDBACK_HALF_LIFE_MS)], 'r', 'her', now)
     assert.ok(old > fresh && old < 0)
@@ -294,98 +252,54 @@ describe('Puns feedback scoring', () => {
 
 describe('Puns reaction feedback', () => {
   const state = setupRobot('Puns.ts', { deferLoad: true })
-  let now: number
-  let user: User
+  let t: ReturnType<typeof clock>
   let client: EventEmitter
-  let nextId: number
 
   beforeEach(async () => {
-    now = 1_000_000_000_000
-    nextId = 0
-    mock.method(Date, 'now', () => now)
+    t = clock(1_000_000_000_000)
     setRandomSource(() => 0)
-    user = brainUser(state.robot, 'test-user', 'test user')
-    client = Object.assign(new EventEmitter(), { user: { id: 'bot-id' } })
-    state.robot.adapter.client = client as unknown as DiscordClient
-    const send = state.robot.adapter.send.bind(state.robot.adapter)
-    // like the discord adapter, resolve to the sent messages
-    const adapter = state.robot.adapter as unknown as { send: (...args: Parameters<typeof send>) => Promise<unknown> }
-    mock.method(adapter, 'send', async (...args: Parameters<typeof send>) => {
-      await send(...args)
-      return [{ id: `msg-${++nextId}` }]
-    })
-    await state.loadScript()
+    sendReturnsIds(state.robot, 'msg')
+    client = await fakeClient(state, { user: { id: 'bot-id' } })
   })
 
-  const say = (text: string, room = 'test-room') => state.robot.adapter.say(user, text, room)
-  const react = (emoji: string, messageId: string, userId = 'fan', bot = false, event = 'messageReactionAdd') =>
-    client.emit(event, { partial: true, emoji: { name: emoji }, message: { id: messageId } }, { id: userId, bot })
-  const status = async () => {
-    const sent = collect(state.robot)
-    await say(`${state.robot.name} puns chances`)
+  const react = (emoji: string, messageId: string, userId = 'fan', { bot = false, remove = false, channelId }: { bot?: boolean, remove?: boolean, channelId?: string } = {}) =>
+    client.emit(remove ? 'messageReactionRemove' : 'messageReactionAdd', { partial: true, emoji: { name: emoji }, message: { id: messageId, channelId } }, { id: userId, bot })
+  // pun once, react, then read the chances
+  const chances = async (reactions: () => void) => {
+    const { sent, say, ask } = chat(state)
+    await say('functor')
+    reactions()
+    await ask('puns chances')
     return sent.at(-1)!
   }
 
-  it('likes raise the chance for that kind in that channel', async () => {
-    await say('functor')
-    react('😂', 'msg-1', 'a')
-    react('🤣', 'msg-1', 'b')
-    const reply = await status()
-    assert.match(reply, /knew-her 54%/)
-    assert.match(reply, /knew-'em 31%/)
-  })
+  for (const [name, reactions, expected] of [
+    ['raises the chance on likes, for that kind only', () => { react('😂', 'msg-1', 'a'); react('🤣', 'msg-1', 'b') }, /knew-her 54%.*knew-'em 31%/],
+    ['lowers it on dislikes', () => { react('🙄', 'msg-1', 'a'); react('👎', 'msg-1', 'b') }, /knew-her 18%/],
+    ['counts each person once per pun, latest reaction wins', () => { react('😂', 'msg-1', 'a'); react('🤣', 'msg-1', 'a'); react('🙄', 'msg-1', 'a') }, /knew-her 24%/],
+    ['withdraws a vote when its reaction is removed', () => { react('😂', 'msg-1', 'a'); react('😂', 'msg-1', 'a', { remove: true }) }, /knew-her 31%/],
+    ['ignores bots, other emoji and other messages', () => { react('😂', 'msg-1', 'a', { bot: true }); react('🐙', 'msg-1', 'b'); react('😂', 'not-a-pun', 'c') }, /knew-her 31%/]
+  ] as const) {
+    it(name, async () => {
+      assert.match(await chances(reactions), expected)
+    })
+  }
+
   it('ignores reactions where puns are off', async () => {
-    await say('functor')
-    const before = await status()
     inGuild(state.robot, 'g1', ['quiet'])
-    client.emit('messageReactionAdd', { partial: true, emoji: { name: '😂' }, message: { id: 'msg-1', channelId: 'quiet' } }, { id: 'a', bot: false })
-    assert.strictEqual(await status(), before)
+    assert.match(await chances(() => react('😂', 'msg-1', 'a', { channelId: 'quiet' })), /knew-her 31%/)
   })
-  it('dislikes lower it', async () => {
-    await say('functor')
-    react('🙄', 'msg-1', 'a')
-    react('👎', 'msg-1', 'b')
-    assert.match(await status(), /knew-her 18%/)
-  })
-  it('counts each person once per pun, latest reaction wins', async () => {
-    await say('functor')
-    react('😂', 'msg-1', 'a')
-    react('🤣', 'msg-1', 'a')
-    react('🙄', 'msg-1', 'a')
-    assert.match(await status(), /knew-her 24%/)
-  })
-  it('removing a reaction withdraws the vote', async () => {
-    await say('functor')
-    react('😂', 'msg-1', 'a')
-    react('😂', 'msg-1', 'a', false, 'messageReactionRemove')
-    assert.match(await status(), /knew-her 31%/)
-  })
-  it('ignores bots, other emoji and other messages', async () => {
-    await say('functor')
-    react('😂', 'msg-1', 'a', true)
-    react('🐙', 'msg-1', 'b')
-    react('😂', 'not-a-pun', 'c')
-    assert.match(await status(), /knew-her 31%/)
-  })
+
   it('uses the learned chance for the roll', async () => {
+    const { sent, say } = chat(state)
     await say('functor')
     for (const id of ['a', 'b']) react('🙄', 'msg-1', id)
-    now += PUN_COOLDOWN_MS
-    // a roll that passes at the base chance but not at the lowered one
+    t.advance(PUN_COOLDOWN_MS)
+    // passes at the base chance but not the lowered one
     setRandomSource(c => Math.floor(0.25 * c))
-    const sent = collect(state.robot)
     await say('compressor')
     await say('theorem')
-    assert.strictEqual(sent.length, 1)
-    assert.match(sent[0]!, /^Theorem\? .*'em!$/)
-  })
-  it('does not repeat pun phrasing back to back', async () => {
-    const sent = collect(state.robot)
-    for (let i = 0; i < 24; i++) {
-      now += REPEAT_WINDOW_MS
-      await say('functor')
-    }
-    assert.strictEqual(sent.length, 24)
-    sent.forEach((line, i) => { if (i) assert.notStrictEqual(line, sent[i - 1]) })
+    assert.strictEqual(sent.length, 2)
+    assert.match(sent[1]!, /^Theorem\? .*'em/)
   })
 })

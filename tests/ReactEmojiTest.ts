@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import type { User } from 'hubot'
 
 import { setupRobot, brainUser, collect, inGuild } from './helpers/setup.ts'
-import type { TestRobot } from './helpers/setup.ts'
+import { clock, settle } from './helpers/fakes.ts'
 
 import { setRandomSource } from '../scripts/lib/random.ts'
 import { EMOJI_VOCAB } from '../scripts/lib/emojiVocab.ts'
@@ -23,9 +23,6 @@ const NEUTRAL = 'just chatting about the plan for later'
 
 const sentimentIn = (reacted: string[], mood: 'positive' | 'negative') =>
   reacted.filter(e => SENTIMENT_EMOJI[mood].includes(e))
-
-// lets the async timer callback finish
-const flush = () => new Promise(resolve => setImmediate(resolve))
 
 describe('ReactEmoji scoring', () => {
   it('scores exact rare names', () => {
@@ -72,79 +69,70 @@ describe('ReactEmoji emoji data', () => {
   })
 })
 
-describe('ReactEmoji testing Hubot scripts', () => {
-  const state = setupRobot(['ReactEmoji.ts', 'Policy.ts'], { envVars: ['OWNER_USER_ID'] })
-  let now: number
+describe('ReactEmoji', () => {
+  const state = setupRobot(['ReactEmoji.ts', 'Policy.ts'], { owner: 'toggler' })
+  let t: ReturnType<typeof clock>
 
   beforeEach(() => {
-    now = 1_000_000_000_000
-    mock.method(Date, 'now', () => now)
+    t = clock(1_000_000_000_000)
     mock.timers.enable({ apis: ['setTimeout'] })
     setRandomSource(() => 0)
   })
 
-  const fakeUser = (robot: TestRobot, id = 'test-user', name = 'test user'): FakeMessage => {
+  const fakeUser = (id = 'test-user', name = 'test user'): FakeMessage => {
     const fake = { reacted: [] as string[], cache: new Map<string, unknown>() } as FakeMessage
-    fake.user = brainUser(robot, id, name, {
+    fake.user = brainUser(state.robot, id, name, {
       message: { react: async (emoji: string) => { fake.reacted.push(emoji) }, reactions: { cache: fake.cache } }
     })
     return fake
   }
 
-  const say = async (robot: TestRobot, fake: FakeMessage, text: string, room = 'test-room') => {
-    await robot.adapter.say(fake.user, text, room)
-  }
+  const say = (fake: FakeMessage, text: string, room = 'test-room') => state.robot.adapter.say(fake.user, text, room)
 
-  const settle = async () => {
+  // past the react delay
+  const react = async () => {
     mock.timers.tick(REACT_DELAY_MS)
-    await flush()
+    await settle()
   }
 
   it('reacts with one vocabulary emoji, only after the delay', async () => {
-    const fake = fakeUser(state.robot)
-    await say(state.robot, fake, 'saw an octopus today')
+    const fake = fakeUser()
+    await say(fake, 'saw an octopus today')
     assert.deepStrictEqual(fake.reacted, [])
-    await settle()
+    await react()
     assert.deepStrictEqual(fake.reacted, ['🐙'])
   })
-  it('does not react to common words', async () => {
-    const fake = fakeUser(state.robot)
-    await say(state.robot, fake, 'want cheese and toast for breakfast')
-    await say(state.robot, fake, 'great work team')
-    await settle()
-    assert.deepStrictEqual(fake.reacted, [])
-  })
-  it('does not react to upbeat text without enough room history', async () => {
-    const fake = fakeUser(state.robot)
-    await say(state.robot, fake, 'love this, great work team, amazing!')
-    await settle()
-    assert.deepStrictEqual(fake.reacted, [])
-  })
+  for (const [name, text] of [
+    ['common words', 'want cheese and toast for breakfast'],
+    ['upbeat text without room history', 'love this, great work team, amazing!'],
+    ['messages addressed to the bot', 'Dumbotheelephant tell me about the octopus']
+  ]) {
+    it(`skips ${name}`, async () => {
+      const fake = fakeUser()
+      await say(fake, text!)
+      await react()
+      assert.deepStrictEqual(fake.reacted, [])
+    })
+  }
   it('does not repeat an emoji in a room within the window', async () => {
-    const fake = fakeUser(state.robot)
-    await say(state.robot, fake, 'saw an octopus today')
-    await say(state.robot, fake, 'the octopus was huge')
-    await settle()
+    const fake = fakeUser()
+    await say(fake, 'saw an octopus today')
+    await say(fake, 'the octopus was huge')
+    await react()
     assert.deepStrictEqual(fake.reacted, ['🐙'])
-    await say(state.robot, fake, 'another octopus', 'other-room')
-    await settle()
+    await say(fake, 'another octopus', 'other-room')
+    await react()
     assert.deepStrictEqual(fake.reacted, ['🐙', '🐙'])
-    now += REPEAT_WINDOW_MS
-    await say(state.robot, fake, 'octopus again')
-    await settle()
+    t.advance(REPEAT_WINDOW_MS)
+    await say(fake, 'octopus again')
+    await react()
     assert.deepStrictEqual(fake.reacted, ['🐙', '🐙', '🐙'])
   })
   it('skips messages someone already reacted to', async () => {
-    const fake = fakeUser(state.robot)
-    await say(state.robot, fake, 'saw an octopus today')
+    const fake = fakeUser()
+    await say(fake, 'saw an octopus today')
     fake.cache.set('👀', {})
-    await settle()
-    assert.deepStrictEqual(fake.reacted, [])
-  })
-  it('skips messages addressed to the bot', async () => {
-    const fake = fakeUser(state.robot)
-    await say(state.robot, fake, `${state.robot.name} tell me about the octopus`)
-    await settle()
+    await react()
     assert.deepStrictEqual(fake.reacted, [])
   })
   it('does not throw without a react method or when react rejects', async () => {
@@ -154,57 +142,57 @@ describe('ReactEmoji testing Hubot scripts', () => {
       message: { react: async () => { throw new Error('unknown message') }, reactions: { cache: new Map() } }
     })
     await state.robot.adapter.say(failing, 'saw an octopus today', 'test-room')
-    await assert.doesNotReject(settle())
+    await assert.doesNotReject(react())
   })
 
   describe('conversation tone', () => {
     it('reacts once when the room turns positive, not on every upbeat message', async () => {
-      const fake = fakeUser(state.robot)
-      for (let i = 0; i < 4; i++) await say(state.robot, fake, POSITIVE)
-      await settle()
+      const fake = fakeUser()
+      for (let i = 0; i < 4; i++) await say(fake, POSITIVE)
+      await react()
       assert.deepStrictEqual(fake.reacted, [])
-      await say(state.robot, fake, POSITIVE)
-      await settle()
+      await say(fake, POSITIVE)
+      await react()
       assert.strictEqual(sentimentIn(fake.reacted, 'positive').length, 1)
-      for (let i = 0; i < 5; i++) await say(state.robot, fake, POSITIVE)
-      await settle()
+      for (let i = 0; i < 5; i++) await say(fake, POSITIVE)
+      await react()
       assert.strictEqual(fake.reacted.length, 1)
     })
     it('reacts again after the room settles back to neutral', async () => {
-      const fake = fakeUser(state.robot)
-      for (let i = 0; i < 5; i++) await say(state.robot, fake, POSITIVE)
-      for (let i = 0; i < 20; i++) await say(state.robot, fake, NEUTRAL)
-      for (let i = 0; i < 5; i++) await say(state.robot, fake, POSITIVE)
-      await settle()
+      const fake = fakeUser()
+      for (let i = 0; i < 5; i++) await say(fake, POSITIVE)
+      for (let i = 0; i < 20; i++) await say(fake, NEUTRAL)
+      for (let i = 0; i < 5; i++) await say(fake, POSITIVE)
+      await react()
       assert.strictEqual(sentimentIn(fake.reacted, 'positive').length, 2)
     })
     it('reacts once when the room turns negative', async () => {
-      const fake = fakeUser(state.robot)
-      for (let i = 0; i < 6; i++) await say(state.robot, fake, NEGATIVE)
-      await settle()
+      const fake = fakeUser()
+      for (let i = 0; i < 6; i++) await say(fake, NEGATIVE)
+      await react()
       assert.strictEqual(sentimentIn(fake.reacted, 'negative').length, 1)
       assert.strictEqual(fake.reacted.length, 1)
     })
     it('ignores a single negative outlier in a positive room', async () => {
-      const fake = fakeUser(state.robot)
-      for (let i = 0; i < 6; i++) await say(state.robot, fake, POSITIVE)
-      await say(state.robot, fake, NEGATIVE)
-      await settle()
+      const fake = fakeUser()
+      for (let i = 0; i < 6; i++) await say(fake, POSITIVE)
+      await say(fake, NEGATIVE)
+      await react()
       assert.deepStrictEqual(sentimentIn(fake.reacted, 'negative'), [])
     })
     it('forgets messages older than the window', async () => {
-      const fake = fakeUser(state.robot)
-      for (let i = 0; i < 4; i++) await say(state.robot, fake, POSITIVE)
-      now += 31 * 60 * 1000
-      await say(state.robot, fake, POSITIVE)
-      await settle()
+      const fake = fakeUser()
+      for (let i = 0; i < 4; i++) await say(fake, POSITIVE)
+      t.advance(31 * 60_000)
+      await say(fake, POSITIVE)
+      await react()
       assert.deepStrictEqual(fake.reacted, [])
       const stored = state.robot.brain.get<{ entries: unknown[] }>('reactemoji:tone:test-room')!
       assert.strictEqual(stored.entries.length, 1)
     })
     it('caps the window and stores numbers only', async () => {
-      const fake = fakeUser(state.robot)
-      for (let i = 0; i < 25; i++) await say(state.robot, fake, `${NEUTRAL} ${i}`)
+      const fake = fakeUser()
+      for (let i = 0; i < 25; i++) await say(fake, `${NEUTRAL} ${i}`)
       const stored = state.robot.brain.get<{ mood: string, entries: Record<string, unknown>[] }>('reactemoji:tone:test-room')!
       assert.strictEqual(stored.entries.length, 20)
       for (const entry of stored.entries) {
@@ -213,10 +201,10 @@ describe('ReactEmoji testing Hubot scripts', () => {
       }
     })
     it('adds at most one vocabulary and one sentiment emoji', async () => {
-      const fake = fakeUser(state.robot)
-      for (let i = 0; i < 4; i++) await say(state.robot, fake, POSITIVE)
-      await say(state.robot, fake, `${POSITIVE}, look at that octopus`)
-      await settle()
+      const fake = fakeUser()
+      for (let i = 0; i < 4; i++) await say(fake, POSITIVE)
+      await say(fake, `${POSITIVE}, look at that octopus`)
+      await react()
       assert.strictEqual(fake.reacted.length, 2)
       assert.strictEqual(fake.reacted[0], '🐙')
       assert.strictEqual(sentimentIn(fake.reacted, 'positive').length, 1)
@@ -224,38 +212,35 @@ describe('ReactEmoji testing Hubot scripts', () => {
   })
 
   describe('channel toggle', () => {
-    beforeEach(() => {
-      process.env.OWNER_USER_ID = 'toggler'
-      inGuild(state.robot, 'g1', ['test-room', 'other-room'], 'casual')
-    })
+    beforeEach(() => { inGuild(state.robot, 'g1', ['test-room', 'other-room'], 'casual') })
     it('turns reactions off and on per channel', async () => {
       const replies = collect(state.robot)
-      const fake = fakeUser(state.robot, 'toggler', 'toggler')
-      await say(state.robot, fake, `${state.robot.name} reactions off`)
+      const fake = fakeUser('toggler', 'toggler')
+      await say(fake, `${state.robot.name} reactions off`)
       assert.match(replies.at(-1)!, /off for this channel/)
-      await say(state.robot, fake, 'saw an octopus today')
-      await say(state.robot, fake, 'saw an octopus today', 'other-room')
-      await settle()
+      await say(fake, 'saw an octopus today')
+      await say(fake, 'saw an octopus today', 'other-room')
+      await react()
       assert.deepStrictEqual(fake.reacted, ['🐙'])
 
-      await say(state.robot, fake, `${state.robot.name} reactions on`)
+      await say(fake, `${state.robot.name} reactions on`)
       assert.match(replies.at(-1)!, /on for this channel/)
-      await say(state.robot, fake, 'saw an octopus today')
-      await settle()
+      await say(fake, 'saw an octopus today')
+      await react()
       assert.deepStrictEqual(fake.reacted, ['🐙', '🐙'])
     })
     it('drops a pending reaction when the channel is turned off during the delay', async () => {
-      const fake = fakeUser(state.robot, 'toggler', 'toggler')
-      await say(state.robot, fake, 'saw an octopus today')
-      await say(state.robot, fake, `${state.robot.name} reactions off`)
-      await settle()
+      const fake = fakeUser('toggler', 'toggler')
+      await say(fake, 'saw an octopus today')
+      await say(fake, `${state.robot.name} reactions off`)
+      await react()
       assert.deepStrictEqual(fake.reacted, [])
     })
     it('stays off in a professional server', async () => {
       inGuild(state.robot, 'g2', ['pro-room'])
-      const fake = fakeUser(state.robot)
-      await say(state.robot, fake, 'saw an octopus today', 'pro-room')
-      await settle()
+      const fake = fakeUser()
+      await say(fake, 'saw an octopus today', 'pro-room')
+      await react()
       assert.deepStrictEqual(fake.reacted, [])
     })
   })

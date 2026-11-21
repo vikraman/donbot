@@ -3,16 +3,22 @@ import assert from 'node:assert/strict'
 
 import { AI_BUSY_RETRY_MS, AI_DAILY_CALLS, AI_POOL_SIZE, AI_QUOTA_RETRY_MS, AI_REFILL_INTERVAL_MS, AI_RETRY_MS, aiCallsToday, bagPick, contextVars, configureLines, defineLines, keptFor, linesIn, poolFor, refillAi, resetLines, scoreLine, validAiLine } from '../scripts/lib/lines.ts'
 import { setRandomSource } from '../scripts/lib/random.ts'
+import { clock, geminiBody, mockFetch, mockGemini, settle, withEnv } from './helpers/fakes.ts'
+import { fc } from './helpers/arb.ts'
 
 // mon 2026-11-16 10:00 utc
 const MONDAY_10AM = Date.UTC(2026, 10, 16, 10, 0)
 
 const contextVarsAt = (ms: number) => contextVars('UTC', ms)
 
-const gemini = (lines: unknown) => mock.method(global, 'fetch', async () => ({
-  ok: true,
-  json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(lines) }] } }] })
-}))
+const AI = { about: 'x', slots: ['who'] }
+
+// fetch replying with an http status, no body
+const failFetch = (status: () => number) => {
+  const urls: string[] = []
+  mock.method(globalThis, 'fetch', async (url: string) => { urls.push(url); return { ok: false, status: status() } })
+  return urls
+}
 
 describe('lines', () => {
   let originalKey: string | undefined
@@ -29,122 +35,124 @@ describe('lines', () => {
     mock.reset()
   })
 
-  it('uses every line once before repeating, and never repeats across the reshuffle', () => {
-    const items = ['a', 'b', 'c', 'd']
-    for (let round = 0; round < 50; round++) {
-      const seen = Array.from({ length: 4 }, () => bagPick('t', items))
-      assert.deepEqual([...seen].sort(), items)
-    }
-    const run = Array.from({ length: 400 }, () => bagPick('seam', items))
-    run.forEach((item, i) => { if (i) assert.notEqual(item, run[i - 1]) })
+  it('uses every line once per cycle, never repeating across the reshuffle', () => {
+    let n = 0
+    const lists = fc.uniqueArray(fc.string({ minLength: 1, maxLength: 3 }), { minLength: 2, maxLength: 8 })
+    fc.assert(fc.property(lists, fc.integer({ min: 1, max: 6 }), (items, cycles) => {
+      const key = `bag${n++}`
+      const run = Array.from({ length: items.length * cycles }, () => bagPick(key, items)!)
+      for (let c = 0; c < cycles; c++) assert.deepStrictEqual(run.slice(c * items.length, (c + 1) * items.length).sort(), [...items].sort())
+      run.forEach((item, i) => { if (i) assert.notStrictEqual(item, run[i - 1]) })
+    }))
   })
   it('starts over when the list changes', () => {
     setRandomSource(() => 0)
-    assert.equal(bagPick('change', ['a', 'b']), 'a')
-    assert.equal(bagPick('change', ['x', 'y', 'z']), 'x')
+    assert.strictEqual(bagPick('change', ['a', 'b']), 'a')
+    assert.strictEqual(bagPick('change', ['x', 'y', 'z']), 'x')
   })
   it('fills vars, including daypart and weekday', () => {
     setRandomSource(() => 0)
-    mock.method(Date, 'now', () => MONDAY_10AM)
+    clock(MONDAY_10AM)
     const line = defineLines('test.fill', { fallback: ['Good {daypart}, {who}! Happy {weekday}.'] })
-    assert.equal(line({ who: 'ada' }, { tz: 'UTC' }), 'Good morning, ada! Happy Monday.')
-    assert.equal(line({}, { tz: 'UTC' }), 'Good morning, {who}! Happy Monday.')
+    assert.strictEqual(line({ who: 'ada' }, { tz: 'UTC' }), 'Good morning, ada! Happy Monday.')
+    assert.strictEqual(line({}, { tz: 'UTC' }), 'Good morning, {who}! Happy Monday.')
   })
   it('composes lines from parts', () => {
     setRandomSource(() => 0)
     const line = defineLines('test.parts', { fallback: { open: ['Hey.', ''], body: ['Nice work.', 'Well done.'], close: ['🎉'] } })
-    assert.equal(line(), 'Hey. Nice work. 🎉')
-    assert.equal(line(), 'Well done. 🎉')
+    assert.strictEqual(line(), 'Hey. Nice work. 🎉')
+    assert.strictEqual(line(), 'Well done. 🎉')
   })
   it('serves rare lines and time-of-week flair only when extras are on', () => {
     setRandomSource(() => 0)
-    // monday morning in utc
-    mock.method(Date, 'now', () => MONDAY_10AM)
+    clock(MONDAY_10AM)
     const line = defineLines('test.rare', { fallback: ['plain'], rare: ['✨ legendary'], flair: true })
-    assert.equal(line({}, { tz: 'UTC' }), 'plain')
+    assert.strictEqual(line({}, { tz: 'UTC' }), 'plain')
     configureLines({ extras: true })
-    assert.equal(line({}, { tz: 'UTC' }), '✨ legendary Strong start to the week.')
+    assert.strictEqual(line({}, { tz: 'UTC' }), '✨ legendary Strong start to the week.')
   })
   it('keeps to professional lines where casual ones are off', async () => {
     process.env.GEMINI_API_KEY = 'key'
-    gemini(['Fresh, {who}.'])
+    mockGemini(['Fresh, {who}.'])
     setRandomSource(() => 0)
-    mock.method(Date, 'now', () => MONDAY_10AM)
-    const line = defineLines('test.pro', { fallback: ['Yo {who}, nailed it.'], professional: ['Well done, {who}.'], rare: ['✨ legend'], flair: true, ai: { about: 'x', slots: ['who'] } })
+    clock(MONDAY_10AM)
+    const line = defineLines('test.pro', { fallback: ['Yo {who}, nailed it.'], professional: ['Well done, {who}.'], rare: ['✨ legend'], flair: true, ai: AI })
     await refillAi('test.pro')
     configureLines({ extras: true, casual: (room, feature) => room === 'casual' && feature !== 'lines.ratelimit' })
-    for (let i = 0; i < 5; i++) assert.equal(line({ who: 'bo' }, { room: 'pro', tz: 'UTC' }), 'Well done, bo.')
+    for (let i = 0; i < 5; i++) assert.strictEqual(line({ who: 'bo' }, { room: 'pro', tz: 'UTC' }), 'Well done, bo.')
     // no room is professional
-    assert.equal(line({ who: 'bo' }, { tz: 'UTC' }), 'Well done, bo.')
-    assert.equal(line({ who: 'bo' }, { room: 'casual', tz: 'UTC' }), '✨ legend Strong start to the week.')
+    assert.strictEqual(line({ who: 'bo' }, { tz: 'UTC' }), 'Well done, bo.')
+    assert.strictEqual(line({ who: 'bo' }, { room: 'casual', tz: 'UTC' }), '✨ legend Strong start to the week.')
     // per-kind feature
     const sass = defineLines('test.sass', { fallback: ['Get lost.'], professional: ['Please wait.'], feature: 'lines.ratelimit' })
-    assert.equal(sass({}, { room: 'casual' }), 'Please wait.')
+    assert.strictEqual(sass({}, { room: 'casual' }), 'Please wait.')
     // no pro list: plain lines
     const plain = defineLines('test.plain', { fallback: ['Plain.'], rare: ['✨'] })
-    assert.equal(plain({}, { room: 'pro' }), 'Plain.')
+    assert.strictEqual(plain({}, { room: 'pro' }), 'Plain.')
   })
   it('validates ai lines', () => {
-    assert.equal(validAiLine('Nice one, {who}!', ['who']), true)
-    assert.equal(validAiLine('Nice one!', ['who']), false)
-    assert.equal(validAiLine('Nice one {who} and {other}', ['who']), false)
-    assert.equal(validAiLine('see https://x.y {who}', ['who']), false)
-    assert.equal(validAiLine('hey @everyone {who}', ['who']), false)
-    assert.equal(validAiLine(`{who} ${'x'.repeat(200)}`, ['who']), false)
-    assert.equal(validAiLine(42, []), false)
+    assert.strictEqual(validAiLine('Nice one, {who}!', ['who']), true)
+    assert.strictEqual(validAiLine('Nice one!', ['who']), false)
+    assert.strictEqual(validAiLine('Nice one {who} and {other}', ['who']), false)
+    assert.strictEqual(validAiLine('see https://x.y {who}', ['who']), false)
+    assert.strictEqual(validAiLine('hey @everyone {who}', ['who']), false)
+    assert.strictEqual(validAiLine(`{who} ${'x'.repeat(200)}`, ['who']), false)
+    assert.strictEqual(validAiLine(42, []), false)
   })
   it('refills the ai reserve from gemini, keeping only valid, new lines', async () => {
     process.env.GEMINI_API_KEY = 'key'
-    const fetch = gemini(['Bravo, {who}.', 'no slot here', 'Bravo, {who}.', 'Take a bow, {who}. 🎭'])
+    const bodies: { contents: { parts: { text: string }[] }[], generationConfig: { responseMimeType: string } }[] = []
+    mockFetch((_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(init?.body as string) as (typeof bodies)[number])
+      return geminiBody(['Bravo, {who}.', 'no slot here', 'Bravo, {who}.', 'Take a bow, {who}. 🎭'])
+    })
     defineLines('test.ai', { fallback: ['Nice, {who}.'], ai: { about: 'cheers', slots: ['who'] } })
-    assert.equal(await refillAi('test.ai'), 2)
-    assert.deepEqual(poolFor('test.ai').lines, ['Bravo, {who}.', 'Take a bow, {who}. 🎭'])
-    const body = JSON.parse((fetch.mock.calls[0]!.arguments[1] as { body: string }).body)
-    assert.match(body.contents[0].parts[0].text, /contain \{who\}/)
-    assert.equal(body.generationConfig.responseMimeType, 'application/json')
+    assert.strictEqual(await refillAi('test.ai'), 2)
+    assert.deepStrictEqual(poolFor('test.ai').lines, ['Bravo, {who}.', 'Take a bow, {who}. 🎭'])
+    assert.match(bodies[0]!.contents[0]!.parts[0]!.text, /contain \{who\}/)
+    assert.strictEqual(bodies[0]!.generationConfig.responseMimeType, 'application/json')
   })
   it('backs off after a failed refill', async () => {
     process.env.GEMINI_API_KEY = 'key'
-    const fetch = mock.method(global, 'fetch', async () => ({ ok: false, status: 500 }))
+    const urls = failFetch(() => 500)
     defineLines('test.fail', { fallback: ['x'], ai: { about: 'x' } })
-    assert.equal(await refillAi('test.fail'), 0)
-    assert.equal(await refillAi('test.fail'), 0)
-    assert.equal(fetch.mock.callCount(), 1)
+    assert.strictEqual(await refillAi('test.fail'), 0)
+    assert.strictEqual(await refillAi('test.fail'), 0)
+    assert.strictEqual(urls.length, 1)
   })
   it('mixes ai lines in when extras are on, and tops up when low', async () => {
     process.env.GEMINI_API_KEY = 'key'
-    const fetch = gemini(['Fresh one, {who}.'])
-    const line = defineLines('test.mix', { fallback: ['Static, {who}.'], ai: { about: 'x', slots: ['who'] } })
+    const urls = mockGemini(['Fresh one, {who}.'])
+    const line = defineLines('test.mix', { fallback: ['Static, {who}.'], ai: AI })
     await refillAi('test.mix')
     configureLines({ extras: true })
     setRandomSource(() => 0)
-    assert.equal(line({ who: 'bo' }), 'Fresh one, bo.')
-    assert.equal(poolFor('test.mix').lines.length, 0)
-    await new Promise(resolve => setImmediate(resolve))
+    assert.strictEqual(line({ who: 'bo' }), 'Fresh one, bo.')
+    assert.strictEqual(poolFor('test.mix').lines.length, 0)
+    await settle()
     // empty, but refilled less than 6h ago
-    assert.equal(fetch.mock.callCount(), 1)
-    const start = Date.now()
-    mock.method(Date, 'now', () => start + AI_REFILL_INTERVAL_MS + 1)
+    assert.strictEqual(urls.length, 1)
+    clock().advance(AI_REFILL_INTERVAL_MS + 1)
     line({ who: 'bo' })
-    await new Promise(resolve => setImmediate(resolve))
-    assert.equal(fetch.mock.callCount(), 2)
+    await settle()
+    assert.strictEqual(urls.length, 2)
     configureLines({ casual: (room, feature) => feature !== 'lines.ai' || room !== 'quiet' })
-    assert.equal(line({ who: 'bo' }, { room: 'quiet' }), 'Static, bo.')
+    assert.strictEqual(line({ who: 'bo' }, { room: 'quiet' }), 'Static, bo.')
     assert.ok(AI_POOL_SIZE > 10)
   })
   it('keeps ai lines people love and retires lines people groan at', async () => {
     process.env.GEMINI_API_KEY = 'key'
-    gemini(['Loved, {who}.'])
-    const line = defineLines('test.score', { fallback: ['Meh, {who}.', 'Fine, {who}.'], ai: { about: 'x', slots: ['who'] } })
+    mockGemini(['Loved, {who}.'])
+    const line = defineLines('test.score', { fallback: ['Meh, {who}.', 'Fine, {who}.'], ai: AI })
     await refillAi('test.score')
     configureLines({ extras: true })
     setRandomSource(() => 0)
     const text = line({ who: 'cy' })
     const [ref] = linesIn(`🎉 ${text} 🔥 streak`)
-    assert.deepEqual(ref, { kind: 'test.score', template: 'Loved, {who}.', source: 'ai' })
-    scoreLine(ref!, 1)
-    scoreLine(ref!, 1)
-    assert.deepEqual(keptFor('test.score'), ['Loved, {who}.'])
+    assert.deepStrictEqual(ref, { kind: 'test.score', template: 'Loved, {who}.', source: 'ai' })
+    scoreLine(ref, 1)
+    scoreLine(ref, 1)
+    assert.deepStrictEqual(keptFor('test.score'), ['Loved, {who}.'])
 
     configureLines({ extras: false })
     const meh = { kind: 'test.score', template: 'Meh, {who}.', source: 'static' as const }
@@ -164,45 +172,51 @@ describe('lines', () => {
   it('treats the small hours as the night before', () => {
     // 02:00 monday utc
     const vars = contextVarsAt(Date.UTC(2026, 10, 16, 2, 0))
-    assert.deepEqual(vars, { daypart: 'night', weekday: 'Sunday' })
+    assert.deepStrictEqual(vars, { daypart: 'night', weekday: 'Sunday' })
   })
-  it('falls back to the lite model when the main one is overloaded', async () => {
-    process.env.GEMINI_API_KEY = 'key'
-    const urls: string[] = []
-    mock.method(global, 'fetch', async (url: string) => {
-      urls.push(url)
-      if (url.includes('gemini-flash-latest')) return { ok: false, status: 503 }
-      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: '["Lite, {who}."]' }] } }] }) }
+  for (const [name, models, fail, expected] of [
+    ['falls back to the lite model when the main one is overloaded', undefined, () => ({ ok: false, status: 503 }), ['gemini-flash-latest', 'gemini-flash-lite-latest']],
+    ['skips unknown models from GEMINI_LINE_MODELS', 'gone-model, good-model', () => ({ ok: false, status: 404 }), ['gone-model', 'good-model']],
+    ['moves on when a model times out', undefined, () => { throw new DOMException('timed out', 'TimeoutError') }, ['gemini-flash-latest', 'gemini-flash-lite-latest']]
+  ] as const) {
+    it(name, async () => {
+      process.env.GEMINI_API_KEY = 'key'
+      const calls: { model: string, signal: unknown }[] = []
+      mock.method(globalThis, 'fetch', async (url: string, init: { signal?: unknown }) => {
+        const model = url.match(/models\/([\w.-]+):/)![1]!
+        calls.push({ model, signal: init.signal })
+        if (model === expected[0]) return fail()
+        return { ok: true, status: 200, json: async () => geminiBody(['Ok, {who}.']) }
+      })
+      await withEnv({ GEMINI_LINE_MODELS: models }, async () => {
+        defineLines(`test.${name}`, { fallback: ['x {who}'], ai: AI })
+        assert.strictEqual(await refillAi(`test.${name}`), 1)
+      })
+      assert.deepStrictEqual(calls.map(c => c.model), expected)
+      assert.ok(calls.every(c => c.signal instanceof AbortSignal))
     })
-    defineLines('test.lite', { fallback: ['x {who}'], ai: { about: 'x', slots: ['who'] } })
-    assert.equal(await refillAi('test.lite'), 1)
-    assert.deepEqual(urls.map(u => u.match(/models\/([\w-]+):/)![1]), ['gemini-flash-latest', 'gemini-flash-lite-latest'])
-  })
+  }
   it('retries sooner when every model is busy than after other errors', async () => {
     process.env.GEMINI_API_KEY = 'key'
     let status = 503
-    const fetch = mock.method(global, 'fetch', async () => ({ ok: false, status }))
+    const urls = failFetch(() => status)
     defineLines('test.busy', { fallback: ['x'], ai: { about: 'x' } })
-    const start = Date.now()
-    const now = mock.method(Date, 'now', () => start)
-    await refillAi('test.busy')
-    assert.equal(fetch.mock.callCount(), 3)
-    now.mock.mockImplementation(() => start + AI_BUSY_RETRY_MS + 1)
-    status = 400
-    await refillAi('test.busy')
-    assert.equal(fetch.mock.callCount(), 4)
-    // other errors wait 30m
-    now.mock.mockImplementation(() => start + AI_BUSY_RETRY_MS + AI_RETRY_MS)
-    await refillAi('test.busy')
-    assert.equal(fetch.mock.callCount(), 4)
-    status = 429
-    now.mock.mockImplementation(() => start + AI_BUSY_RETRY_MS + AI_RETRY_MS + 2)
-    await refillAi('test.busy')
-    assert.equal(fetch.mock.callCount(), 7)
-    // quota errors wait 2h
-    now.mock.mockImplementation(() => start + AI_BUSY_RETRY_MS + AI_RETRY_MS + AI_QUOTA_RETRY_MS)
-    await refillAi('test.busy')
-    assert.equal(fetch.mock.callCount(), 7)
+    const t = clock()
+    // [advance, status, total calls]
+    for (const [ms, code, calls] of [
+      [0, 503, 3],
+      [AI_BUSY_RETRY_MS + 1, 400, 4],
+      // other errors wait 30m
+      [AI_RETRY_MS - 1, 400, 4],
+      [2, 429, 7],
+      // quota errors wait 2h
+      [AI_QUOTA_RETRY_MS - 2, 429, 7]
+    ]) {
+      t.advance(ms!)
+      status = code!
+      await refillAi('test.busy')
+      assert.strictEqual(urls.length, calls)
+    }
   })
   it('skips unknown models and honours GEMINI_LINE_MODELS', async () => {
     process.env.GEMINI_API_KEY = 'key'
@@ -216,8 +230,8 @@ describe('lines', () => {
     })
     try {
       defineLines('test.models', { fallback: ['x {who}'], ai: { about: 'x', slots: ['who'] } })
-      assert.equal(await refillAi('test.models'), 1)
-      assert.deepEqual(urls.map(u => u.match(/models\/([\w.-]+):/)![1]), ['gone-model', 'good-model'])
+      assert.strictEqual(await refillAi('test.models'), 1)
+      assert.deepStrictEqual(urls.map(u => u.match(/models\/([\w.-]+):/)![1]), ['gone-model', 'good-model'])
     } finally {
       if (original === undefined) delete process.env.GEMINI_LINE_MODELS
       else process.env.GEMINI_LINE_MODELS = original
@@ -225,21 +239,21 @@ describe('lines', () => {
   })
   it('stops at the daily request cap, even when forced', async () => {
     process.env.GEMINI_API_KEY = 'key'
-    const fetch = gemini(['A, {who}.'])
+    const urls = mockGemini(['A, {who}.'])
     const kinds = Array.from({ length: AI_DAILY_CALLS + 3 }, (_, i) => `test.cap${i}`)
-    for (const kind of kinds) defineLines(kind, { fallback: ['x {who}'], ai: { about: 'x', slots: ['who'] } })
+    for (const kind of kinds) defineLines(kind, { fallback: ['x {who}'], ai: AI })
     for (const kind of kinds) await refillAi(kind, { force: true })
-    assert.equal(fetch.mock.callCount(), AI_DAILY_CALLS)
-    assert.equal(aiCallsToday(), AI_DAILY_CALLS)
+    assert.strictEqual(urls.length, AI_DAILY_CALLS)
+    assert.strictEqual(aiCallsToday(), AI_DAILY_CALLS)
   })
   it('runs one refill at a time', async () => {
     process.env.GEMINI_API_KEY = 'key'
-    const fetch = gemini(['A, {who}.'])
-    defineLines('test.one', { fallback: ['x {who}'], ai: { about: 'x', slots: ['who'] } })
-    defineLines('test.two', { fallback: ['x {who}'], ai: { about: 'x', slots: ['who'] } })
+    const urls = mockGemini(['A, {who}.'])
+    defineLines('test.one', { fallback: ['x {who}'], ai: AI })
+    defineLines('test.two', { fallback: ['x {who}'], ai: AI })
     const [a, b] = await Promise.all([refillAi('test.one'), refillAi('test.two')])
-    assert.deepEqual([a, b], [1, 0])
-    assert.equal(fetch.mock.callCount(), 1)
+    assert.deepStrictEqual([a, b], [1, 0])
+    assert.strictEqual(urls.length, 1)
   })
   it('moves on when a model times out', async () => {
     process.env.GEMINI_API_KEY = 'key'
@@ -250,8 +264,8 @@ describe('lines', () => {
       return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: '["Quick, {who}."]' }] } }] }) }
     })
     defineLines('test.slow', { fallback: ['x {who}'], ai: { about: 'x', slots: ['who'] } })
-    assert.equal(await refillAi('test.slow'), 1)
-    assert.equal(signals.length, 2)
+    assert.strictEqual(await refillAi('test.slow'), 1)
+    assert.strictEqual(signals.length, 2)
     assert.ok(signals.every(s => s instanceof AbortSignal))
   })
 })
