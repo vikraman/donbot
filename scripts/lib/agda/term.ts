@@ -222,6 +222,21 @@ export const size = (s: Sig): number => {
   return n
 }
 
+// over cap, counted lazily
+export const larger = (s: Sig, cap: number): boolean => {
+  let n = 0
+  const go = (t: Term): boolean => {
+    if (++n > cap) return true
+    switch (t.k) {
+      case 'c': case 'm': case 'b': return t.a.some(go)
+      case 'p': return go(t.d) || go(t.c)
+      case 'l': return go(t.b)
+      default: return false
+    }
+  }
+  return sigTerms(s).some(go)
+}
+
 export const headId = (t: Term): string | undefined => (t.k === 'c' && typeof t.id === 'string' ? t.id : undefined)
 
 // constant-headed subterms

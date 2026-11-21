@@ -12,7 +12,7 @@ import { closeStore, cmd, generations, indexSize, libraries, loadIndex, wipe } f
 import { wellTyped, type Signature } from '../scripts/lib/agda/typing.ts'
 import { binderNames } from '../scripts/lib/agda/explain.ts'
 import { displayType, lookupName, searchAbout, searchNames, searchType, ordered, splitFilters, splitParts, urlFor, type Hit } from '../scripts/lib/agda/search.ts'
-import { apply, normalise, TooBig, type NameInfo, type Term } from '../scripts/lib/agda/term.ts'
+import { apply, larger, normalise, TooBig, type NameInfo, type Term } from '../scripts/lib/agda/term.ts'
 import { canonicaliser } from '../scripts/lib/agda/canon.ts'
 import { merged, setSuc, unify, type Subst } from '../scripts/lib/agda/unify.ts'
 import { noRedis, useTestRedis } from './helpers/redis.ts'
@@ -145,6 +145,16 @@ describe('agda unification', () => {
     // small ones reduce
     const twice: Term = { k: 'l', b: { k: 'l', b: { k: 'b', i: 1, a: [{ k: 'b', i: 1, a: [{ k: 'b', i: 0, a: [] }] }] } } }
     assert.deepStrictEqual(apply(twice, [{ k: 'c', id: 'f', a: [] }, { k: 'c', id: 'a', a: [] }]), { k: 'c', id: 'f', a: [{ k: 'c', id: 'f', a: [{ k: 'c', id: 'a', a: [] }] }] })
+  })
+
+  it('measures shared terms only up to a cap', () => {
+    // shared dag, exponential tree
+    let t: Term = { k: 'c', id: 'a', a: [] }
+    for (let i = 0; i < 40; i++) t = { k: 'c', id: 'f', a: [t, t] }
+    const start = performance.now()
+    assert.ok(larger({ args: [], res: t }, 500))
+    assert.ok(!larger({ args: [], res: { k: 'c', id: 'f', a: [] } }, 500))
+    assert.ok(performance.now() - start < 50)
   })
 
   it('keeps named query variables distinct, rigid candidate binders too', () => {

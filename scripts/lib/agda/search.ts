@@ -1,7 +1,7 @@
 import { ascii, hash, plainModule, segments } from './fold.ts'
 import { chunks, lex, parse, toQuery, type Env, type Q as Parsed, type Query } from './parse.ts'
 import { cached, env, libraries, notationsWithParts, resolveNames, rigidTypes, scope, search, tag, tags, type Doc, type Library } from './store.ts'
-import { apply, consts, decode, instantiate, size, subterms, termKey, TooBig, type Sig, type Term, type Typing } from './term.ts'
+import { apply, consts, decode, instantiate, larger, subterms, termKey, TooBig, type Sig, type Term, type Typing } from './term.ts'
 import { canonicaliser, unfolder } from './canon.ts'
 import { wellTyped, type Context, type Signature } from './typing.ts'
 import { merged, resolve as resolveMeta, specialised, unify, type Budget, type Subst } from './unify.ts'
@@ -893,7 +893,7 @@ const MAX_QUERY_NODES = 500
 const readQuery = (x: Parsed, e: Env): Query | null => {
   try {
     const q = toQuery(x, e)
-    return size(q.sig) > MAX_QUERY_NODES ? null : q
+    return larger(q.sig, MAX_QUERY_NODES) ? null : q
   } catch (err) {
     if (err instanceof TooBig) return null
     throw err
