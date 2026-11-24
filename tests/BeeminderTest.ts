@@ -492,7 +492,7 @@ describe('Beeminder', () => {
       setNow(TONIGHT - 3 * HOUR_MS)
       fake.goals = [goal('pushups', { losedate: TONIGHT / 1000 + 2 * 86_400, safebuf: 2, roadstatuscolor: 'blue' })]
       await pollNow(robot)
-      assert.deepStrictEqual(sent.map(s => s.text), ['🐝 <@1001> rescued *pushups*: safe for 2 days. 🎉'])
+      assert.deepStrictEqual(sent.map(s => s.text), ['🐝 ada rescued *pushups*: safe for 2 days. 🎉'])
       await pollNow(robot)
       assert.strictEqual(sent.length, 1)
     })
@@ -522,7 +522,7 @@ describe('Beeminder', () => {
       assert.strictEqual(jobs(robot)[0]!.at, eight)
       setNow(eight)
       await pollNow(robot)
-      assert.deepStrictEqual(sent.map(s => s.text), ['🐝 💥 <@1001> derailed on *pushups*. Dust off and go again.'])
+      assert.deepStrictEqual(sent.map(s => s.text), ['🐝 💥 ada derailed on *pushups*. Dust off and go again.'])
       await pollNow(robot)
       assert.strictEqual(sent.length, 1)
     })
@@ -549,7 +549,7 @@ describe('Beeminder', () => {
       setNow(TONIGHT + 2 * MINUTE_MS)
       fake.goals = [goal('pushups', { losedate: TONIGHT / 1000 + 86_400, safebuf: 1, roadstatuscolor: 'orange', lasttouch: new Date(TONIGHT - 5 * MINUTE_MS).toISOString() })]
       await pollNow(robot)
-      assert.deepStrictEqual(sent.map(s => s.text), ['🐝 <@1001> rescued *pushups*: safe for 1 day. 🎉'])
+      assert.deepStrictEqual(sent.map(s => s.text), ['🐝 ada rescued *pushups*: safe for 1 day. 🎉'])
       assert.strictEqual(fake.calls.filter(c => c.includes('datapoints')).length, 0)
     })
 

@@ -225,6 +225,8 @@ export default async (robot: Robot) => {
     const snaps: Record<string, Snap> = {}
     const watched: Goal[] = []
     const who = mentionFor({ id: userId })
+    // only red and countdown alerts ping
+    const name = robot.brain.data.users[userId]?.name ?? username
     const quiet = parseQuiet(process.env.BEEMINDER_QUIET_HOURS)
     const quietNow = isQuiet(now, tz, quiet)
     const wakeAt = quiet && quietNow ? quietEnd(now, tz, quiet) : undefined
@@ -241,7 +243,7 @@ export default async (robot: Robot) => {
       const prev = old[goal.slug]
       // first sight just seeds
       if (!prev) continue
-      const vars = { who, goal: goal.slug, need: needText(goal, tz, now), left: timeLeft(goal, now), days: days(goal.safebuf) }
+      const vars = { who: name, goal: goal.slug, need: needText(goal, tz, now), left: timeLeft(goal, now), days: days(goal.safebuf) }
       const opts = { tz }
       let text: string | undefined
       const deadline = prev.derailFor ?? (prev.losedate <= now ? prev.losedate : undefined)
@@ -269,12 +271,12 @@ export default async (robot: Robot) => {
           snap.color = prev.color
           held = true
         } else {
-          text = red(vars, opts)
+          text = red({ ...vars, who }, opts)
         }
       } else if ((prev.color === 'red' || prev.color === 'orange') && goal.safebuf > prev.safebuf) {
         text = progress(vars, opts)
       } else if (step >= 0 && (prev.zenoFor !== lose || step > (prev.zenoStep ?? -1))) {
-        text = (lose - now <= 30 * MINUTE_MS ? zenoLast : zeno)(vars, opts)
+        text = (lose - now <= 30 * MINUTE_MS ? zenoLast : zeno)({ ...vars, who }, opts)
       }
       if (text) for (const room of rooms) await postToRoom(robot, room, `🐝 ${text}`, 'beeminder')
     }
