@@ -24,7 +24,8 @@ defineFeature({ id: 'agda', label: 'Agda search', level: 'professional', web: tr
 
 const RELEASE = 'https://github.com/vikraman/donbot/releases/download/agda-index'
 // measured on agda 2.9
-const DEFAULT_SOURCES = ['cubical', 'stdlib', 'TypeTopology', 'categories', 'unimath', 'En'].map(l => `${RELEASE}/${l}.ndjson.gz`).join(',')
+const DEFAULT_LIBRARIES = ['cubical', 'stdlib', 'TypeTopology', 'categories', 'unimath', 'En']
+const MANIFEST_MS = 30 * 1000
 const REFRESH_MS = 24 * 60 * 60 * 1000
 const PAGE = 5
 const MAX_TYPE = 300
@@ -158,11 +159,20 @@ const libsText = (failure: string): string => {
   return [...libs.map(line), ...(agda.length > 0 ? [`_checked with Agda ${agda.join(', ')}_`] : [])].join('\n')
 }
 
+// released libraries, else the defaults
+export const indexSources = async (manifest = `${RELEASE}/libraries.txt`): Promise<string[]> => {
+  const env = process.env.AGDA_INDEX_URLS?.split(',').map(s => s.trim()).filter(Boolean) ?? []
+  if (env.length > 0) return env
+  const names = await fetch(manifest, { signal: AbortSignal.timeout(MANIFEST_MS) })
+    .then(async r => (r.ok ? (await r.text()).split('\n').map(s => s.trim()).filter(Boolean) : []))
+    .catch(() => [])
+  return (names.length > 0 ? names : DEFAULT_LIBRARIES).map(l => `${RELEASE}/${l}.ndjson.gz`)
+}
+
 // bare names
 const NAMES_ONLY = /^-?[^\s"()]+$/
 
 export default (robot: Robot) => {
-  const sources = (process.env.AGDA_INDEX_URLS || DEFAULT_SOURCES).split(',').map(s => s.trim()).filter(Boolean)
   const pages = new Map<string, Page>()
   let loaded: Promise<void> = Promise.resolve()
   // redis-held index
@@ -175,7 +185,7 @@ export default (robot: Robot) => {
   const reload = (force = false) => {
     // queued in order
     refreshed = refresh().catch(() => false)
-    loaded = loadIndex(sources, force).then(
+    loaded = indexSources().then(sources => loadIndex(sources, force)).then(
       ({ loaded, skipped }) => {
         failure = ''
         skippedLast = skipped

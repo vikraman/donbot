@@ -37,6 +37,9 @@ env:
     categories agda/agda-categories
     unimath UniMath/agda-unimath
     En DesyncTheThird/HoTT
+  # course libraries in teaching/*/*/_agda/*.agda-lib
+  SITE: vikraman/site
+  SITE_URL: https://vikraman.org
 
 jobs:
   # libraries whose commit, agda or indexer changed since the last release
@@ -48,6 +51,7 @@ jobs:
       shas: ${{ steps.plan.outputs.shas }}
       indexer: ${{ steps.plan.outputs.indexer }}
       stamps: ${{ steps.plan.outputs.stamps }}
+      sites: ${{ steps.plan.outputs.sites }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -64,23 +68,37 @@ jobs:
           build=""
           stamps=""
           shas="{}"
-          while read -r name repo; do
-            [ -n "$name" ] || continue
-            sha=$(git ls-remote "https://github.com/$repo" HEAD | cut -f1)
-            shas=$(jq -c --arg k "$name" --arg v "$sha" '. + {($k): $v}' <<< "$shas")
-            stamp="$name $sha agda $AGDA_VERSION ghc $GHC_VERSION indexer $indexer"
+          sites="{}"
+          add() {
+            shas=$(jq -c --arg k "$1" --arg v "$2" '. + {($k): $v}' <<< "$shas")
+            stamp="$1 $2 agda $AGDA_VERSION ghc $GHC_VERSION indexer $indexer"
             stamps="$stamps$stamp;"
             # stamps hide in comments in the release notes
             if [ "$FORCE" = "true" ] || ! printf '%s\n' "$notes" | grep -qxF "<!-- stamp: $stamp -->"; then
-              build="$build $name"
+              build="$build $1"
             fi
+          }
+          while read -r name repo; do
+            [ -n "$name" ] || continue
+            add "$name" "$(git ls-remote "https://github.com/$repo" HEAD | cut -f1)"
           done <<< "$LIBRARIES"
+          # each course offering
+          git clone --quiet --filter=blob:none --no-checkout "https://github.com/$SITE" "$RUNNER_TEMP/site"
+          while read -r lib; do
+            [ -n "$lib" ] || continue
+            dir=$(dirname "$lib")
+            name=$(git -C "$RUNNER_TEMP/site" show "HEAD:$lib" | sed -n 's/^name:[[:space:]]*//p' | tr -d '[:space:]')
+            [ -n "$name" ] || continue
+            sites=$(jq -c --arg k "$name" --arg v "$dir" '. + {($k): $v}' <<< "$sites")
+            add "$name" "$(git -C "$RUNNER_TEMP/site" log -1 --format=%H -- "$dir")"
+          done < <(git -C "$RUNNER_TEMP/site" ls-tree -r --name-only HEAD | grep -E '^teaching/.+/_agda/[^/]+\.agda-lib$')
           {
             echo "build=${build# }"
             echo "matrix=$(jq -cn --arg b "${build# }" '$b | split(" ") | map(select(. != ""))')"
             echo "shas=$shas"
             echo "indexer=$indexer"
             echo "stamps=$stamps"
+            echo "sites=$sites"
           } >> "$GITHUB_OUTPUT"
 
   # indexer binary, built only when its cache misses
@@ -172,6 +190,8 @@ jobs:
       LIB: ${{ matrix.lib }}
       SHAS: ${{ needs.plan.outputs.shas }}
       BUILD: ${{ needs.plan.outputs.indexer }}
+      # course offering dir, empty for others
+      SITE_PATH: ${{ fromJSON(needs.plan.outputs.sites)[matrix.lib] }}
     steps:
       # self-contained, agda embeds its data files
       - name: Restore indexer
@@ -192,10 +212,16 @@ jobs:
               git -C "$name" checkout --quiet "$(jq -r --arg k "$name" '.[$k]' <<< "$SHAS")"
             fi
           done <<< "$LIBRARIES"
+          if [ -n "$SITE_PATH" ]; then
+            git clone --quiet --filter=blob:none --no-checkout "https://github.com/$SITE" site
+            git -C site sparse-checkout set "$SITE_PATH"
+            GIT_LFS_SKIP_SMUDGE=1 git -C site checkout --quiet "$(jq -r --arg k "$LIB" '.[$k]' <<< "$SHAS")"
+          fi
           echo "SHA=$(jq -r --arg k "$LIB" '.[$k]' <<< "$SHAS")" >> "$GITHUB_ENV"
 
-      # same paths in every job
+      # same paths in every job, courses check quickly
       - name: Restore interface cache
+        if: env.SITE_PATH == ''
         uses: actions/cache/restore@v6
         with:
           path: |
@@ -272,13 +298,19 @@ jobs:
                 --index-source="https://github.com/DesyncTheThird/HoTT/blob/$SHA/" \
                 --index-out="$out" En/Everything.agda
               ;;
-            *) echo "no recipe for $LIB"; exit 1 ;;
+            # course offering, linked to its rendered lectures
+            *)
+              [ -n "$SITE_PATH" ] || { echo "no recipe for $LIB"; exit 1; }
+              cd "site/$SITE_PATH"
+              idx --index-url="$SITE_URL/${SITE_PATH%/_agda}/lectures/" \
+                --index-out="$out" Everything.agda
+              ;;
           esac
           test -s "$out"
           gzip -9 "$out"
 
       - name: Save interface cache
-        if: always()
+        if: always() && env.SITE_PATH == ''
         uses: actions/cache/save@v6
         with:
           path: |
@@ -344,15 +376,23 @@ jobs:
             sha=$(echo "$stamp" | cut -d' ' -f2)
             if [ -f "$name.ndjson.gz" ]; then
               count=$(gunzip -c "$name.ndjson.gz" | head -1 | jq '.meta.count')
-              rows="$rows| $name | [\`${sha:0:7}\`]($(gunzip -c "$name.ndjson.gz" | head -1 | jq -r '.meta.source' | sed 's|/blob/.*||')/commit/$sha) | $count |"$'\n'
+              repo=$(gunzip -c "$name.ndjson.gz" | head -1 | jq -r '.meta.source' | sed 's|/blob/.*||')
+              [ -n "$repo" ] || repo="https://github.com/$SITE"
+              rows="$rows| $name | [\`${sha:0:7}\`]($repo/commit/$sha) | $count |"$'\n'
               stamps="$stamps<!-- stamp: $stamp -->"$'\n'
+              echo "$name" >> libraries.txt
             else
               rows="$rows$(printf '%s\n' "$old" | grep "^| $name |" || true)"$'\n'
-              stamps="$stamps$(printf '%s\n' "$old" | grep "^<!-- stamp: $name " || true)"$'\n'
+              prev=$(printf '%s\n' "$old" | grep "^<!-- stamp: $name " || true)
+              stamps="$stamps$prev"$'\n'
+              # never indexed
+              [ -z "$prev" ] || echo "$name" >> libraries.txt
             fi
           done
+          # the bot loads these
+          gh release upload "$TAG" libraries.txt --clobber
           {
-            echo "Search index of Agda libraries for donbot's \`agda\` command, one \`<library>.ndjson.gz\` each."
+            echo "Search index of Agda libraries for donbot's \`agda\` command, one \`<library>.ndjson.gz\` each, listed in \`libraries.txt\`."
             echo
             echo "| library | commit | definitions |"
             echo "|---|---|---:|"

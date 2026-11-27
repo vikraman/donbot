@@ -3,10 +3,13 @@ import assert from 'node:assert/strict'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
 
 import { closeStore, loadIndex, wipe } from '../scripts/lib/agda/store.ts'
 import { setupRobot, collect, brainUser } from './helpers/setup.ts'
 import { tick } from './helpers/fakes.ts'
+import { indexSources } from '../scripts/Agda.ts'
 import { noRedis, useTestRedis } from './helpers/redis.ts'
 
 const FIXTURES = 'tests/fixtures/agda-cubical.ndjson,tests/fixtures/agda-stdlib.ndjson'
@@ -252,5 +255,46 @@ describe('Agda', { skip: noRedis }, () => {
   it('says which sources a reindex skipped', async () => {
     const partial = await ask('agda reindex', `${FIXTURES},tests/fixtures/missing.ndjson`, 'boss')
     assert.match(partial[0]!, /^Reloaded 62 definitions\. Skipped `tests\/fixtures\/missing\.ndjson: [^`]+`\.$/)
+  })
+})
+
+describe('Agda sources', () => {
+  const saved = process.env.AGDA_INDEX_URLS
+  let server: Server
+  let base = ''
+  let body: string | null = 'cubical\ncs410-sp27\n'
+
+  before(async () => {
+    delete process.env.AGDA_INDEX_URLS
+    server = createServer((_req, res) => {
+      res.writeHead(body === null ? 404 : 200).end(body ?? '')
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/libraries.txt`
+  })
+
+  after(() => {
+    server.closeAllConnections()
+    server.close()
+    if (saved === undefined) delete process.env.AGDA_INDEX_URLS
+    else process.env.AGDA_INDEX_URLS = saved
+  })
+
+  it('loads the released libraries', async () => {
+    const sources = await indexSources(base)
+    assert.deepStrictEqual(sources.map(s => s.split('/').pop()), ['cubical.ndjson.gz', 'cs410-sp27.ndjson.gz'])
+  })
+
+  it('falls back to the defaults without a manifest', async () => {
+    body = null
+    const sources = await indexSources(base)
+    assert.ok(sources.some(s => s.endsWith('/stdlib.ndjson.gz')))
+    assert.ok(!sources.some(s => s.includes('cs410')))
+  })
+
+  it('prefers the environment', async () => {
+    process.env.AGDA_INDEX_URLS = 'a.ndjson, b.ndjson'
+    assert.deepStrictEqual(await indexSources(base), ['a.ndjson', 'b.ndjson'])
+    delete process.env.AGDA_INDEX_URLS
   })
 })
