@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { fc } from './helpers/arb.ts'
 
 import { blueskyTarget } from '../scripts/lib/social/bluesky.ts'
-import { cleanText, facetsFor, fitCaption, graphemes, parseAlts, truncate } from '../scripts/lib/social/caption.ts'
+import { cleanText, defaultAlt, facetsFor, fitCaption, graphemes, parseAlts, truncate } from '../scripts/lib/social/caption.ts'
 import { mastodonTarget } from '../scripts/lib/social/mastodon.ts'
 
 interface Req {
@@ -34,6 +34,14 @@ const byteSlice = (text: string, start: number, end: number): string =>
 const image = { data: new Uint8Array([1, 2]), mime: 'image/jpeg', alt: 'A board', width: 4, height: 3, focus: { x: -0.5, y: 0.25 } }
 
 describe('captions', () => {
+  it('builds a default alt from context', () => {
+    assert.strictEqual(defaultAlt({ index: 0, total: 1, caption: '' }), 'Board photo')
+    assert.strictEqual(defaultAlt({ board: 'blackboard', channel: 'cs-theory', date: '28 Nov 2026', index: 1, total: 3, caption: 'Yoneda lemma\nproof\n\n#cats' }),
+      'Blackboard photo from #cs-theory, 28 Nov 2026 (2 of 3): Yoneda lemma proof')
+    const long = defaultAlt({ board: 'whiteboard', index: 0, total: 1, caption: 'word '.repeat(200) })
+    assert.ok(long.startsWith('Whiteboard photo: word') && long.endsWith('…') && graphemes(long) < 300)
+  })
+
   it('pulls alt lines out of the text', () => {
     assert.deepStrictEqual(parseAlts('Hello\nalt: one\nALT 3: three\nalt:two\nbye'), { body: 'Hello\nbye', alts: ['one', 'two', 'three'] })
   })

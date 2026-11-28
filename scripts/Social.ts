@@ -43,9 +43,9 @@ import { parseDuration } from './lib/when.ts'
 import { describeOptions, labelOf as presetOf, resolveEnhance } from './lib/enhance/board.ts'
 import type { EnhanceSpec } from './lib/enhance/board.ts'
 import { imagesOf, MAX_PHOTOS, messageOf, processPhotos } from './lib/enhance/photos.ts'
-import type { Attachment } from './lib/enhance/photos.ts'
+import type { Attachment, Processed } from './lib/enhance/photos.ts'
 import { ENHANCE_HELP, parseEnhance, parseEnhanceSpec } from './lib/enhance/settings.ts'
-import { cleanText, DEFAULT_ALT, fitCaption, parseAlts, parseTags } from './lib/social/caption.ts'
+import { cleanText, defaultAlt, fitCaption, parseAlts, parseTags } from './lib/social/caption.ts'
 import { configuredTargets } from './lib/social/index.ts'
 import { LABELS, TARGET_IDS } from './lib/social/types.ts'
 import type { Image, Posted, Target, TargetId } from './lib/social/types.ts'
@@ -65,11 +65,12 @@ interface Msg {
   channelId: string
   guildId?: string | null
   content?: string
+  createdTimestamp?: number
   partial?: boolean
   author?: { id: string, username?: string }
   attachments?: { values: () => Iterable<Attachment> }
   mentions?: { users?: Map<string, { username?: string, globalName?: string | null }> }
-  channel?: { parentId?: string | null, isThread?: () => boolean }
+  channel?: { name?: string, parentId?: string | null, isThread?: () => boolean }
   fetch?: () => Promise<Msg>
   react?: (emoji: string) => Promise<unknown>
 }
@@ -162,7 +163,7 @@ export default async (robot: Robot) => {
   const binding = (channel: string): Binding | undefined => robot.brain.get<Binding>(bindingKey(channel)) ?? undefined
   const getPost = (message: string): PostRecord | undefined => robot.brain.get<PostRecord>(postKey(message)) ?? undefined
   const savePost = (rec: PostRecord) => robot.brain.set(postKey(rec.message), rec)
-  // re-read, keeps a concurrent cancel
+  // re-read for concurrent cancel
   const updatePost = (message: string, change: (rec: PostRecord) => PostRecord) => {
     const rec = getPost(message)
     if (rec) savePost(change(rec))
@@ -207,6 +208,20 @@ export default async (robot: Robot) => {
     return { text: cleanText(body, nameOf(msg)), alts, enhance: resolveEnhance(binding(bound)?.enhance, spec), errors }
   }
 
+  const dateOf = (ms: number) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: tz }).format(ms)
+
+  // alts
+  const altsFor = (msg: Msg, done: Processed[], text: string, alts: (string | undefined)[]): { alt: string, given: boolean }[] =>
+    done.map((p, i) => alts[i] ? { alt: alts[i], given: true } : {
+      alt: defaultAlt({
+        board: p.photo?.stats?.enhance?.board,
+        channel: msg.channel?.name,
+        date: msg.createdTimestamp ? dateOf(msg.createdTimestamp) : undefined,
+        index: i, total: done.length, caption: text
+      }),
+      given: false
+    })
+
   const stillQueued = (message: string) => getPost(message)?.status === 'queued'
 
   const sendOut = async (rec: PostRecord, msg: Msg, final: boolean): Promise<string[]> => {
@@ -220,7 +235,8 @@ export default async (robot: Robot) => {
     const done = await processPhotos(msg, Math.min(...ready.map(t => t.maxBytes)), enhance, { cache: true })
     const failure = done.find(p => !p.photo)
     if (failure) throw new Error(failure.error)
-    const images: Image[] = done.map((p, i) => ({ ...p.photo!, alt: alts[i] ?? DEFAULT_ALT }))
+    const described = altsFor(msg, done, text, alts)
+    const images: Image[] = done.map((p, i) => ({ ...p.photo!, alt: described[i]!.alt }))
     for (const target of ready) {
       // cancelled while processing
       if (!stillQueued(rec.message)) break
@@ -244,7 +260,7 @@ export default async (robot: Robot) => {
     const msg = await fetchMessage(rec.channel, rec.message)
     if (!msg || !imagesOf(msg).length) {
       const done = await cancel(rec, false)
-      if (msg) await notify(rec.channel, `${SEND} That message has no photos any more. ${done}`, rec.message)
+      if (msg) await notify(rec.channel, `${SEND} No photos left. ${done.replace(`${SEND} `, '')}`, rec.message)
       return
     }
     const final = (job.attempts ?? 0) + 1 >= MAX_ATTEMPTS
@@ -267,8 +283,8 @@ export default async (robot: Robot) => {
     if (sent.length) {
       try { await msg.react?.(DONE) } catch {}
     }
-    const failed = errors.length ? `${sent.length ? 'But it' : 'It'} didn't go out: ${errors.join('; ')}` : ''
-    await notify(rec.channel, [sent.length ? `${SEND} Posted:` : `${SEND} Couldn't post that photo.`, ...lines, failed].filter(Boolean).join('\n'), rec.message)
+    const failed = errors.length ? `Failed: ${errors.join('; ')}` : ''
+    await notify(rec.channel, [sent.length ? `${SEND} Posted:` : `${SEND} Not posted.`, ...lines, failed].filter(Boolean).join('\n'), rec.message)
   }
 
   const jobs = scheduler<JobData>(robot, 'social', fire)
@@ -277,7 +293,7 @@ export default async (robot: Robot) => {
   const cancel = async (rec: PostRecord, note = true): Promise<string> => {
     jobs.remove(jobId(rec.message))
     const live = getPost(rec.message) ?? rec
-    let text = `${SEND} Cancelled. Nothing was sent.`
+    let text = `${SEND} Cancelled.`
     if (Object.keys(live.results).length) {
       text = `${SEND} Cancelled. ${await retract(live)}`
       const after = getPost(rec.message) ?? live
@@ -315,14 +331,14 @@ export default async (robot: Robot) => {
     if (existing && (existing.status === 'queued' || existing.status === 'posted')) return
     const photos = imagesOf(msg)
     if (!photos.length) {
-      await notify(msg.channelId, `${SEND} There's no photo on that message.`, msg.id)
+      await notify(msg.channelId, `${SEND} No photo here.`, msg.id)
       return
     }
     const rule = binding(bound)!
     const available = configuredTargets()
     const targets = rule.targets.filter(t => available[t])
     if (!targets.length) {
-      await notify(msg.channelId, `${SEND} No social accounts are set up yet.`, msg.id)
+      await notify(msg.channelId, `${SEND} No accounts set up.`, msg.id)
       return
     }
     const now = Date.now()
@@ -335,19 +351,19 @@ export default async (robot: Robot) => {
     jobs.add({ id: jobId(msg.id), at: sendAt, tz, data: { message: msg.id } })
     const { text, alts, errors, enhance } = partsOf(msg, bound)
     const notes: string[] = []
-    if (errors.length) notes.push(`The enhance line didn't parse (${errors.join(', ')}), so the channel's settings apply.`)
-    if (photos.length > MAX_PHOTOS) notes.push(`Only the first ${MAX_PHOTOS} photos go.`)
-    if (photos.slice(0, MAX_PHOTOS).some((_p, i) => !alts[i])) notes.push('Add `alt: …` lines to the message to describe the photos.')
+    if (errors.length) notes.push(`Bad enhance line (${errors.join(', ')}), using channel settings.`)
+    if (photos.length > MAX_PHOTOS) notes.push(`First ${MAX_PHOTOS} photos only.`)
     for (const target of targets.map(t => available[t]!)) {
-      if (fitCaption(text, rec.tag, target.limit, target.count).endsWith('…')) notes.push(`The caption is over ${target.label}'s ${target.limit} characters, so it'll be cut.`)
+      if (fitCaption(text, rec.tag, target.limit, target.count).endsWith('…')) notes.push(`Caption cut to ${target.label}'s ${target.limit}.`)
     }
     const when = rule.holdMs ? formatWhen(sendAt, tz, now) : 'in a moment'
-    const head = [`${SEND} Sending to ${listOf(targets.map(labelOf))} ${when}. React ${CANCEL} or remove your ${SEND} to stop.`, ...notes].join(' ')
+    const head = [`${SEND} To ${listOf(targets.map(labelOf))} ${when}, ${CANCEL} to stop.`, ...notes].join(' ')
     // preview, cached for the send
     const done = await processPhotos(msg, Math.min(...targets.map(t => available[t]!.maxBytes)), enhance, { cache: true })
-    const hint = `Tweak with an \`enhance:\` line (${ENHANCE_HELP}), then re-add your ${SEND}.`
+    const described = altsFor(msg, done, text, alts)
+    const lines = done.map((p, i) => described[i]!.given || !p.photo ? p.line : `${p.line}\n  alt: ${described[i]!.alt}`)
     const files = done.flatMap((p, i) => p.photo ? [{ data: p.photo.data, name: `preview-${i + 1}.jpg` }] : [])
-    await postFiles(robot, msg.channelId, [head, ...done.map(p => p.line), hint].join('\n'), files, { feature: 'social', replyTo: msg.id })
+    await postFiles(robot, msg.channelId, [head, ...lines].join('\n'), files, { feature: 'social', replyTo: msg.id })
   }
 
   // one refusal per message
@@ -361,7 +377,7 @@ export default async (robot: Robot) => {
     if (!binding(msg.channelId) && !msg.channel) return
     if (reaction.partial) {
       try {
-        msg = (await reaction.fetch()).message as unknown as Msg
+        msg = (await reaction.fetch()).message
       } catch {
         return
       }
@@ -387,7 +403,7 @@ export default async (robot: Robot) => {
     const allowed = msg.author?.id === user.id || await canManageMember(msg as Parameters<typeof canManageMember>[0], user.id)
     if (!allowed) {
       if (emoji === baseEmoji(SEND) && refusals.first(msg.id, 'refused')) {
-        await notify(msg.channelId, `${SEND} Only the person who posted it or channel staff can send that out.`, msg.id)
+        await notify(msg.channelId, `${SEND} Poster or channel staff only.`, msg.id)
       }
       return
     }

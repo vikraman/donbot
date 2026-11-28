@@ -3,7 +3,25 @@
 import { MAX_PHOTOS } from '../enhance/photos.ts'
 
 
-export const DEFAULT_ALT = 'Whiteboard photo'
+export interface AltContext {
+  board?: 'whiteboard' | 'blackboard'
+  channel?: string
+  date?: string
+  index: number
+  total: number
+  caption: string
+}
+
+const ALT_CAPTION = 250
+
+// default alt
+export const defaultAlt = ({ board, channel, date, index, total, caption }: AltContext): string => {
+  const kind = board === 'blackboard' ? 'Blackboard' : board === 'whiteboard' ? 'Whiteboard' : 'Board'
+  const where = [channel ? `#${channel}` : '', date ?? ''].filter(Boolean).join(', ')
+  const head = `${kind} photo${where ? ` from ${where}` : ''}${total > 1 ? ` (${index + 1} of ${total})` : ''}`
+  const first = caption.split(/\n\s*\n/)[0]!.replace(/\s+/g, ' ').trim()
+  return first ? `${head}: ${truncate(first, ALT_CAPTION)}` : head
+}
 
 const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' })
 
