@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { canonicalTz, dayKey, weekKey, describeRepeat, formatClock, formatWhen, fromZoned, nextOccurrence, parseClock, parseDays, parseWhen, zonedParts, DAY_MS, MAX_AHEAD_MS, MIN_INTERVAL_MS, MINUTE_MS } from '../scripts/lib/time.ts'
+import { canonicalTz, dayKey, weekKey, describeRepeat, formatClock, formatWhen, fromZoned, nextOccurrence, parseClock, parseDays, zonedParts, DAY_MS, MAX_AHEAD_MS, MIN_INTERVAL_MS, MINUTE_MS } from '../scripts/lib/time.ts'
+import { parseWhen } from '../scripts/lib/when.ts'
 import type { Repeat } from '../scripts/lib/time.ts'
 import { fc, hour, instant, minute, weekdays, zone } from './helpers/arb.ts'
 
@@ -44,7 +45,7 @@ describe('time helpers', () => {
     assert.deepStrictEqual(parseWhen('in 5 minutes', 'UTC', NOW), { at: NOW + 5 * 60_000 })
     assert.deepStrictEqual(parseWhen('in an hour', 'UTC', NOW), { at: NOW + 3_600_000 })
     assert.deepStrictEqual(parseWhen('in 2 days', 'UTC', NOW), { at: NOW + 2 * 86_400_000 })
-    assert.strictEqual(parseWhen('in 5 fortnights', 'UTC', NOW), undefined)
+    assert.strictEqual(parseWhen('in 5 eons', 'UTC', NOW), undefined)
   })
   it('parses clock times in the given zone', () => {
     assert.strictEqual(parseWhen('at 3pm', 'UTC', NOW)!.at, Date.UTC(2026, 10, 16, 15, 0))
@@ -146,7 +147,8 @@ describe('time properties', () => {
       .map(n => n * MINUTE_MS)
       .filter(ms => ms !== DAY_MS && ms !== 7 * DAY_MS)
       .map(everyMs => ({ kind: 'interval' as const, everyMs }))
-    fc.assert(fc.property(fc.oneof(weekly, interval), zone, (repeat: Repeat, tz) => {
+    const monthly = fc.record({ kind: fc.constant('monthly' as const), day: fc.integer({ min: 1, max: 31 }), hour, minute }).map(r => ({ ...r }))
+    fc.assert(fc.property(fc.oneof(weekly, interval, monthly), zone, (repeat: Repeat, tz) => {
       assert.deepStrictEqual(parseWhen(describeRepeat(repeat), tz, NOW)?.repeat, repeat)
     }))
   })

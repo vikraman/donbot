@@ -3,11 +3,10 @@
 //   (see `hubot my timezone is`). Persists in the brain, survives restarts.
 //
 // Commands:
-//   hubot remind me <when> to <message> - Reminds you, e.g. in 10 minutes, at 3pm, tomorrow at 9, on friday at 10:30.
-//   hubot remind me to <message> <when> - Same, time last.
-//   hubot remind <user> <when> to <message> - Reminds <user> instead.
-//   hubot remind me every <weekday|day|monday,...> at <time> to <message> - Recurring reminder, e.g. every weekday at 9am.
-//   hubot remind me every <N> hours to <message> - Recurring reminder on an interval.
+//   hubot remind me <when> <message> - Reminds you, e.g. in 10 minutes, tonight, at 3pm, tomorrow morning, next friday at 10:30, on dec 1.
+//   hubot remind me <message> <when> - Same, time last, e.g. remind me to call mom in half an hour.
+//   hubot remind <user> <when> <message> - Reminds <user> instead.
+//   hubot remind me every <when> <message> - Recurring, e.g. every weekday at 9am, every morning, every 2 hours, on mondays, every month on the 1st.
 //   hubot list reminders - Shows pending reminders in this room, numbered.
 //   hubot my reminders - Shows your pending reminders in this room.
 //   hubot cancel reminder <n> - Cancels reminder <n> from the list.
@@ -20,8 +19,9 @@ import { mentionFor } from './lib/mention.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import type { Job } from './lib/schedule.ts'
-import { describeRepeat, formatWhen, HOUR_MS, parseWhen } from './lib/time.ts'
+import { DAY_MS, describeRepeat, formatWhen, HOUR_MS } from './lib/time.ts'
 import type { When } from './lib/time.ts'
+import { findWhen } from './lib/when.ts'
 import { tzNote, userTz } from './lib/timezone.ts'
 import { defineFeature } from './lib/features.ts'
 import { peopleFor } from './lib/spaces.ts'
@@ -54,7 +54,9 @@ interface LegacyReminder {
   dueAt: number
 }
 
-const EXAMPLES = 'Try `in 10 minutes`, `at 3pm`, `tomorrow at 9am`, `on friday at 10:30`, `every weekday at 9am` or `every 2 hours`.'
+const EXAMPLES = 'Try `in 10 minutes`, `tonight`, `at 3pm`, `tomorrow morning`, `next friday at 10:30`, `on dec 1`, `every weekday at 9am` or `every 2 hours`.'
+
+const NO_MESSAGE = '(no message)'
 
 const mentionOf = (r: Reminder): string => mentionFor({ id: r.targetId, name: r.targetName })
 
@@ -89,33 +91,22 @@ interface Parsed {
   message: string
 }
 
-// "to <msg> <when>" or "<when> to <msg>"; first split parseWhen accepts wins
+// time first or last, any connector: "tonight that I owe bob £5", "to call mom at 3pm", "at 11pm I owe bob"
 export const parseRequest = (body: string, tz: string, now = Date.now()): Parsed | undefined => {
-  const text = body.trim()
-  const toFirst = text.match(/^to (.+)$/i)
-  if (toFirst) {
-    const rest = required(toFirst, 1)
-    const words = rest.split(' ')
-    for (let i = 1; i < words.length; i++) {
-      const whenText = words.slice(i).join(' ')
-      const when = parseWhen(whenText, tz, now)
-      if (when) return { when, whenText, message: words.slice(0, i).join(' ') }
-    }
-  }
-  const re = / to /gi
-  for (let m = re.exec(text); m; m = re.exec(text)) {
-    const whenText = text.slice(0, m.index)
-    const when = parseWhen(whenText, tz, now)
-    const message = text.slice(m.index + m[0].length).trim()
-    if (when && message) return { when, whenText, message }
-  }
-  return undefined
+  const found = findWhen(body, tz, now)
+  if (!found) return undefined
+  const message = found.rest.replace(/^(?:[:\-–—]\s*)?(?:(?:to|that|of)\s+)?/i, '').trim()
+  return { when: found.when, whenText: found.phrase, message }
 }
 
 const describeWhen = (when: When, whenText: string, tz: string): string => {
-  if (when.repeat?.kind === 'interval') return describeRepeat(when.repeat)
+  if (when.repeat?.kind === 'interval') {
+    // "every other day at 8am" keeps its clock
+    const daily = when.repeat.everyMs % DAY_MS === 0 && !/^\s*every \S+ \S+\s*$/i.test(whenText)
+    return daily ? `${describeRepeat(when.repeat)}, starting ${formatWhen(when.at, tz)}${tzNote(tz)}` : describeRepeat(when.repeat)
+  }
   if (when.repeat) return `${describeRepeat(when.repeat)}${tzNote(tz)}`
-  if (/^\s*in /i.test(whenText)) return whenText.trim().toLowerCase()
+  if (/^\s*in \D/i.test(whenText) || /^\s*in \d+\s*[a-z]/i.test(whenText)) return whenText.trim().toLowerCase()
   return `${formatWhen(when.at, tz)}${tzNote(tz)}`
 }
 
@@ -125,12 +116,13 @@ const roomJobs = (jobs: Job<Reminder>[], room: string): Job<Reminder>[] =>
 const listLine = (job: Job<Reminder>, n: number): string => {
   const due = formatWhen(job.at, job.tz)
   const repeat = job.repeat ? `, ${describeRepeat(job.repeat)}` : ''
-  return `${n}. ${due}${repeat} for ${mentionOf(job.data)}: ${job.data.message}`
+  return `${n}. ${due}${repeat} for ${mentionOf(job.data)}: ${job.data.message || NO_MESSAGE}`
 }
 
 export default async (robot: Robot) => {
   const reminders = scheduler<Reminder>(robot, 'remind', async job => {
-    await postToRoom(robot, job.data.room, `${mentionOf(job.data)} reminder: ${job.data.message}`, 'remind')
+    const text = job.data.message ? `reminder: ${job.data.message}` : 'here is the reminder you asked for.'
+    await postToRoom(robot, job.data.room, `${mentionOf(job.data)} ${text}`, 'remind')
   })
 
   // pre-scheduler reminders
@@ -178,11 +170,11 @@ export default async (robot: Robot) => {
     await res.send(`Cancelled reminder for ${mentionOf(job.data)}: ${job.data.message}`)
   })
 
-  robot.respond(/remind (\S+) (.+)$/i, { id: 'remind.add' }, async res => {
+  robot.respond(/(?:(?:can|could|would) you |please |pls )*remind (\S+) (.+?)[.!]?$/i, { id: 'remind.add' }, async res => {
     const tz = userTz(robot, res.message.user.id)
     const parsed = parseRequest(required(res.match, 2), tz)
     if (!parsed) {
-      await res.send(`I couldn't tell when to remind you. Say \`remind me <when> to <message>\`. ${EXAMPLES}`)
+      await res.send(`I couldn't find a time in that. Put it at the start or the end, like \`remind me tomorrow at 9 to call bob\`. ${EXAMPLES}`)
       return
     }
 
@@ -208,6 +200,7 @@ export default async (robot: Robot) => {
     reminders.add({ at: parsed.when.at, tz, repeat: parsed.when.repeat, data })
 
     const whom = target.id === res.message.user.id ? 'you' : mentionOf(data)
-    await res.send(`Ok, I'll remind ${whom} ${describeWhen(parsed.when, parsed.whenText, tz)}.`)
+    const what = data.message ? `: ${data.message}` : '.'
+    await res.send(`Ok, I'll remind ${whom} ${describeWhen(parsed.when, parsed.whenText, tz)}${what}`)
   })
 }

@@ -19,7 +19,8 @@ import { canManage, MANAGE_ONLY } from './lib/permissions.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import type { Job } from './lib/schedule.ts'
-import { DAY_MS, MAX_AHEAD_MS, formatWhen, fromZoned, parseClock, parseWhen, zonedParts } from './lib/time.ts'
+import { DAY_MS, formatWhen } from './lib/time.ts'
+import { parseWhen } from './lib/when.ts'
 import { tzNote, userTz } from './lib/timezone.ts'
 
 defineFeature({ id: 'deadlines', label: 'Deadlines', level: 'professional', help: ['hubot deadline', 'hubot remove deadline'] })
@@ -34,36 +35,11 @@ interface Deadline {
 
 export const MAX_PER_ROOM = 25
 const MAX_TITLE = 100
-const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+const END_OF_DAY = { hour: 23, minute: 59 }
 
-const clockOf = (text: string | undefined): { hour: number, minute: number } | undefined =>
-  text ? parseClock(text.trim()) : { hour: 23, minute: 59 }
-
-// iso or month-name dates, end of day unless a time is given; else anything parseWhen takes
+// "dec 12", "2026-12-12 17:00", "friday", "in 3 days"; end of day unless a time is given
 export const parseDue = (text: string, tz: string, now = Date.now()): number | undefined => {
-  const t = text.trim().toLowerCase().replace(/\s+/g, ' ').replace(/^on /, '')
-  let year: number | undefined
-  let month: number | undefined
-  let day: number | undefined
-  let clockText: string | undefined
-  let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ t](?:at )?(.+))?$/)
-  if (m) {
-    year = Number(m[1]); month = Number(m[2]); day = Number(m[3]); clockText = m[4]
-  } else if ((m = t.match(/^([a-z]{3})[a-z]* (\d{1,2})(?:st|nd|rd|th)?(?:,? (\d{4}))?(?: at (.+))?$/)) && MONTHS.includes(m[1]!)) {
-    month = MONTHS.indexOf(m[1]!) + 1; day = Number(m[2]); year = m[3] ? Number(m[3]) : undefined; clockText = m[4]
-  } else if ((m = t.match(/^(\d{1,2})(?:st|nd|rd|th)? ([a-z]{3})[a-z]*(?:,? (\d{4}))?(?: at (.+))?$/)) && MONTHS.includes(m[2]!)) {
-    day = Number(m[1]); month = MONTHS.indexOf(m[2]!) + 1; year = m[3] ? Number(m[3]) : undefined; clockText = m[4]
-  }
-  if (month !== undefined && day !== undefined) {
-    const clock = clockOf(clockText)
-    if (!clock || month < 1 || month > 12 || day < 1 || day > 31) return undefined
-    const thisYear = zonedParts(now, tz).year
-    let at = fromZoned(year ?? thisYear, month, day, clock.hour, clock.minute, tz)
-    // a month and day already past means next year
-    if (year === undefined && at <= now) at = fromZoned(thisYear + 1, month, day, clock.hour, clock.minute, tz)
-    return at > now && at - now <= MAX_AHEAD_MS ? at : undefined
-  }
-  const when = parseWhen(t, tz, now)
+  const when = parseWhen(text, tz, now, { defaultClock: END_OF_DAY })
   return when && !when.repeat ? when.at : undefined
 }
 

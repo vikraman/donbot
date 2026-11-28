@@ -78,7 +78,7 @@ describe('Poll', () => {
       ['poll q | only', /at least two options/],
       [`poll q | ${Array.from({ length: 11 }, (_, i) => `o${i}`).join(' | ')}`, /at most 10 options/],
       ['poll q | a | | b', /Usage/],
-      ['poll 5 fortnights: q', /don't understand the duration/],
+      ['poll 5 eons: q', /don't understand the duration/],
       ['poll 31d: q', /at most 30 days/]
     ] as const) {
       await ask(text)

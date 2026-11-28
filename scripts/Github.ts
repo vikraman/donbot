@@ -36,7 +36,8 @@ import { allowsRoomAsync } from './lib/policy.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { recordStreak } from './lib/streak.ts'
-import { DAY_MS, nextOccurrence } from './lib/time.ts'
+import { DAY_MS, nextOccurrence, unitMs } from './lib/time.ts'
+import { parseDuration } from './lib/when.ts'
 import type { Repeat } from './lib/time.ts'
 import { defaultTz } from './lib/timezone.ts'
 import { defineFeature } from './lib/features.ts'
@@ -397,13 +398,10 @@ export interface Options {
   error?: string
 }
 
-const UNITS: Record<string, number> = { s: 1, sec: 1, secs: 1, second: 1, seconds: 1, m: 60, min: 60, mins: 60, minute: 60, minutes: 60, h: 3600, hr: 3600, hrs: 3600, hour: 3600, hours: 3600 }
-
-const parseDuration = (text: string): number | undefined => {
-  const m = text.match(/^(\d+)\s*([a-z]*)$/)
-  if (!m || !m[1]) return undefined
-  const unit = m[2] ? UNITS[m[2]] : 60
-  return unit ? Number(m[1]) * unit : undefined
+// seconds; a bare number is minutes
+const parseInterval = (text: string): number | undefined => {
+  const ms = parseDuration(text, 'minutes')
+  return ms === undefined ? undefined : ms / 1000
 }
 
 export const parseOptions = (text: string): Options => {
@@ -414,9 +412,9 @@ export const parseOptions = (text: string): Options => {
     const t = tokens[i] as string
     if (t === 'every') {
       let spec = tokens[i + 1] || ''
-      if (/^\d+$/.test(spec) && tokens[i + 2] && UNITS[tokens[i + 2] as string]) spec += tokens[++i + 1]
+      if (/^\d+$/.test(spec) && tokens[i + 2] && unitMs(tokens[i + 2] as string)) spec += tokens[++i + 1]
       i++
-      interval = parseDuration(spec)
+      interval = parseInterval(spec)
       if (interval === undefined || interval < MIN_SEC || interval > MAX_SEC) {
         return { categories: [], error: 'Pick an interval between 1m and 1h, like `every 5m`.' }
       }

@@ -15,7 +15,18 @@ describe('Remind request parsing', () => {
       ['to stretch in 5 minutes', 'stretch'],
       ['at 3pm to call mom', 'call mom'],
       ['to call mom at 3pm', 'call mom'],
-      ['to talk to bob on friday at 10', 'talk to bob']
+      ['to talk to bob on friday at 10', 'talk to bob'],
+      ['tonight that I owe vikraman £12.08', 'I owe vikraman £12.08'],
+      ['at 11pm I owe vikraman £12.08', 'I owe vikraman £12.08'],
+      ['at 11pm today to pay vikraman £12.08', 'pay vikraman £12.08'],
+      ['about the meeting in half an hour', 'about the meeting'],
+      ['tomorrow call bob at 3', 'call bob'],
+      ['in 5: stretch', 'stretch'],
+      ['in 10 minutes - stretch', 'stretch'],
+      ['in 10 minutes — to stretch', 'stretch'],
+      ['of the dentist tomorrow', 'the dentist'],
+      ['in 5 for the call', 'for the call'],
+      ['in 5 re the call', 're the call']
     ] as const) assert.strictEqual(parseRequest(text, 'UTC', NOW)?.message, message, text)
   })
   it('keeps " to " inside the message', () => {
@@ -42,27 +53,41 @@ describe('Remind', () => {
     const { sent, ask } = chat(state)
     await ask('remind me in 5 minutes to stretch')
     await ask('remind me every weekday at 9am to post standup')
-    assert.deepStrictEqual(sent, ["Ok, I'll remind you in 5 minutes.", "Ok, I'll remind you every weekday at 9am."])
+    assert.deepStrictEqual(sent, ["Ok, I'll remind you in 5 minutes: stretch", "Ok, I'll remind you every weekday at 9am: post standup"])
+  })
+  it('takes polite phrasings and reminders without a message', async () => {
+    clock(NOW)
+    const { robot, sent, ask } = chat(state)
+    await ask('can you please remind me tonight that I owe vikraman £12.08')
+    await ask('remind me in 10 minutes')
+    await ask('remind me to stretch every other day at 8am')
+    assert.deepStrictEqual(sent, [
+      "Ok, I'll remind you today at 8pm: I owe vikraman £12.08",
+      "Ok, I'll remind you in 10 minutes.",
+      "Ok, I'll remind you every 2 days, starting tomorrow at 8am: stretch"
+    ])
+    await runDueJobs(robot, 'remind')
+    assert.ok(sent.includes('<@test-user> here is the reminder you asked for.'))
   })
   it('names the timezone only when it is not the default', async () => {
     clock(NOW)
     state.robot.brain.set('tz:user:test-user', 'Asia/Tokyo')
     const { sent, ask } = chat(state)
     await ask('remind me to call mom at 3pm')
-    assert.strictEqual(sent[0], "Ok, I'll remind you tomorrow at 3pm (Asia/Tokyo).")
+    assert.strictEqual(sent[0], "Ok, I'll remind you tomorrow at 3pm (Asia/Tokyo): call mom")
   })
   it('uses DEFAULT_TIMEZONE when the requester has none', async () => {
     process.env.DEFAULT_TIMEZONE = 'America/New_York'
     clock(NOW)
     const { robot, sent, ask } = chat(state)
     await ask('remind me at 3pm to leave')
-    assert.strictEqual(sent[0], "Ok, I'll remind you today at 3pm.")
+    assert.strictEqual(sent[0], "Ok, I'll remind you today at 3pm: leave")
     assert.strictEqual(robot.brain.get<{ tz: string }[]>('schedule:remind')![0]!.tz, 'America/New_York')
   })
   it('explains the formats when it cannot parse the time', async () => {
     const { sent, ask } = chat(state)
-    await ask('remind me in 5 fortnights to stretch')
-    assert.match(sent[0]!, /couldn't tell when/)
+    await ask('remind me in 5 eons to stretch')
+    assert.match(sent[0]!, /couldn't find a time/)
     assert.match(sent[0]!, /every weekday at 9am/)
   })
   it('fires when due and forgets one-off reminders', async () => {
@@ -77,19 +102,19 @@ describe('Remind', () => {
     brainUser(robot, 'bob-id', 'bob')
     brainUser(robot, '12345', 'carol')
     await ask('remind bob to stretch in 1 minute')
-    assert.strictEqual(sent[0], "Ok, I'll remind <@bob-id> in 1 minute.")
+    assert.strictEqual(sent[0], "Ok, I'll remind <@bob-id> in 1 minute: stretch")
     await runDueJobs(robot, 'remind')
     assert.strictEqual(sent[1], '<@bob-id> reminder: stretch')
     await ask('remind <@12345> in 5 minutes to review')
-    assert.strictEqual(sent[2], "Ok, I'll remind <@12345> in 5 minutes.")
+    assert.strictEqual(sent[2], "Ok, I'll remind <@12345> in 5 minutes: review")
   })
   it('never pings unknown names, everyone or roles', async () => {
     const { sent, ask } = chat(state)
     await ask('remind nobody-known in 5 minutes to stretch')
     await ask('remind everyone in 5 minutes to stretch')
     await ask('remind <@&42> in 5 minutes to stretch')
-    assert.strictEqual(sent[0], "Ok, I'll remind @​nobody-known in 5 minutes.")
-    assert.strictEqual(sent[1], "Ok, I'll remind @​everyone in 5 minutes.")
+    assert.strictEqual(sent[0], "Ok, I'll remind @​nobody-known in 5 minutes: stretch")
+    assert.strictEqual(sent[1], "Ok, I'll remind @​everyone in 5 minutes: stretch")
     assert.doesNotMatch(sent[2]!, /<@&42>/)
   })
   it('lists reminders in this room, numbered by due time', async () => {

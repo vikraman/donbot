@@ -80,7 +80,7 @@ export const weekKey = (ms: number, tz: string): string => {
 
 const DAY_NAMES =['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
-const weekdayOf = (word: string): number | undefined => {
+export const weekdayOf = (word: string): number | undefined => {
   const w = word.toLowerCase()
   if (w.length < 3) return undefined
   const i = DAY_NAMES.findIndex(d => d.startsWith(w) || `${d}s` === w)
@@ -103,10 +103,17 @@ export const formatWhen = (ms: number, tz: string, now = Date.now()): string => 
   return `${label} at ${clock}`
 }
 
+export interface Clock {
+  hour: number
+  minute: number
+}
+
 export type Repeat =
   | { kind: 'interval', everyMs: number }
   // days: weekdays it runs on, 0 = sunday
   | { kind: 'weekly', days: number[], hour: number, minute: number }
+  // day of month, clamped to short months
+  | { kind: 'monthly', day: number, hour: number, minute: number }
 
 const UNIT_MS: Record<string, number> = {
   s: 1000, sec: 1000, secs: 1000, second: 1000, seconds: 1000,
@@ -119,7 +126,7 @@ const UNIT_MS: Record<string, number> = {
 export const unitMs = (unit: string): number | undefined => UNIT_MS[unit.toLowerCase()]
 
 // "3pm", "15:30", "9:05am", "noon", "midnight"
-export const parseClock = (text: string): { hour: number, minute: number } | undefined => {
+export const parseClock = (text: string): Clock | undefined => {
   const t = text.trim().toLowerCase()
   if (t === 'noon') return { hour: 12, minute: 0 }
   if (t === 'midnight') return { hour: 0, minute: 0 }
@@ -139,7 +146,7 @@ export const parseClock = (text: string): { hour: number, minute: number } | und
 }
 
 // next weekly occurrence strictly after `after`
-const nextWeekly = (days: number[], hour: number, minute: number, tz: string, after: number): number => {
+export const nextWeekly = (days: number[], hour: number, minute: number, tz: string, after: number): number => {
   const p = zonedParts(after, tz)
   for (let offset = 0; offset <= 7; offset++) {
     const candidate = fromZoned(p.year, p.month, p.day + offset, hour, minute, tz)
@@ -150,11 +157,33 @@ const nextWeekly = (days: number[], hour: number, minute: number, tz: string, af
   return after + 7 * DAY_MS
 }
 
-export const nextOccurrence = (repeat: Repeat, tz: string, after: number): number =>
-  repeat.kind === 'interval' ? after + repeat.everyMs : nextWeekly(repeat.days, repeat.hour, repeat.minute, tz, after)
+// month 1-based, may overflow
+export const daysInMonth = (year: number, month: number): number => new Date(Date.UTC(year, month, 0)).getUTCDate()
 
-const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
-const WORKDAYS = [1, 2, 3, 4, 5]
+// next monthly occurrence strictly after `after`
+export const nextMonthly = (day: number, hour: number, minute: number, tz: string, after: number): number => {
+  const p = zonedParts(after, tz)
+  for (let offset = 0; offset <= 12; offset++) {
+    const candidate = fromZoned(p.year, p.month + offset, Math.min(day, daysInMonth(p.year, p.month + offset)), hour, minute, tz)
+    if (candidate > after) return candidate
+  }
+  return after + 31 * DAY_MS
+}
+
+export const nextOccurrence = (repeat: Repeat, tz: string, after: number): number => {
+  if (repeat.kind === 'interval') return after + repeat.everyMs
+  if (repeat.kind === 'monthly') return nextMonthly(repeat.day, repeat.hour, repeat.minute, tz, after)
+  return nextWeekly(repeat.days, repeat.hour, repeat.minute, tz, after)
+}
+
+export const ordinal = (n: number): string => {
+  const tens = n % 100
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'
+  return `${n}${suffix}`
+}
+
+export const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
+export const WORKDAYS = [1, 2, 3, 4, 5]
 
 // "day", "weekday", "weekend", "monday", "mon, wed and fri"
 export const parseDays = (text: string): number[] | undefined => {
@@ -176,6 +205,7 @@ export const describeRepeat = (repeat: Repeat): string => {
     return n === 1 ? `every ${unit}` : `every ${n} ${unit}s`
   }
   const clock = formatClock(repeat.hour, repeat.minute)
+  if (repeat.kind === 'monthly') return `every month on the ${ordinal(repeat.day)} at ${clock}`
   const key = repeat.days.join()
   if (key === ALL_DAYS.join()) return `every day at ${clock}`
   if (key === WORKDAYS.join()) return `every weekday at ${clock}`
@@ -193,66 +223,3 @@ export interface When {
 export const MIN_INTERVAL_MS = 5 * MINUTE_MS
 // further out than this is a typo, and breaks date formatting past year 275760
 export const MAX_AHEAD_MS = 2 * 365 * DAY_MS
-
-// "at 3" means 3pm; nobody books a 3am meeting by accident
-const likelyClock = (text: string): { hour: number, minute: number } | undefined => {
-  const clock = parseClock(text)
-  if (!clock || /am|pm/i.test(text) || clock.hour < 1 || clock.hour > 7) return clock
-  return { ...clock, hour: clock.hour + 12 }
-}
-
-// "in 5 minutes", "at 3pm", "tomorrow at 9", "on friday at 10:30", "every weekday at 9am", "every 2 hours"
-export const parseWhen = (text: string, tz: string, now = Date.now()): When | undefined => {
-  const t = text.trim().toLowerCase().replace(/\s+/g, ' ')
-
-  let m = t.match(/^in (\d+|an?|one) ?([a-z]+)$/)
-  if (m) {
-    const n = /^\d+$/.test(m[1]!) ? Number(m[1]) : 1
-    const size = unitMs(m[2]!)
-    if (!size || n < 1 || n * size > MAX_AHEAD_MS) return undefined
-    return { at: now + n * size }
-  }
-
-  m = t.match(/^every (\d+ )?([a-z]+)$/)
-  if (m && unitMs(m[2]!) && m[2] !== 'day' && m[2] !== 'week') {
-    const everyMs = (m[1] ? Number(m[1]) : 1) * unitMs(m[2]!)!
-    if (everyMs < MIN_INTERVAL_MS || everyMs > MAX_AHEAD_MS) return undefined
-    return { at: now + everyMs, repeat: { kind: 'interval', everyMs } }
-  }
-
-  m = t.match(/^every (.+?)(?: at (.+))?$/)
-  if (m) {
-    const days = parseDays(m[1]!)
-    const clock = m[2] ? likelyClock(m[2]) : { hour: 9, minute: 0 }
-    if (!days || !clock) return undefined
-    const repeat: Repeat = { kind: 'weekly', days, ...clock }
-    return { at: nextOccurrence(repeat, tz, now), repeat }
-  }
-
-  // [today|tomorrow|on <day>] [at <clock>], either order
-  m = t.match(/^(?:(today|tonight|tomorrow|on [a-z]+|[a-z]+day) )?(at )?([0-9:]+ ?(?:am|pm)?|noon|midnight)(?: (today|tonight|tomorrow|on [a-z]+|[a-z]+day))?$/)
-    ?? t.match(/^()()(tomorrow)()$/)
-  if (m) {
-    m.splice(2, 1)
-    const dayWord = (m[1] || m[3] || '').replace(/^on /, '')
-    // a bare "3" is too likely to be part of the message
-    if (/^\d+$/.test(m[2]!) && !/(?:^| )at \d+$/.test(t) && !dayWord) return undefined
-    let clock = m[2] === 'tomorrow' ? { hour: 9, minute: 0 } : likelyClock(m[2]!)
-    if (!clock) return undefined
-    if (dayWord === 'tonight' && clock.hour < 12 && !/am|pm/.test(m[2]!)) clock = { ...clock, hour: clock.hour + 12 }
-    const p = zonedParts(now, tz)
-    if (m[2] === 'tomorrow' || dayWord === 'tomorrow') {
-      return { at: fromZoned(p.year, p.month, p.day + 1, clock.hour, clock.minute, tz) }
-    }
-    if (dayWord && dayWord !== 'today' && dayWord !== 'tonight') {
-      const day = weekdayOf(dayWord)
-      if (day === undefined) return undefined
-      return { at: nextWeekly([day], clock.hour, clock.minute, tz, now) }
-    }
-    const today = fromZoned(p.year, p.month, p.day, clock.hour, clock.minute, tz)
-    // "at 9" after 9 means tomorrow
-    return { at: today > now ? today : fromZoned(p.year, p.month, p.day + 1, clock.hour, clock.minute, tz) }
-  }
-
-  return undefined
-}

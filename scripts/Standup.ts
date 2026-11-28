@@ -28,7 +28,8 @@ import { canManage, MANAGE_ONLY } from './lib/permissions.ts'
 import { postToRoom } from './lib/rooms.ts'
 import { scheduler } from './lib/schedule.ts'
 import { freezeStreak, recordStreak } from './lib/streak.ts'
-import { DAY_MS, describeRepeat, formatWhen, HOUR_MS, MINUTE_MS, parseWhen, unitMs } from './lib/time.ts'
+import { DAY_MS, describeRepeat, formatWhen, HOUR_MS, MINUTE_MS } from './lib/time.ts'
+import { parseDuration, parseWhen } from './lib/when.ts'
 import { tzNote, userTz } from './lib/timezone.ts'
 import { defineFeature } from './lib/features.ts'
 import { spaceOf, spaceOfRes } from './lib/spaces.ts'
@@ -256,7 +257,7 @@ export default async (robot: Robot) => {
 
   const promptId = (room: string): string => `standup:${room}`
 
-  robot.respond(/standup (every .+?)(?:,? (?:and )?summary (?:after|in) (\d+) ?([a-z]+))?$/i, { id: 'standup.every' }, async res => {
+  robot.respond(/standup (every .+?)(?:,? (?:and )?summary (?:after|in) (.+))?$/i, { id: 'standup.every' }, async res => {
     if (!canManage(res, 'channel')) {
       await res.send(MANAGE_ONLY.channel)
       return
@@ -270,7 +271,7 @@ export default async (robot: Robot) => {
     }
     let summaryMs = SUMMARY_DELAY_MS
     if (res.match[2]) {
-      summaryMs = Number(res.match[2]) * (unitMs(res.match[3]!) ?? NaN)
+      summaryMs = parseDuration(res.match[2]) ?? NaN
       if (!(summaryMs >= MIN_SUMMARY_DELAY_MS && summaryMs <= MAX_SUMMARY_DELAY_MS)) {
         await res.send('The summary can come between 15 minutes and 6 days after the prompt.')
         return

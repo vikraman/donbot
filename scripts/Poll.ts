@@ -15,7 +15,8 @@ import { rawMessageOf } from './lib/discordMessage.ts'
 import { formatDuration } from './lib/duration.ts'
 import { required } from './lib/match.ts'
 import { scheduler } from './lib/schedule.ts'
-import { DAY_MS, unitMs } from './lib/time.ts'
+import { DAY_MS } from './lib/time.ts'
+import { parseDuration } from './lib/when.ts'
 import { defineFeature } from './lib/features.ts'
 import { isOwner } from './lib/owner.ts'
 import { postToRoom } from './lib/rooms.ts'
@@ -48,13 +49,6 @@ const pollKey = (room: string): string => `poll:${room}`
 const emojisFor = (poll: PollState): string[] => poll.options.length ? NUMBERS.slice(0, poll.options.length) : [UP, DOWN]
 
 const labelsFor = (poll: PollState): string[] => poll.options.length ? poll.options : ['yes', 'no']
-
-// "30m", "2h", "1d"
-const parseDuration = (text: string): number | undefined => {
-  const m = text.trim().match(/^(\d+)\s*([a-z]+)$/i)
-  const size = m && unitMs(m[2]!)
-  return m && size ? Number(m[1]) * size : undefined
-}
 
 const countVotes = async (message: DiscordMessage, emoji: string): Promise<number> => {
   const reaction = message.reactions.cache.get(emoji)
