@@ -162,7 +162,8 @@ export default async (robot: Robot) => {
     } else if (scope.kind === 'dm') {
       lines.push(`**Our DMs**: ${describeRec(d.dms[scope.user!])}`)
     }
-    const off = visible().filter(f => !policy.allows(res, f.id) && f.level !== 'mature')
+    // mature, opt-in off by default
+    const off = visible().filter(f => !policy.allows(res, f.id) && f.level !== 'mature' && !f.optIn)
     if (off.length > 0) lines.push(`**Off here**: ${off.map(f => `\`${f.id}\``).join(', ')}`)
     const known = new Set(features().map(f => f.id))
     const stale = [...resolved.layers.flatMap(r => [...r.on, ...r.off])].filter(id => !known.has(id))
@@ -223,6 +224,11 @@ export default async (robot: Robot) => {
     }
     if (feature.locked && action === 'disable') {
       await res.send(`${feature.label} can't be turned off.`)
+      return
+    }
+    // opt-in is per server
+    if (feature.optIn && action === 'enable' && where !== 'server') {
+      await res.send(`${feature.label} is turned on for a whole server: \`${robot.name} enable ${feature.id} server\` (needs Manage Server).`)
       return
     }
     const target = await authorize(res, targetFor(res, where, 'channel'))

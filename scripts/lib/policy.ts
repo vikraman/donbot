@@ -43,6 +43,7 @@ interface Resolved {
   passiveOn: boolean
   // server off is final
   serverOff?: string[]
+  serverOn?: string[]
 }
 
 export interface ChannelLike {
@@ -85,6 +86,11 @@ export const allowsFeature = (resolved: Resolved, feature: Feature): boolean => 
   if (resolved.scope.kind === 'web') return feature.level === 'professional' && Boolean(feature.web) && !feature.passive && !feature.infra
   if (feature.infra || feature.locked) return true
   if (resolved.serverOff?.includes(feature.id)) return false
+  // opt-in: server on, channel off wins
+  if (feature.optIn) {
+    if (resolved.scope.kind !== 'guild' || !resolved.serverOn?.includes(feature.id)) return false
+    return !resolved.layers.some(rec => rec.off.includes(feature.id))
+  }
   // mature needs nsfw, checked on use
   if (feature.level === 'mature' && resolved.scope.kind === 'guild' && !resolved.scope.nsfw) return false
   for (const rec of resolved.layers) {
@@ -168,7 +174,7 @@ export const policyFor = (robot: Robot): Policy => {
     if (scope.kind === 'guild') {
       const layers = [d.channels[scope.channel!], d.guilds[scope.guild!]].filter((r): r is Rec => Boolean(r))
       const mode = layers.find(r => r.mode)?.mode ?? 'professional'
-      return { scope, mode, layers, passiveOn: mode === 'casual', serverOff: d.guilds[scope.guild!]?.off }
+      return { scope, mode, layers, passiveOn: mode === 'casual', serverOff: d.guilds[scope.guild!]?.off, serverOn: d.guilds[scope.guild!]?.on }
     }
     const mode = scope.kind === 'web' ? 'professional' : unknownMode
     return { scope, mode, layers: [], passiveOn: mode === 'casual' }

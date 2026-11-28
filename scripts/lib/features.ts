@@ -17,6 +17,8 @@ export interface Feature {
   web?: boolean
   // always on
   locked?: boolean
+  // off until enabled for the server
+  optIn?: boolean
   // plumbing, hidden
   infra?: boolean
   // help prefixes

@@ -8,6 +8,7 @@ import type { TestRobot } from './helpers/setup.ts'
 import { discordMessage, tick, withMessage } from './helpers/fakes.ts'
 import type { RawOptions } from './helpers/fakes.ts'
 
+import { defineFeature } from '../scripts/lib/features.ts'
 import { configurePolicy, policyFor, POLICY_KEY } from '../scripts/lib/policy.ts'
 import { appliedMigrations } from '../scripts/lib/migrations.ts'
 import { postToRoom } from '../scripts/lib/rooms.ts'
@@ -144,6 +145,27 @@ describe('Policy', () => {
       await say(bot('mode casual'), 'room', { manageGuild: true })
       assert.strictEqual(sent.at(-1), 'This server is now casual.')
       assert.strictEqual(policyFor(state.robot).data().guilds.g1?.mode, 'casual')
+    })
+
+    it('keeps opt-in features off until a server admin turns them on for the server', async () => {
+      defineFeature({ id: 'optintest', label: 'Opt-in test', level: 'professional', optIn: true })
+      const policy = policyFor(state.robot)
+      inGuild(state.robot, 'g1', ['room'], 'casual')
+      assert.ok(!policy.allowsRoom('room', 'optintest'))
+      const sent = collect(state.robot)
+      await say(bot('enable optintest'), 'room', { manageGuild: true })
+      assert.strictEqual(sent.at(-1), 'Opt-in test is turned on for a whole server: `Dumbotheelephant enable optintest server` (needs Manage Server).')
+      await say(bot('enable optintest server'), 'room', { manageChannels: true })
+      assert.strictEqual(sent.at(-1), 'Only someone who can manage this server can do that.')
+      assert.ok(!policy.allowsRoom('room', 'optintest'))
+      await say(bot('enable optintest server'), 'room', { manageGuild: true })
+      assert.ok(policy.allowsRoom('room', 'optintest'))
+      // channel opt-out
+      await say(bot('disable optintest'), 'room', { manageChannels: true })
+      assert.ok(!policy.allowsRoom('room', 'optintest'))
+      // never in dms
+      policy.update(d => { d.dms.u1 = { on: ['optintest'], off: [] } })
+      assert.ok(!policy.allowsRoom('dm-u1', 'optintest'))
     })
 
     it('turns features on and off, and says when the channel ends up different', async () => {

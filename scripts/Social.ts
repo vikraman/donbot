@@ -10,6 +10,7 @@
 //   hubot social retract <message link> - Cancels or deletes a post (poster or Manage Channels).
 //
 // Notes:
+//   Off until someone who can manage the server runs "hubot enable social server".
 //   React 📣 on a message with 1-4 photos to queue it, ❌ (or removing your 📣) cancels it, 🗑️ deletes it once sent.
 //   The caption is the message text, and edits count until it goes. Lines like "alt: …" or "alt 2: …" describe the photos.
 //   Photos are resized and stripped of metadata (including location), and boards are cleaned up, cropped and straightened.
@@ -49,7 +50,7 @@ import { configuredTargets } from './lib/social/index.ts'
 import { LABELS, TARGET_IDS } from './lib/social/types.ts'
 import type { Image, Posted, Target, TargetId } from './lib/social/types.ts'
 
-defineFeature({ id: 'social', label: 'Social posting', level: 'professional', stores: 'bound channels, and which messages were posted where', help: ['hubot social'] })
+defineFeature({ id: 'social', label: 'Social posting', level: 'professional', optIn: true, stores: 'bound channels, and which messages were posted where', help: ['hubot social'] })
 
 const SEND = '📣'
 const CANCEL = '❌'

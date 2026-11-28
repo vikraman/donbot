@@ -10,6 +10,7 @@ import { configureSocial } from '../scripts/lib/social/index.ts'
 import type { Image, Target, TargetId } from '../scripts/lib/social/types.ts'
 import { parseHere } from '../scripts/Social.ts'
 import { PRESETS } from '../scripts/lib/enhance/board.ts'
+import { policyFor } from '../scripts/lib/policy.ts'
 
 interface Call {
   target: TargetId
@@ -88,13 +89,16 @@ describe('Social', () => {
     return msg
   }
 
-  const start = async () => {
-    const channel = { id: 'boards', send: async (o: { content: string, files: { name: string }[] }) => { previews.push({ content: o.content, files: o.files.map(f => f.name) }); state.robot.emit('send', { room: 'boards' }, o.content) }, messages: { fetch: async (id: string) => {
+  // server g1, social on by default
+  const start = async ({ enabled = true } = {}) => {
+    const channel = { id: 'boards', guildId: 'g1', send: async (o: { content: string, files: { name: string }[] }) => { previews.push({ content: o.content, files: o.files.map(f => f.name) }); state.robot.emit('send', { room: 'boards' }, o.content) }, messages: { fetch: async (id: string) => {
       const m = messages.get(id)
       if (!m) throw Object.assign(new Error('Unknown Message'), { code: 10008 })
       return m
     } } }
-    const client = await fakeClient(state, { channels: { cache: new Map([['boards', channel]]), fetch: async () => channel } })
+    const others = ['lab', 'other', 'elsewhere'].map(id => [id, { id, guildId: 'g1' }] as const)
+    const client = await fakeClient(state, { channels: { cache: new Map<string, unknown>([['boards', channel], ...others]), fetch: async () => channel } })
+    if (enabled) policyFor(state.robot).update(d => { d.guilds.g1 = { on: ['social'], off: [] } })
     state.robot.brain.set('social:channel:boards', { targets: ['mastodon', 'bluesky'], holdMs: 600_000, tag: '#whiteboard', by: 'staff', at: 0 })
     return client
   }
@@ -280,6 +284,17 @@ describe('Social', () => {
     assert.strictEqual(sent.at(-1), '📣 Cancelled. 🗑️ Deleted from Mastodon.')
     await runDueJobs(state.robot, 'social')
     assert.deepStrictEqual(calls.map(c => c.target), ['mastodon'])
+  })
+
+  it('stays off in servers that haven\'t turned it on', async () => {
+    const client = await start({ enabled: false })
+    const sent = collect(state.robot)
+    await reactTo(client, message('m1'), '📣', 'alice')
+    await runDueJobs(state.robot, 'social')
+    assert.deepStrictEqual(calls, [])
+    assert.ok(sent.every(t => !t.startsWith('📣')))
+    // gate blocks commands
+    assert.ok(!policyFor(state.robot).allowsRoom('boards', 'social'))
   })
 
   it('ignores unbound channels', async () => {
