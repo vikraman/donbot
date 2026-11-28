@@ -34,7 +34,7 @@ import { canManage, canManageMember, MANAGE_ONLY } from './lib/permissions.ts'
 import { allowsRoom } from './lib/policy.ts'
 import { reactionGuard } from './lib/reactionGuard.ts'
 import { baseEmoji } from './lib/reactions.ts'
-import { channelOf, postFiles, postToRoom } from './lib/rooms.ts'
+import { channelOf, postFiles } from './lib/rooms.ts'
 import { MAX_ATTEMPTS, scheduler } from './lib/schedule.ts'
 import type { Job } from './lib/schedule.ts'
 import { HOUR_MS, MINUTE_MS, formatWhen } from './lib/time.ts'
@@ -168,9 +168,10 @@ export default async (robot: Robot) => {
     if (rec) savePost(change(rec))
   }
 
-  const notify = async (room: string, text: string) => {
+  // reply to photo
+  const notify = async (room: string, text: string, replyTo?: string) => {
     try {
-      await postToRoom(robot, room, text, 'social')
+      await postFiles(robot, room, text, [], { feature: 'social', ...replyTo ? { replyTo } : {} })
     } catch (error) {
       robot.logger.warn(`social: couldn't post in ${room}: ${String(error)}`)
     }
@@ -243,7 +244,7 @@ export default async (robot: Robot) => {
     const msg = await fetchMessage(rec.channel, rec.message)
     if (!msg || !imagesOf(msg).length) {
       const done = await cancel(rec, false)
-      if (msg) await notify(rec.channel, `${SEND} That message has no photos any more. ${done}`)
+      if (msg) await notify(rec.channel, `${SEND} That message has no photos any more. ${done}`, rec.message)
       return
     }
     const final = (job.attempts ?? 0) + 1 >= MAX_ATTEMPTS
@@ -267,7 +268,7 @@ export default async (robot: Robot) => {
       try { await msg.react?.(DONE) } catch {}
     }
     const failed = errors.length ? `${sent.length ? 'But it' : 'It'} didn't go out: ${errors.join('; ')}` : ''
-    await notify(rec.channel, [sent.length ? `${SEND} Posted:` : `${SEND} Couldn't post that photo.`, ...lines, failed].filter(Boolean).join('\n'))
+    await notify(rec.channel, [sent.length ? `${SEND} Posted:` : `${SEND} Couldn't post that photo.`, ...lines, failed].filter(Boolean).join('\n'), rec.message)
   }
 
   const jobs = scheduler<JobData>(robot, 'social', fire)
@@ -284,7 +285,7 @@ export default async (robot: Robot) => {
     } else {
       savePost({ ...live, status: 'cancelled' })
     }
-    if (note) await notify(rec.channel, text)
+    if (note) await notify(rec.channel, text, rec.message)
     return text
   }
 
@@ -314,14 +315,14 @@ export default async (robot: Robot) => {
     if (existing && (existing.status === 'queued' || existing.status === 'posted')) return
     const photos = imagesOf(msg)
     if (!photos.length) {
-      await notify(msg.channelId, `${SEND} There's no photo on that message.`)
+      await notify(msg.channelId, `${SEND} There's no photo on that message.`, msg.id)
       return
     }
     const rule = binding(bound)!
     const available = configuredTargets()
     const targets = rule.targets.filter(t => available[t])
     if (!targets.length) {
-      await notify(msg.channelId, `${SEND} No social accounts are set up yet.`)
+      await notify(msg.channelId, `${SEND} No social accounts are set up yet.`, msg.id)
       return
     }
     const now = Date.now()
@@ -346,7 +347,7 @@ export default async (robot: Robot) => {
     const done = await processPhotos(msg, Math.min(...targets.map(t => available[t]!.maxBytes)), enhance, { cache: true })
     const hint = `Tweak with an \`enhance:\` line (${ENHANCE_HELP}), then re-add your ${SEND}.`
     const files = done.flatMap((p, i) => p.photo ? [{ data: p.photo.data, name: `preview-${i + 1}.jpg` }] : [])
-    await postFiles(robot, msg.channelId, [head, ...done.map(p => p.line), hint].join('\n'), files, { feature: 'social' })
+    await postFiles(robot, msg.channelId, [head, ...done.map(p => p.line), hint].join('\n'), files, { feature: 'social', replyTo: msg.id })
   }
 
   // one refusal per message
@@ -386,13 +387,13 @@ export default async (robot: Robot) => {
     const allowed = msg.author?.id === user.id || await canManageMember(msg as Parameters<typeof canManageMember>[0], user.id)
     if (!allowed) {
       if (emoji === baseEmoji(SEND) && refusals.first(msg.id, 'refused')) {
-        await notify(msg.channelId, `${SEND} Only the person who posted it or channel staff can send that out.`)
+        await notify(msg.channelId, `${SEND} Only the person who posted it or channel staff can send that out.`, msg.id)
       }
       return
     }
     if (emoji === baseEmoji(SEND)) await queue(msg, bound, user.id)
     else if (emoji === baseEmoji(CANCEL) && rec?.status === 'queued') await cancel(rec)
-    else if (emoji === baseEmoji(RETRACT) && rec?.status === 'posted') await notify(rec.channel, await retract(rec))
+    else if (emoji === baseEmoji(RETRACT) && rec?.status === 'posted') await notify(rec.channel, await retract(rec), rec.message)
     else if (emoji === baseEmoji(RETRACT) && rec?.status === 'queued') await cancel(rec)
   }
 

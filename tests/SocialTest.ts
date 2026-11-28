@@ -50,7 +50,7 @@ describe('Social', () => {
   let messages: Map<string, Record<string, unknown>>
   let reacted: string[]
   let prepOpts: unknown[]
-  let previews: { content: string, files: string[] }[]
+  let previews: { content: string, files: string[], replyTo?: string }[]
 
   beforeEach(() => {
     delete process.env.OWNER_USER_ID
@@ -91,7 +91,7 @@ describe('Social', () => {
 
   // server g1, social on by default
   const start = async ({ enabled = true } = {}) => {
-    const channel = { id: 'boards', guildId: 'g1', send: async (o: { content: string, files: { name: string }[] }) => { previews.push({ content: o.content, files: o.files.map(f => f.name) }); state.robot.emit('send', { room: 'boards' }, o.content) }, messages: { fetch: async (id: string) => {
+    const channel = { id: 'boards', guildId: 'g1', send: async (o: { content: string, files: { name: string }[], reply?: { messageReference: string } }) => { previews.push({ content: o.content, files: o.files.map(f => f.name), replyTo: o.reply?.messageReference }); state.robot.emit('send', { room: 'boards' }, o.content) }, messages: { fetch: async (id: string) => {
       const m = messages.get(id)
       if (!m) throw Object.assign(new Error('Unknown Message'), { code: 10008 })
       return m
@@ -124,6 +124,8 @@ describe('Social', () => {
     ])
     assert.match(sent.at(-1)!, /^📣 Posted:\nMastodon: <https:\/\/mastodon\.example\/p\/1>\nBluesky: </)
     assert.deepStrictEqual(reacted, ['✅'])
+    // reply to photo
+    assert.deepStrictEqual(previews.map(p => p.replyTo), ['m1', 'm1'])
     // second 📣
     await reactTo(client, msg, '📣', 'alice')
     await runDueJobs(state.robot, 'social')

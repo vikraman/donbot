@@ -33,10 +33,10 @@ interface FileChannel {
   send?: (o: { content: string, files: { attachment: Buffer, name: string }[], allowedMentions: { parse: string[], repliedUser: boolean }, reply?: { messageReference: string, failIfNotExists: boolean } }) => Promise<unknown>
 }
 
-// files, else text
+// files or reply, else text
 export const postFiles = async (robot: Robot, room: string, text: string, files: FileOut[], { feature, replyTo }: { feature?: string, replyTo?: string } = {}): Promise<unknown> => {
   if (feature && !await allowsRoomAsync(robot, room, feature)) return undefined
-  if (files.length) {
+  if (files.length || replyTo) {
     try {
       const channel = await channelOf<FileChannel>(robot, room)
       if (channel?.send) {
