@@ -1,5 +1,11 @@
 // photo pipeline
 
+import { execFile } from 'node:child_process'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+
 import sharp from 'sharp'
 
 import { enhanceBoard } from './board.ts'
@@ -78,6 +84,36 @@ export const hasGps = (exif: Buffer | undefined): boolean => {
   return false
 }
 
+const run = promisify(execFile)
+
+export const HEIC_UNSUPPORTED = "HEIC photos aren't supported here; send a JPEG instead"
+
+const HEVC_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs'])
+
+// ftyp box with an hevc brand
+export const isHeic = (data: Uint8Array): boolean => {
+  const ascii = (a: number, b: number) => String.fromCharCode(...data.subarray(a, b))
+  if (data.length < 16 || ascii(4, 8) !== 'ftyp') return false
+  const end = Math.min(new DataView(data.buffer, data.byteOffset).getUint32(0), data.length)
+  // brands, minus minor version
+  for (let o = 8; o + 4 <= end; o += 4) if (o !== 12 && HEVC_BRANDS.has(ascii(o, o + 4))) return true
+  return false
+}
+
+// heic to jpeg via libheif
+const fromHeic = async (data: Uint8Array): Promise<Buffer> => {
+  const dir = await mkdtemp(join(tmpdir(), 'donbot-heic-'))
+  try {
+    await writeFile(join(dir, 'in.heic'), data)
+    await run(process.env.HEIF_CONVERT || 'heif-convert', ['-q', '95', join(dir, 'in.heic'), join(dir, 'out.jpg')], { timeout: 30_000 })
+    return await readFile(join(dir, 'out.jpg'))
+  } catch (error) {
+    throw new Error((error as { code?: unknown }).code === 'ENOENT' ? HEIC_UNSUPPORTED : "couldn't convert the HEIC photo", { cause: error })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
 const ATTEMPTS: readonly [number, number][] = [[MAX_EDGE, 85], [MAX_EDGE, 75], [MAX_EDGE, 65], [1600, 70], [1280, 70], [1024, 65]]
 
 // one at a time
@@ -92,10 +128,12 @@ const serially = <T>(task: () => Promise<T>): Promise<T> => {
 // jpeg under maxBytes, no metadata
 export const prepareImage: Prepare = (data, maxBytes, opts = {}) => serially(async () => {
   const input = { limitInputPixels: 100_000_000, failOn: 'error' as const }
-  const meta = await sharp(data, input).metadata()
-  const turned = (meta.orientation ?? 1) >= 5
-  const { data: decoded, info } = await sharp(data, input)
-    .rotate()
+  const heic = isHeic(data)
+  const src = heic ? await fromHeic(data) : data
+  const meta = await sharp(src, input).metadata()
+  // converted heic is upright, stale tag
+  const turned = !heic && (meta.orientation ?? 1) >= 5
+  const { data: decoded, info } = await (heic ? sharp(src, input) : sharp(src, input).rotate())
     .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })
     .flatten({ background: '#ffffff' })
     .removeAlpha()

@@ -1,10 +1,13 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 
+import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+
 import sharp from 'sharp'
 
 import { describeStats, parseEnhance, parseEnhanceSpec } from '../scripts/lib/enhance/settings.ts'
-import { focusOf, hasGps, prepareImage } from '../scripts/lib/enhance/image.ts'
+import { focusOf, HEIC_UNSUPPORTED, hasGps, isHeic, prepareImage } from '../scripts/lib/enhance/image.ts'
 import { applyH, cropFor, enhanceBoard, homography, PRESETS, resolveEnhance, straighten } from '../scripts/lib/enhance/board.ts'
 import type { Raw } from '../scripts/lib/enhance/board.ts'
 
@@ -192,5 +195,38 @@ describe('exif', () => {
     // stray bytes
     assert.ok(!hasGps(Buffer.from([0x4d, 0x4d, 0x88, 0x25, 0, 4])))
     assert.ok(!hasGps(undefined))
+  })
+})
+
+describe('heic', () => {
+  const heic = () => new Uint8Array(readFileSync('tests/fixtures/board.heic'))
+  const hasConverter = spawnSync('heif-convert', ['--version']).error === undefined
+
+  it('spots heic by its ftyp brands', async () => {
+    assert.ok(isHeic(heic()))
+    const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#fff' } }).jpeg().toBuffer()
+    assert.ok(!isHeic(new Uint8Array(jpeg)))
+    const box = (brands: string) => new Uint8Array([0, 0, 0, 8 + brands.length, ...Buffer.from('ftyp' + brands)])
+    assert.ok(!isHeic(box('avif\0\0\0\0mif1avif')))
+    assert.ok(isHeic(box('mif1\0\0\0\0mif1heic')))
+  })
+
+  it('explains when heic can\'t be converted here', async () => {
+    const saved = process.env.HEIF_CONVERT
+    process.env.HEIF_CONVERT = '/nonexistent/heif-convert'
+    try {
+      await assert.rejects(prepareImage(heic(), 976_560), new RegExp(HEIC_UNSUPPORTED.slice(0, 20)))
+    } finally {
+      if (saved === undefined) delete process.env.HEIF_CONVERT
+      else process.env.HEIF_CONVERT = saved
+    }
+  })
+
+  it('converts heic upright', { skip: !hasConverter && 'heif-convert is not installed' }, async () => {
+    const out = await prepareImage(heic(), 976_560)
+    assert.deepStrictEqual([out.width, out.height], [64, 48])
+    const { data } = await sharp(out.data).raw().toBuffer({ resolveWithObject: true })
+    // red on top
+    assert.ok(data[0]! > data[2]! + 80, `${data[0]} ${data[2]}`)
   })
 })
