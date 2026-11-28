@@ -12,6 +12,7 @@
 // Notes:
 //   Off until someone who can manage the server runs "hubot enable social server".
 //   React 📣 on a message with 1-4 photos to queue it, ❌ (or removing your 📣) cancels it, 🗑️ deletes it once sent.
+//   📣 again on a sent photo sends it to accounts it missed, e.g. one set up later.
 //   The caption is the message text, and edits count until it goes. Lines like "alt: …" or "alt 2: …" describe the photos.
 //   Photos are resized and stripped of metadata (including location), and boards are cleaned up, cropped and straightened.
 //   An "enhance:" line changes that for one message, e.g. "enhance: strong, color 100, nocrop" (see hubot enhance help).
@@ -104,6 +105,8 @@ interface PostRecord {
   targets: TargetId[]
   tag: string
   results: Partial<Record<TargetId, Posted>>
+  // pre-top-up results
+  kept?: TargetId[]
   error?: string
 }
 
@@ -122,6 +125,10 @@ const listOf = (items: string[]): string =>
 
 const messageLink = (rec: Pick<PostRecord, 'guild' | 'channel' | 'message'>): string =>
   `https://discord.com/channels/${rec.guild ?? '@me'}/${rec.channel}/${rec.message}`
+
+// cancellable results
+const freshOf = (rec: PostRecord): TargetId[] =>
+  (Object.keys(rec.results) as TargetId[]).filter(t => !rec.kept?.includes(t))
 
 // discord unknown message/channel
 const isGone = (error: unknown): boolean => [10003, 10008].includes(Number((error as { code?: unknown } | null)?.code))
@@ -273,8 +280,8 @@ export default async (robot: Robot) => {
     }
     // cancelled mid-send
     if (!stillQueued(rec.message)) {
-      if (Object.keys(rec.results).length) await retract(rec)
-      updatePost(rec.message, r => ({ ...r, status: 'cancelled' }))
+      if (freshOf(rec).length) await retract(rec, freshOf(rec))
+      updatePost(rec.message, r => ({ ...r, status: Object.keys(r.results).length ? 'posted' : 'cancelled' }))
       return
     }
     const sent = Object.entries(rec.results) as [TargetId, Posted][]
@@ -294,23 +301,25 @@ export default async (robot: Robot) => {
     jobs.remove(jobId(rec.message))
     const live = getPost(rec.message) ?? rec
     let text = `${SEND} Cancelled.`
-    if (Object.keys(live.results).length) {
-      text = `${SEND} Cancelled. ${await retract(live)}`
+    if (freshOf(live).length) {
+      text = `${SEND} Cancelled. ${await retract(live, freshOf(live))}`
       const after = getPost(rec.message) ?? live
       savePost({ ...after, status: Object.keys(after.results).length ? 'posted' : 'cancelled' })
     } else {
-      savePost({ ...live, status: 'cancelled' })
+      savePost({ ...live, status: Object.keys(live.results).length ? 'posted' : 'cancelled' })
     }
     if (note) await notify(rec.channel, text, rec.message)
     return text
   }
 
-  const retract = async (rec: PostRecord): Promise<string> => {
+  // optional target filter
+  const retract = async (rec: PostRecord, only?: TargetId[]): Promise<string> => {
     const available = configuredTargets()
     const removed: string[] = []
     const errors: string[] = []
     const results = { ...rec.results }
     for (const [id, posted] of Object.entries(rec.results) as [TargetId, Posted][]) {
+      if (only && !only.includes(id)) continue
       const target = available[id]
       try {
         if (!target) throw new Error(`${labelOf(id)} isn't set up any more`)
@@ -328,7 +337,9 @@ export default async (robot: Robot) => {
 
   const queue = async (msg: Msg, bound: string, by: string) => {
     const existing = getPost(msg.id)
-    if (existing && (existing.status === 'queued' || existing.status === 'posted')) return
+    if (existing?.status === 'queued') return
+    // top-up
+    const kept = existing?.status === 'posted' ? Object.keys(existing.results) as TargetId[] : []
     const photos = imagesOf(msg)
     if (!photos.length) {
       await notify(msg.channelId, `${SEND} No photo here.`, msg.id)
@@ -336,22 +347,26 @@ export default async (robot: Robot) => {
     }
     const rule = binding(bound)!
     const available = configuredTargets()
-    const targets = rule.targets.filter(t => available[t])
+    const targets = rule.targets.filter(t => available[t] && !kept.includes(t))
     if (!targets.length) {
-      await notify(msg.channelId, `${SEND} No accounts set up.`, msg.id)
+      const unbound = TARGET_IDS.filter(t => available[t] && !rule.targets.includes(t) && !kept.includes(t))
+      const hint = unbound.length ? ` This channel doesn't send to ${listOf(unbound.map(labelOf))}, \`${robot.name} social here ${[...rule.targets, ...unbound].join(' ')}\` adds it.` : ''
+      await notify(msg.channelId, kept.length ? `${SEND} Already on ${listOf(kept.map(labelOf))}.${hint}` : `${SEND} No accounts set up.`, msg.id)
       return
     }
     const now = Date.now()
     const sendAt = now + rule.holdMs
     const rec: PostRecord = {
       status: 'queued', channel: msg.channelId, bound, guild: msg.guildId ?? null, message: msg.id,
-      author: msg.author?.id ?? '', by, at: now, sendAt, targets, tag: rule.tag, results: {}
+      author: msg.author?.id ?? '', by, at: now, sendAt, targets, tag: rule.tag,
+      results: kept.length ? { ...existing!.results } : {}, ...kept.length ? { kept } : {}
     }
     savePost(rec)
     jobs.add({ id: jobId(msg.id), at: sendAt, tz, data: { message: msg.id } })
     const { text, alts, errors, enhance } = partsOf(msg, bound)
     const notes: string[] = []
     if (errors.length) notes.push(`Bad enhance line (${errors.join(', ')}), using channel settings.`)
+    if (kept.length) notes.push(`Already on ${listOf(kept.map(labelOf))}.`)
     if (photos.length > MAX_PHOTOS) notes.push(`First ${MAX_PHOTOS} photos only.`)
     for (const target of targets.map(t => available[t]!)) {
       if (fitCaption(text, rec.tag, target.limit, target.count).endsWith('…')) notes.push(`Caption cut to ${target.label}'s ${target.limit}.`)

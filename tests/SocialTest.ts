@@ -301,6 +301,63 @@ describe('Social', () => {
     assert.deepStrictEqual(calls.map(c => c.target), ['mastodon'])
   })
 
+  it('sends a sent photo to accounts it missed on a second 📣', async () => {
+    const client = await start()
+    const sent = collect(state.robot)
+    const rule = state.robot.brain.get<Record<string, unknown>>('social:channel:boards')!
+    state.robot.brain.set('social:channel:boards', { ...rule, targets: ['bluesky'] })
+    const msg = message('m1')
+    await reactTo(client, msg, '📣', 'alice')
+    await runDueJobs(state.robot, 'social')
+    assert.deepStrictEqual(calls.map(c => c.target), ['bluesky'])
+    // unbound mastodon
+    await reactTo(client, msg, '📣', 'alice')
+    assert.strictEqual(sent.at(-1), `📣 Already on Bluesky. This channel doesn't send to Mastodon, \`${state.robot.name} social here bluesky mastodon\` adds it.`)
+    state.robot.brain.set('social:channel:boards', { ...rule, targets: ['mastodon', 'bluesky'] })
+    await reactTo(client, msg, '📣', 'alice')
+    assert.match(previews.at(-1)!.content, /^📣 To Mastodon today at .*, ❌ to stop\. Already on Bluesky\./)
+    await runDueJobs(state.robot, 'social')
+    assert.deepStrictEqual(calls.map(c => c.target), ['bluesky', 'mastodon'])
+    assert.match(sent.at(-1)!, /^📣 Posted:\nBluesky: <.*>\nMastodon: <https:\/\/mastodon\.example\/p\/2>$/)
+    await reactTo(client, msg, '📣', 'alice')
+    assert.strictEqual(sent.at(-1), '📣 Already on Bluesky and Mastodon.')
+    // deletes both
+    await reactTo(client, msg, '🗑️', 'alice')
+    assert.deepStrictEqual(removed.sort(), ['bluesky-ref', 'mastodon-ref'])
+  })
+
+  it('keeps the earlier post when a top-up is cancelled', async () => {
+    const client = await start()
+    const sent = collect(state.robot)
+    const rule = state.robot.brain.get<Record<string, unknown>>('social:channel:boards')!
+    state.robot.brain.set('social:channel:boards', { ...rule, targets: ['bluesky'] })
+    const msg = message('m1')
+    await reactTo(client, msg, '📣', 'alice')
+    await runDueJobs(state.robot, 'social')
+    state.robot.brain.set('social:channel:boards', rule)
+    await reactTo(client, msg, '📣', 'alice')
+    await reactTo(client, msg, '❌', 'alice')
+    assert.strictEqual(sent.at(-1), '📣 Cancelled.')
+    await reactTo(client, msg, '📣', 'alice', false)
+    await runDueJobs(state.robot, 'social')
+    assert.deepStrictEqual(calls.map(c => c.target), ['bluesky'])
+    assert.deepStrictEqual(removed, [])
+    assert.strictEqual(state.robot.brain.get<{ status: string }>('social:post:m1')!.status, 'posted')
+    // unreact keeps it
+    await reactTo(client, msg, '📣', 'alice')
+    await reactTo(client, msg, '📣', 'alice', false)
+    assert.strictEqual(sent.at(-1), '📣 Cancelled.')
+    assert.deepStrictEqual(removed, [])
+    // part-sent top-up
+    await reactTo(client, msg, '📣', 'alice')
+    const rec = state.robot.brain.get<Record<string, unknown>>('social:post:m1')!
+    state.robot.brain.set('social:post:m1', { ...rec, results: { ...rec.results as object, mastodon: { url: 'u', ref: 'mastodon-ref' } } })
+    await reactTo(client, msg, '❌', 'alice')
+    assert.strictEqual(sent.at(-1), '📣 Cancelled. 🗑️ Deleted from Mastodon.')
+    assert.deepStrictEqual(removed, ['mastodon-ref'])
+    assert.strictEqual(state.robot.brain.get<{ status: string }>('social:post:m1')!.status, 'posted')
+  })
+
   it('stays off in servers that haven\'t turned it on', async () => {
     const client = await start({ enabled: false })
     const sent = collect(state.robot)
