@@ -42,7 +42,7 @@ const skipNames = ['', 'who', 'what', 'where', 'when', 'why']
 // owned by other scripts
 const RESERVED = /^(?:focusing|your owner|my (?:timezone|time zone|tz|github)|what time|what's my (?:timezone|time zone|tz|github))$/i
 // other scripts' commands, so "win the deploy is done" isn't read as a role
-const COMMAND_WORDS = new Set(['remind', 'win', 'wins', 'focus', 'tock', 'pomodoro', 'distraction', 'kudos', 'pep', 'standup', 'recap', 'poll', 'ask', 'tell', 'streaks', 'github', 'my', 'skip', 'cancel', 'forget', 'define', 'choose', 'weather', 'quote', 'joke', 'score', 'reasons', 'top', 'last', 'most', 'least', 'whimsy', 'ai', 'faq', 'deadline', 'preset', 'enhance'])
+const COMMAND_WORDS = new Set(['remind', 'win', 'wins', 'focus', 'tock', 'pomodoro', 'distraction', 'kudos', 'pep', 'standup', 'recap', 'poll', 'ask', 'tell', 'streaks', 'github', 'my', 'skip', 'cancel', 'forget', 'define', 'choose', 'weather', 'quote', 'joke', 'score', 'reasons', 'top', 'last', 'most', 'least', 'whimsy', 'ai', 'faq', 'deadline', 'preset', 'social', 'enhance'])
 // people's names are short; anything longer is a sentence
 const MAX_NAME_WORDS = 3
 
