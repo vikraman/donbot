@@ -97,7 +97,7 @@ describe('bluesky', () => {
   it('logs in, uploads, posts with facets and deletes', async () => {
     const blob = { $type: 'blob', ref: { $link: 'bafy' }, mimeType: 'image/jpeg', size: 2 }
     const reqs = script([
-      [200, { did: 'did:plc:lab', accessJwt: 'jwt1' }],
+      [200, { did: 'did:plc:lab', handle: 'lab.bsky.social', accessJwt: 'jwt1' }],
       [200, { blob }],
       [200, { uri: 'at://did:plc:lab/app.bsky.feed.post/3abc', cid: 'c' }],
       [400, { error: 'ExpiredToken', message: 'Token has expired' }],
@@ -106,7 +106,7 @@ describe('bluesky', () => {
     ])
     const target = blueskyTarget({ handle: 'lab.bsky.social', password: 'app-pw' })
     const posted = await target.post('new #board', [image], 'k')
-    assert.deepStrictEqual(posted, { url: 'https://bsky.app/profile/did:plc:lab/post/3abc', ref: 'at://did:plc:lab/app.bsky.feed.post/3abc' })
+    assert.deepStrictEqual(posted, { url: 'https://bsky.app/profile/lab.bsky.social/post/3abc', ref: 'at://did:plc:lab/app.bsky.feed.post/3abc' })
     assert.strictEqual(reqs[1]!.headers.Authorization, 'Bearer jwt1')
     const record = (JSON.parse(reqs[2]!.body as string) as { record: { text: string, facets: unknown[], embed: unknown } }).record
     assert.strictEqual(record.text, 'new #board')

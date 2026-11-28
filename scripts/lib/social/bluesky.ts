@@ -12,6 +12,7 @@ interface Options {
 
 interface Session {
   did: string
+  handle?: string
   accessJwt: string
 }
 
@@ -78,7 +79,7 @@ export const blueskyTarget = ({ handle, password, service = 'https://bsky.social
       const res = await call('com.atproto.repo.createRecord', json({ repo: s.did, collection: 'app.bsky.feed.post', record }))
       const { uri } = await res.json() as { uri: string }
       const rkey = uri.split('/').at(-1)!
-      return { url: `https://bsky.app/profile/${s.did}/post/${rkey}`, ref: uri }
+      return { url: `https://bsky.app/profile/${s.handle ?? s.did}/post/${rkey}`, ref: uri }
     },
     remove: async ref => {
       // at://did/collection/rkey
