@@ -26,7 +26,8 @@
     "hubot-rules": "^2.1.1",
     "most-common-words-by-language": "^3.0.14",
     "redis": "^4.7.1",
-    "sentiment": "^5.0.2"
+    "sentiment": "^5.0.2",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
